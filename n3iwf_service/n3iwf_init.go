@@ -14,6 +14,7 @@ import (
 	"gofree5gc/src/n3iwf/factory"
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_handler"
+	"gofree5gc/src/n3iwf/n3iwf_ike/udp_server"
 	"gofree5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
 	"gofree5gc/src/n3iwf/n3iwf_util"
 	//"gofree5gc/src/n3iwf/n3iwf_context"
@@ -100,6 +101,10 @@ func (n3iwf *N3IWF) Start() {
 	wg := sync.WaitGroup{}
 
 	n3iwf_sctp.InitiateSCTP(&wg)
+
+	udp_server.Run()
+
+	wg.Add(1)
 
 	wg.Wait()
 
