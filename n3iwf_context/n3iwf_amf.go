@@ -1,6 +1,8 @@
 package n3iwf_context
 
 import (
+	"bytes"
+	"gofree5gc/lib/aper"
 	"gofree5gc/lib/ngap/ngapConvert"
 	"gofree5gc/lib/ngap/ngapType"
 )
@@ -99,4 +101,24 @@ func (amf *N3IWFAMF) StartOverload(resp *ngapType.OverloadResponse, trafloadInd 
 }
 func (amf *N3IWFAMF) StopOverload() {
 	amf.AMFOverloadContent = nil
+}
+
+// FindAvalibleAMFByCompareGUAMI compares the incoming GUAMI with AMF served GUAMI
+// and return if this AMF is avalible for UE
+func (amf *N3IWFAMF) FindAvalibleAMFByCompareGUAMI(ueSpecifiedGUAMI *ngapType.GUAMI) bool {
+	for _, amfServedGUAMI := range amf.ServedGUAMIList.List {
+		codedAMFServedGUAMI, err := aper.MarshalWithParams(&amfServedGUAMI.GUAMI, "valueExt")
+		if err != nil {
+			return false
+		}
+		codedUESpecifiedGUAMI, err := aper.MarshalWithParams(ueSpecifiedGUAMI, "valueExt")
+		if err != nil {
+			return false
+		}
+		if !bytes.Equal(codedAMFServedGUAMI, codedUESpecifiedGUAMI) {
+			continue
+		}
+		return true
+	}
+	return false
 }
