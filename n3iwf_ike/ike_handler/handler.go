@@ -14,6 +14,7 @@ import (
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_context"
 	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
+	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
 
 	"github.com/sirupsen/logrus"
 )
@@ -730,7 +731,9 @@ func HandleIKEAUTH(ueSendInfo n3iwf_message.UDPSendInfoGroup, message *ike_messa
 			Identifier: identifier,
 			EAPTypeData: []ike_message.EAPTypeFormat{
 				&ike_message.EAPExpanded{
-					VendorID: n3iwfSelf.VendorID,
+					VendorID:   VendorID3GPP,
+					VendorType: VendorTypeEAP5G,
+					VendorData: BuildEAP5GStart(),
 				},
 			},
 		}
@@ -884,11 +887,24 @@ func HandleIKEAUTH(ueSendInfo n3iwf_message.UDPSendInfoGroup, message *ike_messa
 				}
 				// Create UE context
 				thisUE := n3iwfSelf.NewN3iwfUe()
+				// Relative context
 				ikeSecurityAssociation.ThisUE = thisUE
+				thisUE.N3IWFIKESecurityAssociation = ikeSecurityAssociation
 				thisUE.AMF = selectedAMF
+
+				// Store some information in conext
+				networkAddrStringSlice := strings.Split(ueSendInfo.Addr.String(), ":")
+				thisUE.IPAddrv4 = networkAddrStringSlice[0]
+				thisUE.PortNumber = ueSendInfo.Addr.Port
+				thisUE.RRCEstablishmentCause = int16(anParameters.EstablishmentCause.Value)
+
 				// Send Initial UE Message
+				ngap_message.SendInitialUEMessage(selectedAMF, thisUE, nasPDU)
 			} else {
+				thisUE := ikeSecurityAssociation.ThisUE
+				amf := thisUE.AMF
 				// Send Uplink NAS Transport
+				ngap_message.SendUplinkNASTransport(amf, thisUE, nasPDU)
 			}
 		}
 
