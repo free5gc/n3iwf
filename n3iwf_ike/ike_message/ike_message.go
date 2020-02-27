@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+
 	"github.com/sirupsen/logrus"
 
 	"gofree5gc/src/n3iwf/logger"
@@ -18,7 +19,7 @@ func init() {
 
 type IKEMessage struct {
 	InitiatorSPI uint64
-	RespondorSPI uint64
+	ResponderSPI uint64
 	Version      uint8
 	ExchangeType uint8
 	Flags        uint8
@@ -33,7 +34,7 @@ func Encode(ikeMessage *IKEMessage) ([]byte, error) {
 		ikeMessageData := make([]byte, 28)
 
 		binary.BigEndian.PutUint64(ikeMessageData[0:8], ikeMessage.InitiatorSPI)
-		binary.BigEndian.PutUint64(ikeMessageData[8:16], ikeMessage.RespondorSPI)
+		binary.BigEndian.PutUint64(ikeMessageData[8:16], ikeMessage.ResponderSPI)
 		ikeMessageData[17] = ikeMessage.Version
 		ikeMessageData[18] = ikeMessage.ExchangeType
 		ikeMessageData[19] = ikeMessage.Flags
@@ -112,7 +113,7 @@ func Decode(rawData []byte) (*IKEMessage, error) {
 	ikeMessage := new(IKEMessage)
 
 	ikeMessage.InitiatorSPI = binary.BigEndian.Uint64(rawData[:8])
-	ikeMessage.RespondorSPI = binary.BigEndian.Uint64(rawData[8:16])
+	ikeMessage.ResponderSPI = binary.BigEndian.Uint64(rawData[8:16])
 	ikeMessage.Version = rawData[17]
 	ikeMessage.ExchangeType = rawData[18]
 	ikeMessage.Flags = rawData[19]
