@@ -4,19 +4,23 @@ import (
 	"net"
 	"sync"
 
-	"github.com/sirupsen/logrus"
 	"gofree5gc/src/n3iwf/factory"
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
+
+	"github.com/sirupsen/logrus"
 )
 
 // IKE daemon listen on UDP 500 and 4500
-// IP address can be suppport to set according to configuration file
-// TODO: IPaddr configure
 const (
 	maxQueueSize       int = 100000
 	defaultIKEPort500  int = 20500
 	defaultIKEPort4500 int = 24500
+)
+
+const (
+	channelIDForPort500  = 1
+	channelIDForPort4500 = 2
 )
 
 type sendParameters struct {
@@ -27,11 +31,11 @@ type sendParameters struct {
 
 var ikeLog *logrus.Entry
 
-var sendChanToPort500 chan sendParameters // Chennel ID 1
-var mtx1 sync.Mutex
+var sendChanToPort500 chan sendParameters // Chennel ID 1 (channelIDForPort500)
+var mtxForChanPort500 sync.Mutex
 
-var sendChanToPort4500 chan sendParameters // Chennel ID 2
-var mtx2 sync.Mutex
+var sendChanToPort4500 chan sendParameters // Chennel ID 2 (channelIDForPort4500)
+var mtxForChanPort4500 sync.Mutex
 
 func init() {
 	// init logger
@@ -48,23 +52,23 @@ func Run() {
 
 	configBindAddr(listenAddrPort500, listenAddrPort4500)
 
-	listener1, err := net.ListenUDP("udp", listenAddrPort500)
+	listenerPort500, err := net.ListenUDP("udp", listenAddrPort500)
 	if err != nil {
 		ikeLog.Errorf("[IKE] Listen on UDP socket failed: %+v", err)
 		return
 	}
 
-	go reader(1, listener1)
-	go sender(1, listener1)
+	go reader(channelIDForPort500, listenerPort500)
+	go sender(channelIDForPort500, listenerPort500)
 
-	listener2, err := net.ListenUDP("udp", listenAddrPort4500)
+	listenerPort4500, err := net.ListenUDP("udp", listenAddrPort4500)
 	if err != nil {
 		ikeLog.Errorf("[IKE] Listen on UDP socket failed: %+v", err)
 		return
 	}
 
-	go reader(2, listener2)
-	go sender(2, listener2)
+	go reader(channelIDForPort4500, listenerPort4500)
+	go sender(channelIDForPort4500, listenerPort4500)
 
 }
 
@@ -95,7 +99,7 @@ func configBindAddr(listenAddrPort500 *net.UDPAddr, listenAddrPort4500 *net.UDPA
 }
 
 func Send(sendInfo *n3iwf_message.UDPSendInfoGroup, msg []byte) {
-	if sendInfo.ChannelID == 1 {
+	if sendInfo.ChannelID == channelIDForPort500 {
 
 		sendData := sendParameters{
 			DstAddr: sendInfo.Addr,
@@ -103,11 +107,11 @@ func Send(sendInfo *n3iwf_message.UDPSendInfoGroup, msg []byte) {
 			Payload: msg,
 		}
 
-		mtx1.Lock()
+		mtxForChanPort500.Lock()
 		sendChanToPort500 <- sendData
-		mtx1.Unlock()
+		mtxForChanPort500.Unlock()
 
-	} else if sendInfo.ChannelID == 2 {
+	} else if sendInfo.ChannelID == channelIDForPort4500 {
 
 		sendData := sendParameters{
 			DstAddr: sendInfo.Addr,
@@ -115,22 +119,22 @@ func Send(sendInfo *n3iwf_message.UDPSendInfoGroup, msg []byte) {
 			Payload: msg,
 		}
 
-		mtx2.Lock()
+		mtxForChanPort4500.Lock()
 		sendChanToPort4500 <- sendData
-		mtx2.Unlock()
+		mtxForChanPort4500.Unlock()
 
 	} else {
 		ikeLog.Error("[IKE] Send(): Invalid channel ID")
 	}
 }
 
-func sender(channelID int, c *net.UDPConn) {
-	if channelID == 1 {
+func sender(channelID int, conn *net.UDPConn) {
+	if channelID == channelIDForPort500 {
 		for {
 
 			sendData := <-sendChanToPort500
 
-			n, err := c.WriteToUDP(sendData.Payload, sendData.DstAddr)
+			n, err := conn.WriteToUDP(sendData.Payload, sendData.DstAddr)
 			if err != nil {
 				ikeLog.Errorf("[IKE] Sending data through UDP failed: %+v", err)
 			}
@@ -139,12 +143,12 @@ func sender(channelID int, c *net.UDPConn) {
 			}
 
 		}
-	} else if channelID == 2 {
+	} else if channelID == channelIDForPort4500 {
 		for {
 
 			sendData := <-sendChanToPort4500
 
-			n, err := c.WriteToUDP(sendData.Payload, sendData.DstAddr)
+			n, err := conn.WriteToUDP(sendData.Payload, sendData.DstAddr)
 			if err != nil {
 				ikeLog.Errorf("[IKE] Sending data through UDP failed: %+v", err)
 			}
@@ -160,7 +164,7 @@ func sender(channelID int, c *net.UDPConn) {
 
 func reader(channelID int, conn *net.UDPConn) {
 
-	if channelID > 2 {
+	if channelID > channelIDForPort4500 {
 		ikeLog.Error("[IKE] Channel ID out of range")
 		return
 	}
