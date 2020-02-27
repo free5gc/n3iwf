@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"gofree5gc/lib/ngap/ngapType"
+	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
 )
 
 const (
@@ -36,6 +37,10 @@ type N3IWFUe struct {
 	Kn3iwf               []uint8                          // 32 bytes (256 bits), value is from NGAP IE "Security Key"
 	SecurityCapabilities *ngapType.UESecurityCapabilities // TS 38.413 9.3.1.86
 
+	/* IKE Security Association */
+	N3IWFIKESecurityAssociation   *IKESecurityAssociation
+	N3IWFChildSecurityAssociation *ChildSecurityAssociation
+
 	/* Others */
 	Guami                            *ngapType.GUAMI
 	IndexToRfsp                      int64
@@ -63,6 +68,50 @@ type QosFlow struct {
 }
 
 type GTPConnection struct {
+}
+
+type IKESecurityAssociation struct {
+	// SPI
+	RemoteSPI uint64
+	LocalSPI  uint64
+
+	// Transforms for IKE SA
+	EncryptionAlgorithm    *ike_message.Transform
+	PseudorandomFunction   *ike_message.Transform
+	IntegrityAlgorithm     *ike_message.Transform
+	DiffieHellmanGroup     *ike_message.Transform
+	ExpandedSequenceNumber *ike_message.Transform
+
+	// Keys
+	SK_d  []byte // used for child SA key deriving
+	SK_ai []byte // used by initiator for integrity checking
+	SK_ar []byte // used by responder for integrity checking
+	SK_ei []byte // used by initiator for encrypting
+	SK_er []byte // used by responder for encrypting
+	SK_pi []byte // used by initiator for IKE authentication
+	SK_pr []byte // used by responder for IKE authentication
+
+	// State for IKE_AUTH
+	State uint8
+
+	// Temporary data stored for the use in later exchange
+	InitiatorID              *ike_message.IdentificationInitiator
+	InitiatorCertificate     *ike_message.Certificate
+	IKEAuthResponseSA        *ike_message.SecurityAssociation
+	TrafficSelectorInitiator *ike_message.TrafficSelectorInitiator
+	TrafficSelectorResponder *ike_message.TrafficSelectorResponder
+	LastEAPIdentifier        uint8
+
+	// Authentication data
+	LocalUnsignedAuthentication  []byte
+	RemoteUnsignedAuthentication []byte
+
+	// UE context
+	ThisUE *N3IWFUe
+}
+
+type ChildSecurityAssociation struct {
+	LocalSPI uint64
 }
 
 func (ue *N3IWFUe) init() {
