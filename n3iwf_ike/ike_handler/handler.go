@@ -13,6 +13,7 @@ import (
 
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_context"
+	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
 	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
 	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
 
@@ -26,7 +27,7 @@ func init() {
 	ikeLog = logger.IKELog
 }
 
-func HandleIKESAINIT(ueSendInfo n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {
+func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {
 	ikeLog.Infoln("[IKE] Handle IKE_SA_INIT")
 
 	var securityAssociation *ike_message.SecurityAssociation
@@ -344,7 +345,7 @@ const (
 	PostSignalling
 )
 
-func HandleIKEAUTH(ueSendInfo n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {
+func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {
 	ikeLog.Infoln("[IKE] Handle IKE_AUTH")
 
 	var encryptedPayload *ike_message.Encrypted
@@ -895,7 +896,7 @@ func HandleIKEAUTH(ueSendInfo n3iwf_message.UDPSendInfoGroup, message *ike_messa
 				// Store some information in conext
 				networkAddrStringSlice := strings.Split(ueSendInfo.Addr.String(), ":")
 				thisUE.IPAddrv4 = networkAddrStringSlice[0]
-				thisUE.PortNumber = ueSendInfo.Addr.Port
+				thisUE.PortNumber = int32(ueSendInfo.Addr.Port)
 				thisUE.RRCEstablishmentCause = int16(anParameters.EstablishmentCause.Value)
 
 				// Send Initial UE Message
