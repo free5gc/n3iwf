@@ -16,6 +16,7 @@ var InitLog *logrus.Entry
 var NgapLog *logrus.Entry
 var HandlerLog *logrus.Entry
 var ContextLog *logrus.Entry
+var IKELog *logrus.Entry
 
 func init() {
 	log = logrus.New()
@@ -47,6 +48,7 @@ func init() {
 	NgapLog = log.WithFields(logrus.Fields{"N3IWF": "NGAP"})
 	HandlerLog = log.WithFields(logrus.Fields{"N3IWF": "handler"})
 	ContextLog = log.WithFields(logrus.Fields{"N3IWF": "context"})
+	IKELog = log.WithFields(logrus.Fields{"N3IWF": "ike"})
 }
 
 func SetLogLevel(level logrus.Level) {

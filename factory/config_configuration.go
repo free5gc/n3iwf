@@ -9,8 +9,9 @@ import (
 )
 
 type Configuration struct {
-	N3IWFInfo  n3iwf_context.N3IWFNFInfo `yaml:"N3IWFInformation"`
-	AMFAddress []ConfigAMFAddr           `yaml:"AMFAddress"`
+	N3IWFInfo   n3iwf_context.N3IWFNFInfo `yaml:"N3IWFInformation"`
+	AMFAddress  []ConfigAMFAddr           `yaml:"AMFAddress"`
+	IKEBindAddr string                    `yaml:"IKEBindAddr"`
 }
 
 type ConfigAMFAddr struct {

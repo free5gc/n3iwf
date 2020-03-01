@@ -32,6 +32,8 @@ func Handle() {
 				self := n3iwf_context.N3IWFSelf()
 				self.AMFReInitAvailableList[msg.SCTPAddr] = true
 				ngap_message.SendRANConfigurationUpdate(self.AMFPool[msg.SCTPAddr])
+			case n3iwf_message.EventN1UDPMessage:
+				// TODO: handle IKE message
 			}
 		}
 	}
