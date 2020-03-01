@@ -19,6 +19,14 @@ func init() {
 	conn, _ = net.Dial("udp", "127.0.0.1:500")
 }
 
+// TestEncodeDecode tests the Encode() and Decode() function using the data
+// build manually.
+// First, build each payload with correct value, then the IKE message for
+// IKE_SA_INIT type.
+// Second, encode/decode the IKE message using Encode/Decode function, and then
+// re-encode the decoded message again.
+// Third, send the encoded data to the UDP connection for verification with Wireshark.
+// Compare the dataFirstEncode and dataSecondEncode and return the result.
 func TestEncodeDecode(t *testing.T) {
 	testPacket := &IKEMessage{}
 
@@ -329,36 +337,42 @@ func TestEncodeDecode(t *testing.T) {
 
 	testPacket.IKEPayload = append(testPacket.IKEPayload, testSK)
 
-	var data1, data2 []byte
+	var dataFirstEncode, dataSecondEncode []byte
 	var err error
-	var resultPacket *IKEMessage
+	var decodedPacket *IKEMessage
 
-	if data1, err = Encode(testPacket); err != nil {
+	if dataFirstEncode, err = Encode(testPacket); err != nil {
 		t.Fatalf("Encode failed: %+v", err)
 	}
 
-	t.Logf("%+v", data1)
+	t.Logf("%+v", dataFirstEncode)
 
-	if resultPacket, err = Decode(data1); err != nil {
+	if decodedPacket, err = Decode(dataFirstEncode); err != nil {
 		t.Fatalf("Decode failed: %+v", err)
 	}
 
-	if data2, err = Encode(resultPacket); err != nil {
+	if dataSecondEncode, err = Encode(decodedPacket); err != nil {
 		t.Fatalf("Encode failed: %+v", err)
 	}
 
-	t.Logf("Original IKE Message: %+v", data1)
-	t.Logf("Result IKE Message: %+v", data2)
+	t.Logf("Original IKE Message: %+v", dataFirstEncode)
+	t.Logf("Result IKE Message:   %+v", dataSecondEncode)
 
-	_, err = conn.Write(data1)
+	_, err = conn.Write(dataFirstEncode)
 	if err != nil {
 		t.Fatalf("Error: %+v", err)
 	}
 
-	t.FailNow()
+	if !bytes.Equal(dataFirstEncode, dataSecondEncode) {
+		t.FailNow()
+	}
 
 }
 
+// TestEncodeDecodeUsingPublicData tests the Encode() and Decode() function
+// using the public data.
+// Decode and encode the data, and compare the verifyData and the origin
+// data and return the result.
 func TestEncodeDecodeUsingPublicData(t *testing.T) {
 	data := []byte{
 		0x86, 0x43, 0x30, 0xac, 0x30, 0xe6, 0x56, 0x4d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x20, 0x22, 0x08, 0x00,
