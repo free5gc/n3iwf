@@ -37,6 +37,9 @@ type N3IWFContext struct {
 
 	// UEIPAddressRange
 	Subnet *net.IPNet
+
+	// Network interface mark for xfrm
+	Mark uint32
 }
 
 func init() {
@@ -48,6 +51,7 @@ func init() {
 	N3IWFSelf().AMFPool = make(map[string]*N3IWFAMF)
 	N3IWFSelf().AMFReInitAvailableList = make(map[string]bool)
 	N3IWFSelf().IKESA = make(map[uint64]*IKESecurityAssociation)
+	N3IWFSelf().AllocatedUEIPAddress = make(map[string]*N3IWFUe)
 }
 
 // Create new N3IWF context

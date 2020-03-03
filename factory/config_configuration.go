@@ -17,6 +17,7 @@ type Configuration struct {
 	CertificateAuthority string                    // file path
 	Certificate          string                    // file path
 	UEIPAddressRange     string                    // e.g. 10.0.1.0/24
+	InterfaceMark        uint32                    // must != 0, if not specified, random one
 }
 
 type ConfigAMFAddr struct {
