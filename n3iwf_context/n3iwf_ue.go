@@ -2,9 +2,12 @@ package n3iwf_context
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"gofree5gc/lib/ngap/ngapType"
 	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
+	"net"
 )
 
 const (
@@ -100,6 +103,7 @@ type IKESecurityAssociation struct {
 	IKEAuthResponseSA        *ike_message.SecurityAssociation
 	TrafficSelectorInitiator *ike_message.TrafficSelectorInitiator
 	TrafficSelectorResponder *ike_message.TrafficSelectorResponder
+	ConcatenatedNonce        []byte
 	LastEAPIdentifier        uint8
 
 	// Authentication data
@@ -111,7 +115,18 @@ type IKESecurityAssociation struct {
 }
 
 type ChildSecurityAssociation struct {
-	LocalSPI uint64
+	SPI                      uint64
+	PeerPublicIPAddr         net.IP
+	LocalPublicIPAddr        net.IP
+	TrafficSelectorInitiator net.IPNet
+	TrafficSelectorResponder net.IPNet
+	EncryptionAlgorithm      uint16
+	IncomingEncryptionKey    []byte
+	OutgoingEncryptionKey    []byte
+	IntegrityAlgorithm       uint16
+	IncomingIntegrityKey     []byte
+	OutgoingIntegrityKey     []byte
+	ESN                      bool
 }
 
 func (ue *N3IWFUe) init() {
@@ -173,6 +188,32 @@ func (ue *N3IWFUe) CreatePDUSession(pduSessionID int64, snssai ngapType.SNSSAI) 
 	pduSession.QosFlows = make(map[int64]*QosFlow)
 	ue.PduSessionList[pduSessionID] = &pduSession
 	return &pduSession, nil
+}
+
+func (ue *N3IWFUe) CreateIKEChildSecurityAssociation(chosenSecurityAssociation *ike_message.SecurityAssociation) (*ChildSecurityAssociation, error) {
+	childSecurityAssociation := new(ChildSecurityAssociation)
+
+	if len(chosenSecurityAssociation.Proposals[0].SPI) > 4 {
+		return nil, errors.New("SPI size larger than 4")
+	}
+
+	if len(chosenSecurityAssociation.Proposals[0].SPI) <= 8 {
+		spi := make([]byte, 8-len(chosenSecurityAssociation.Proposals[0].SPI))
+		spi = append(spi, chosenSecurityAssociation.Proposals[0].SPI...)
+		childSecurityAssociation.SPI = binary.BigEndian.Uint64(spi)
+	}
+
+	childSecurityAssociation.EncryptionAlgorithm = chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm[0].TransformID
+	childSecurityAssociation.IntegrityAlgorithm = chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm[0].TransformID
+	if chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers[0].TransformID == 0 {
+		childSecurityAssociation.ESN = false
+	} else {
+		childSecurityAssociation.ESN = true
+	}
+
+	ue.N3IWFChildSecurityAssociation = childSecurityAssociation
+
+	return childSecurityAssociation, nil
 }
 
 func (ue *N3IWFUe) AttachAMF(sctpAddr string) error {
