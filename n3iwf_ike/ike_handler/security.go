@@ -112,7 +112,10 @@ func CalculateChecksum(key []byte, message []byte, algorithmType uint16) ([]byte
 			return nil, errors.New("Unmatched input key length")
 		}
 		integrityFunction := hmac.New(md5.New, key)
-		integrityFunction.Write(message)
+		if _, err := integrityFunction.Write(message); err != nil {
+			ikeLog.Errorf("[IKE] Hash function write error when calcualting checksum: %+v", err)
+			return nil, errors.New("Hash function write error")
+		}
 		return integrityFunction.Sum(nil), nil
 	default:
 		ikeLog.Errorf("[IKE] Unsupported integrity function: %d", algorithmType)
@@ -127,7 +130,10 @@ func VerifyIKEChecksum(key []byte, message []byte, checksum []byte, algorithmTyp
 			return false, errors.New("Unmatched input key length")
 		}
 		integrityFunction := hmac.New(md5.New, key)
-		integrityFunction.Write(message)
+		if _, err := integrityFunction.Write(message); err != nil {
+			ikeLog.Errorf("[IKE] Hash function write error when verifying IKE checksum: %+v", err)
+			return false, errors.New("Hash function write error")
+		}
 		checksumOfMessage := integrityFunction.Sum(nil)
 		return hmac.Equal(checksumOfMessage, checksum), nil
 	default:
@@ -242,7 +248,10 @@ func CompareRootCertificate(requestedCertificateAuthorityHash []byte, certificat
 	rsaPublicKeyData := x509.MarshalPKCS1PublicKey(rsaPublicKey)
 
 	hashFunction := sha1.New()
-	hashFunction.Write(rsaPublicKeyData)
+	if _, err := hashFunction.Write(rsaPublicKeyData); err != nil {
+		ikeLog.Errorf("[IKE] Hash function write error when compare root certificate: %+v", err)
+		return false
+	}
 
 	certificateAuthorityPublicKeySHA1 := hashFunction.Sum(nil)
 

@@ -105,7 +105,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							ngapGUAMI := new(ngapType.GUAMI)
 							err := aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
 							if err != nil {
-								ikeLog.Error("[IKE] APER unmarshal with parameter failed: %+v", err)
+								ikeLog.Errorf("[IKE] APER unmarshal with parameter failed: %+v", err)
 								return 0, nil, nil, errors.New("Unmarshal failed when decoding GUAMI")
 							}
 							anParameters.GUAMI = ngapGUAMI
@@ -132,7 +132,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							ngapPLMN := new(ngapType.PLMNIdentity)
 							err := aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
 							if err != nil {
-								ikeLog.Error("[IKE] APER unmarshal with parameter failed: %v", err)
+								ikeLog.Errorf("[IKE] APER unmarshal with parameter failed: %v", err)
 								return 0, nil, nil, errors.New("Unmarshal failed when decoding PLMN")
 							}
 							anParameters.SelectedPLMNID = ngapPLMN
