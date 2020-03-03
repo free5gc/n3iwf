@@ -7,10 +7,12 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"encoding/binary"
+	"errors"
 	"hash"
 	"net"
 	"strings"
 
+	"gofree5gc/src/n3iwf/factory"
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_context"
 	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
@@ -59,7 +61,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
 
-		ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 
 		return
 	}
@@ -73,7 +75,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 		case ike_message.TypeN:
 			nonce = ikePayload.(*ike_message.Nonce)
 		default:
-			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler")
+			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler", ikePayload.Type())
 		}
 	}
 
@@ -165,7 +167,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 
 			responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
 
-			ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+			SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 
 			return
 		}
@@ -189,7 +191,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 
 			responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
 
-			ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+			SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 
 			return
 		}
@@ -230,6 +232,9 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 	ikeSecurityAssociation.PseudorandomFunction = responseSecurityAssociation.Proposals[0].PseudorandomFunction[0]
 	ikeSecurityAssociation.DiffieHellmanGroup = responseSecurityAssociation.Proposals[0].DiffieHellmanGroup[0]
 
+	// Record concatenated nonce
+	ikeSecurityAssociation.ConcatenatedNonce = append(ikeSecurityAssociation.ConcatenatedNonce, concatenatedNonce...)
+
 	// Get key length of SK_d, SK_ai, SK_ar, SK_ei, SK_er, SK_pi, SK_pr
 	var length_SK_d, length_SK_ai, length_SK_ar, length_SK_ei, length_SK_er, length_SK_pi, length_SK_pr, totalKeyLength int
 	var ok bool
@@ -262,7 +267,10 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 		ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 		return
 	}
-	pseudorandomFunction.Write(sharedKeyData)
+	if _, err := pseudorandomFunction.Write(sharedKeyData); err != nil {
+		ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+		return
+	}
 
 	SKEYSEED := pseudorandomFunction.Sum(nil)
 	seed := concatenateNonceAndSPI(concatenatedNonce, ikeSecurityAssociation.RemoteSPI, ikeSecurityAssociation.LocalSPI)
@@ -274,7 +282,10 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 			ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 			return
 		}
-		pseudorandomFunction.Write(append(append(generatedKeyBlock, seed...), index))
+		if _, err := pseudorandomFunction.Write(append(append(generatedKeyBlock, seed...), index)); err != nil {
+			ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+			return
+		}
 		generatedKeyBlock = pseudorandomFunction.Sum(nil)
 		keyStream = append(keyStream, generatedKeyBlock...)
 	}
@@ -332,10 +343,13 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 		ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 		return
 	}
-	pseudorandomFunction.Write(idPayloadData[4:])
+	if _, err := pseudorandomFunction.Write(idPayloadData[4:]); err != nil {
+		ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+		return
+	}
 	ikeSecurityAssociation.LocalUnsignedAuthentication = append(ikeSecurityAssociation.LocalUnsignedAuthentication, pseudorandomFunction.Sum(nil)...)
 
-	ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+	SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 }
 
 // IKE_AUTH state
@@ -373,7 +387,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
-		ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 
 		return
 	}
@@ -391,7 +405,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, 0, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
-		ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 
 		return
 	}
@@ -401,7 +415,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		case ike_message.TypeSK:
 			encryptedPayload = ikePayload.(*ike_message.Encrypted)
 		default:
-			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler")
+			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler", ikePayload.Type())
 		}
 	}
 
@@ -482,7 +496,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		case ike_message.TypeCP:
 			configuration = ikePayload.(*ike_message.Configuration)
 		default:
-			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_AUTH message, this payload will not be handled by IKE handler")
+			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_AUTH message, this payload will not be handled by IKE handler", ikePayload.Type())
 		}
 	}
 
@@ -514,7 +528,10 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 				return
 			}
-			pseudorandomFunction.Write(idPayloadData[4:])
+			if _, err := pseudorandomFunction.Write(idPayloadData[4:]); err != nil {
+				ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+				return
+			}
 			ikeSecurityAssociation.RemoteUnsignedAuthentication = append(ikeSecurityAssociation.RemoteUnsignedAuthentication, pseudorandomFunction.Sum(nil)...)
 		} else {
 			ikeLog.Error("[IKE] The initiator identification field is nil")
@@ -541,7 +558,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 
 				if len(proposal.EncryptionAlgorithm) > 0 {
 					for _, transform := range proposal.EncryptionAlgorithm {
-						if is_supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+						if is_Kernel_Supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
 							chosenProposal.EncryptionAlgorithm = append(chosenProposal.EncryptionAlgorithm, transform)
 							break
 						}
@@ -550,24 +567,14 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 						continue
 					}
 				} else {
-					continue
+					continue // Encryption is mandatory
 				}
 				if len(proposal.PseudorandomFunction) > 0 {
-					for _, transform := range proposal.PseudorandomFunction {
-						if is_supported(ike_message.TypePseudorandomFunction, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
-							chosenProposal.PseudorandomFunction = append(chosenProposal.PseudorandomFunction, transform)
-							break
-						}
-					}
-					if len(chosenProposal.PseudorandomFunction) == 0 {
-						continue
-					}
-				} else {
-					continue
+					continue // Pseudorandom function is not used by ESP
 				}
 				if len(proposal.IntegrityAlgorithm) > 0 {
 					for _, transform := range proposal.IntegrityAlgorithm {
-						if is_supported(ike_message.TypeIntegrityAlgorithm, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+						if is_Kernel_Supported(ike_message.TypeIntegrityAlgorithm, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
 							chosenProposal.IntegrityAlgorithm = append(chosenProposal.IntegrityAlgorithm, transform)
 							break
 						}
@@ -576,11 +583,11 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 						continue
 					}
 				} else {
-					continue
+					continue // Integrity is mandatory
 				}
 				if len(proposal.DiffieHellmanGroup) > 0 {
 					for _, transform := range proposal.DiffieHellmanGroup {
-						if is_supported(ike_message.TypeDiffieHellmanGroup, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+						if is_Kernel_Supported(ike_message.TypeDiffieHellmanGroup, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
 							chosenProposal.DiffieHellmanGroup = append(chosenProposal.DiffieHellmanGroup, transform)
 							break
 						}
@@ -588,12 +595,10 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 					if len(chosenProposal.DiffieHellmanGroup) == 0 {
 						continue
 					}
-				} else {
-					continue
-				}
+				} // Diffie-Hellman group is optional
 				if len(proposal.ExtendedSequenceNumbers) > 0 {
 					for _, transform := range proposal.ExtendedSequenceNumbers {
-						if is_supported(ike_message.TypeExtendedSequenceNumbers, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+						if is_Kernel_Supported(ike_message.TypeExtendedSequenceNumbers, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
 							chosenProposal.ExtendedSequenceNumbers = append(chosenProposal.ExtendedSequenceNumbers, transform)
 							break
 						}
@@ -601,6 +606,8 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 					if len(chosenProposal.ExtendedSequenceNumbers) == 0 {
 						continue
 					}
+				} else {
+					continue // Extended sequence number is mandatory
 				}
 
 				chosenProposal.ProposalNumber = proposal.ProposalNumber
@@ -662,7 +669,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				copy(checksumField, checksumOfMessage)
 
 				// Send IKE message to UE
-				ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+				SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 
 				return
 			}
@@ -705,7 +712,10 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 
 		// Authentication Data
 		sha1HashFunction := sha1.New()
-		sha1HashFunction.Write(ikeSecurityAssociation.LocalUnsignedAuthentication)
+		if _, err := sha1HashFunction.Write(ikeSecurityAssociation.LocalUnsignedAuthentication); err != nil {
+			ikeLog.Errorf("[IKE] Hash function write error: %+v", err)
+			return
+		}
 
 		signedAuth, err := rsa.SignPKCS1v15(rand.Reader, n3iwfSelf.N3IWFPrivateKey, crypto.SHA1, sha1HashFunction.Sum(nil))
 		if err != nil {
@@ -775,7 +785,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		copy(checksumField, checksumOfMessage)
 
 		// Send IKE message to UE
-		ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 
 	case EAPSignalling:
 		// IKEHDR-{response}
@@ -804,7 +814,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			case ike_message.EAPTypeExpanded:
 				eapExpanded = eapTypeData.(*ike_message.EAPExpanded)
 			default:
-				ikeLog.Error("[IKE][EAP] Received EAP packet with type other than EAP expanded type: %d", eapTypeData.Type())
+				ikeLog.Errorf("[IKE][EAP] Received EAP packet with type other than EAP expanded type: %d", eapTypeData.Type())
 				return
 			}
 
@@ -820,7 +830,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 
 			eap5GMessageID, anParameters, nasPDU, err := UnmarshalEAP5GData(eapExpanded.VendorData)
 			if err != nil {
-				ikeLog.Error("[IKE] Unmarshalling EAP-5G packet failed: %+v", err)
+				ikeLog.Errorf("[IKE] Unmarshalling EAP-5G packet failed: %+v", err)
 				return
 			}
 
@@ -828,7 +838,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				// Send EAP failure
 				identifier, err := GenerateRandomUint8()
 				if err != nil {
-					ikeLog.Error("[IKE] Generate random uint8 failed: %+v", err)
+					ikeLog.Errorf("[IKE] Generate random uint8 failed: %+v", err)
 					return
 				}
 
@@ -874,7 +884,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				copy(checksumField, checksumOfMessage)
 
 				// Send IKE message to UE
-				ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+				SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 				return
 			}
 
@@ -929,14 +939,20 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 				return
 			}
-			pseudorandomFunction.Write([]byte("Key Pad for IKEv2"))
+			if _, err := pseudorandomFunction.Write([]byte("Key Pad for IKEv2")); err != nil {
+				ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+				return
+			}
 			secret := pseudorandomFunction.Sum(nil)
 			pseudorandomFunction, ok = NewPseudorandomFunction(secret, transformPseudorandomFunction.TransformID)
 			if !ok {
 				ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 				return
 			}
-			pseudorandomFunction.Write(ikeSecurityAssociation.RemoteUnsignedAuthentication)
+			if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.RemoteUnsignedAuthentication); err != nil {
+				ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+				return
+			}
 			expectedAuthenticationData := pseudorandomFunction.Sum(nil)
 
 			if !bytes.Equal(authentication.AuthenticationData, expectedAuthenticationData) {
@@ -987,7 +1003,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				copy(checksumField, checksumOfMessage)
 
 				// Send IKE message to UE
-				ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+				SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 				return
 			}
 		} else {
@@ -1038,7 +1054,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			copy(checksumField, checksumOfMessage)
 
 			// Send IKE message to UE
-			ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+			SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 			return
 		}
 
@@ -1058,7 +1074,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 						ikeLog.Tracef("[IKE] Got client requested address: %d.%d.%d.%d", attribute.Value[0], attribute.Value[1], attribute.Value[2], attribute.Value[3])
 					}
 				default:
-					ikeLog.Warn("[IKE] Receive other type of configuration request: %d", attribute.Type)
+					ikeLog.Warnf("[IKE] Receive other type of configuration request: %d", attribute.Type)
 				}
 			}
 		} else {
@@ -1126,14 +1142,74 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 			return
 		}
-		pseudorandomFunction.Write([]byte("Key Pad for IKEv2"))
+		if _, err := pseudorandomFunction.Write([]byte("Key Pad for IKEv2")); err != nil {
+			ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+			return
+		}
 		secret := pseudorandomFunction.Sum(nil)
 		pseudorandomFunction, ok = NewPseudorandomFunction(secret, transformPseudorandomFunction.TransformID)
 		if !ok {
 			ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 			return
 		}
-		pseudorandomFunction.Write(ikeSecurityAssociation.LocalUnsignedAuthentication)
+		if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.LocalUnsignedAuthentication); err != nil {
+			ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+			return
+		}
+
+		// Get xfrm needed data
+		// As specified in RFC 7296, ESP negotiate two child security association (pair) in one IKE_AUTH
+		ChildSecurityAssociationContext, err := thisUE.CreateIKEChildSecurityAssociation(ikeSecurityAssociation.IKEAuthResponseSA)
+		if err != nil {
+			ikeLog.Errorf("[IKE] Create child security association context failed: %+v", err)
+			return
+		}
+		err = parseIPAddressInformationToChildSecurityAssociation(ChildSecurityAssociationContext, ueSendInfo.Addr.IP, ikeSecurityAssociation.TrafficSelectorInitiator, ikeSecurityAssociation.TrafficSelectorResponder)
+		if err != nil {
+			ikeLog.Errorf("[IKE] Parse IP address to child security association failed: %+v", err)
+			return
+		}
+
+		// Generate key for child security association as specified in RFC 7296 section 2.17
+		transformEncryptionAlgorithmForIPSec := ikeSecurityAssociation.IKEAuthResponseSA.Proposals[0].EncryptionAlgorithm[0]
+		transformIntegrityAlgorithmForIPSec := ikeSecurityAssociation.IKEAuthResponseSA.Proposals[0].IntegrityAlgorithm[0]
+
+		var lengthEncryptionKeyIPSec, lengthIntegrityKeyIPSec, totalKeyLength int
+		if lengthEncryptionKeyIPSec, ok = getKeyLength(transformEncryptionAlgorithmForIPSec.TransformType, transformEncryptionAlgorithmForIPSec.TransformID, transformEncryptionAlgorithmForIPSec.AttributePresent, transformEncryptionAlgorithmForIPSec.AttributeValue); !ok {
+			ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+			return
+		}
+		if lengthIntegrityKeyIPSec, ok = getKeyLength(transformIntegrityAlgorithmForIPSec.TransformType, transformIntegrityAlgorithmForIPSec.TransformID, transformIntegrityAlgorithmForIPSec.AttributePresent, transformIntegrityAlgorithmForIPSec.AttributeValue); !ok {
+			ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+			return
+		}
+		totalKeyLength = lengthEncryptionKeyIPSec + lengthIntegrityKeyIPSec
+		totalKeyLength = totalKeyLength * 2
+
+		seed := ikeSecurityAssociation.ConcatenatedNonce
+
+		var keyStream, generatedKeyBlock []byte
+		var index byte
+		for index = 1; len(keyStream) < totalKeyLength; index++ {
+			if pseudorandomFunction, ok = NewPseudorandomFunction(ikeSecurityAssociation.SK_d, transformPseudorandomFunction.TransformID); !ok {
+				ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
+				return
+			}
+			if _, err := pseudorandomFunction.Write(append(append(generatedKeyBlock, seed...), index)); err != nil {
+				ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+				return
+			}
+			generatedKeyBlock = pseudorandomFunction.Sum(nil)
+			keyStream = append(keyStream, generatedKeyBlock...)
+		}
+
+		ChildSecurityAssociationContext.IncomingEncryptionKey = append(ChildSecurityAssociationContext.IncomingEncryptionKey, keyStream[:lengthEncryptionKeyIPSec]...)
+		keyStream = keyStream[lengthEncryptionKeyIPSec:]
+		ChildSecurityAssociationContext.IncomingIntegrityKey = append(ChildSecurityAssociationContext.IncomingIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
+		keyStream = keyStream[lengthIntegrityKeyIPSec:]
+		ChildSecurityAssociationContext.OutgoingEncryptionKey = append(ChildSecurityAssociationContext.OutgoingEncryptionKey, keyStream[:lengthEncryptionKeyIPSec]...)
+		keyStream = keyStream[lengthEncryptionKeyIPSec:]
+		ChildSecurityAssociationContext.OutgoingIntegrityKey = append(ChildSecurityAssociationContext.OutgoingIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
 
 		// Build response
 		var ikePayload []ike_message.IKEPayloadType
@@ -1188,7 +1264,13 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		copy(checksumField, checksumOfMessage)
 
 		// Send IKE message to UE
-		ike_message.SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+
+		// Aplly XFRM rules
+		if err = ApplyXFRMRule(ChildSecurityAssociationContext); err != nil {
+			ikeLog.Errorf("[IKE] Applying XFRM rules failed: %+v", err)
+			return
+		}
 	}
 }
 
@@ -1225,6 +1307,8 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 					return true
 				case 256:
 					return true
+				default:
+					return false
 				}
 			} else {
 				return false
@@ -1285,19 +1369,131 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 		default:
 			return false
 		}
+	default:
+		return false
+	}
+}
+
+func is_Kernel_Supported(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) bool {
+	switch transformType {
+	case ike_message.TypeEncryptionAlgorithm:
+		switch transformID {
+		case ike_message.ENCR_DES_IV64:
+			return false
+		case ike_message.ENCR_DES:
+			return true
+		case ike_message.ENCR_3DES:
+			return true
+		case ike_message.ENCR_RC5:
+			return false
+		case ike_message.ENCR_IDEA:
+			return false
+		case ike_message.ENCR_CAST:
+			if attributePresent {
+				switch attributeValue {
+				case 128:
+					return true
+				case 256:
+					return false
+				default:
+					return false
+				}
+			} else {
+				return false
+			}
+		case ike_message.ENCR_BLOWFISH:
+			return true
+		case ike_message.ENCR_3IDEA:
+			return false
+		case ike_message.ENCR_DES_IV32:
+			return false
+		case ike_message.ENCR_NULL:
+			return true
+		case ike_message.ENCR_AES_CBC:
+			if attributePresent {
+				switch attributeValue {
+				case 128:
+					return true
+				case 192:
+					return true
+				case 256:
+					return true
+				default:
+					return false
+				}
+			} else {
+				return false
+			}
+		case ike_message.ENCR_AES_CTR:
+			if attributePresent {
+				switch attributeValue {
+				case 128:
+					return true
+				case 192:
+					return true
+				case 256:
+					return true
+				default:
+					return false
+				}
+			} else {
+				return false
+			}
+		default:
+			return false
+		}
+	case ike_message.TypeIntegrityAlgorithm:
+		switch transformID {
+		case ike_message.AUTH_NONE:
+			return false
+		case ike_message.AUTH_HMAC_MD5_96:
+			return true
+		case ike_message.AUTH_HMAC_SHA1_96:
+			return true
+		case ike_message.AUTH_DES_MAC:
+			return false
+		case ike_message.AUTH_KPDK_MD5:
+			return false
+		case ike_message.AUTH_AES_XCBC_96:
+			return true
+		default:
+			return false
+		}
+	case ike_message.TypeDiffieHellmanGroup:
+		switch transformID {
+		case ike_message.DH_NONE:
+			return false
+		case ike_message.DH_768_BIT_MODP:
+			return false
+		case ike_message.DH_1024_BIT_MODP:
+			return false
+		case ike_message.DH_1536_BIT_MODP:
+			return false
+		case ike_message.DH_2048_BIT_MODP:
+			return false
+		case ike_message.DH_3072_BIT_MODP:
+			return false
+		case ike_message.DH_4096_BIT_MODP:
+			return false
+		case ike_message.DH_6144_BIT_MODP:
+			return false
+		case ike_message.DH_8192_BIT_MODP:
+			return false
+		default:
+			return false
+		}
 	case ike_message.TypeExtendedSequenceNumbers:
 		switch transformID {
 		case ike_message.ESN_NO:
 			return true
 		case ike_message.ESN_NEED:
-			return false
+			return true
 		default:
 			return false
 		}
 	default:
 		return false
 	}
-	return false
 }
 
 func getKeyLength(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) (int, bool) {
@@ -1307,23 +1503,43 @@ func getKeyLength(transformType uint8, transformID uint16, attributePresent bool
 		case ike_message.ENCR_DES_IV64:
 			return 0, false
 		case ike_message.ENCR_DES:
-			return 0, false
+			return 8, true
 		case ike_message.ENCR_3DES:
-			return 0, false
+			return 24, true
 		case ike_message.ENCR_RC5:
 			return 0, false
 		case ike_message.ENCR_IDEA:
 			return 0, false
 		case ike_message.ENCR_CAST:
+			if attributePresent {
+				switch attributeValue {
+				case 128:
+					return 16, true
+				case 256:
+					return 0, false
+				default:
+					return 0, false
+				}
+			}
 			return 0, false
-		case ike_message.ENCR_BLOWFISH:
-			return 0, false
+		case ike_message.ENCR_BLOWFISH: // Blowfish support variable key length
+			if attributePresent {
+				if attributeValue < 40 {
+					return 0, false
+				} else if attributeValue > 448 {
+					return 0, false
+				} else {
+					return int(attributeValue / 8), true
+				}
+			} else {
+				return 0, false
+			}
 		case ike_message.ENCR_3IDEA:
 			return 0, false
 		case ike_message.ENCR_DES_IV32:
 			return 0, false
 		case ike_message.ENCR_NULL:
-			return 0, false
+			return 0, true
 		case ike_message.ENCR_AES_CBC:
 			if attributePresent {
 				switch attributeValue {
@@ -1333,12 +1549,27 @@ func getKeyLength(transformType uint8, transformID uint16, attributePresent bool
 					return 24, true
 				case 256:
 					return 32, true
+				default:
+					return 0, false
 				}
 			} else {
 				return 0, false
 			}
 		case ike_message.ENCR_AES_CTR:
-			return 0, false
+			if attributePresent {
+				switch attributeValue {
+				case 128:
+					return 20, true
+				case 192:
+					return 28, true
+				case 256:
+					return 36, true
+				default:
+					return 0, false
+				}
+			} else {
+				return 0, false
+			}
 		default:
 			return 0, false
 		}
@@ -1396,7 +1627,6 @@ func getKeyLength(transformType uint8, transformID uint16, attributePresent bool
 	default:
 		return 0, false
 	}
-	return 0, false
 }
 
 func concatenateNonceAndSPI(nonce []byte, SPI_initiator uint64, SPI_responder uint64) []byte {
@@ -1413,10 +1643,11 @@ func concatenateNonceAndSPI(nonce []byte, SPI_initiator uint64, SPI_responder ui
 func GenRandomIPinRange(subnet *net.IPNet) net.IP {
 	ipAddr := make([]byte, 4)
 
+	// TODO: elimenate network name, gateway, and broadcast
 	for i := 0; i < 4; i++ {
 		randomNumber, err := GenerateRandomUint8()
 		if err != nil {
-			ikeLog.Error("[IKE] Generate random number for IP address failed: %+v", err)
+			ikeLog.Errorf("[IKE] Generate random number for IP address failed: %+v", err)
 			return nil
 		}
 		alter := byte(randomNumber) & (subnet.Mask[i] ^ 255)
@@ -1424,4 +1655,39 @@ func GenRandomIPinRange(subnet *net.IPNet) net.IP {
 	}
 
 	return net.IPv4(ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
+}
+
+func parseIPAddressInformationToChildSecurityAssociation(
+	childSecurityAssociation *n3iwf_context.ChildSecurityAssociation,
+	uePublicIPAddr net.IP,
+	trafficSelectorInitiator *ike_message.TrafficSelectorInitiator,
+	trafficSelectorResponder *ike_message.TrafficSelectorResponder) error {
+
+	if childSecurityAssociation == nil {
+		return errors.New("childSecurityAssociation is nil")
+	}
+
+	childSecurityAssociation.PeerPublicIPAddr = uePublicIPAddr
+	if factory.N3iwfConfig.Configuration != nil {
+		if factory.N3iwfConfig.Configuration.IKEBindAddr != "" {
+			ipAddr := factory.N3iwfConfig.Configuration.IKEBindAddr
+			childSecurityAssociation.LocalPublicIPAddr = net.ParseIP(ipAddr)
+		} else {
+			return errors.New("N3IWF address is not specified in configuration")
+		}
+	} else {
+		return errors.New("N3IWF configuration is nil")
+	}
+
+	childSecurityAssociation.TrafficSelectorInitiator = net.IPNet{
+		IP:   trafficSelectorInitiator.TrafficSelectors[0].StartAddress,
+		Mask: []byte{255, 255, 255, 255},
+	}
+
+	childSecurityAssociation.TrafficSelectorResponder = net.IPNet{
+		IP:   trafficSelectorResponder.TrafficSelectors[0].StartAddress,
+		Mask: []byte{0, 0, 0, 0},
+	}
+
+	return nil
 }
