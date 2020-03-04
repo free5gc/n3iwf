@@ -1,9 +1,11 @@
 package n3iwf_handler
 
 import (
-	"github.com/sirupsen/logrus"
 	"gofree5gc/src/n3iwf/n3iwf_context"
+	"gofree5gc/src/n3iwf/n3iwf_ike"
 	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
+
+	"github.com/sirupsen/logrus"
 
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
@@ -33,7 +35,7 @@ func Handle() {
 				self.AMFReInitAvailableList[msg.SCTPAddr] = true
 				ngap_message.SendRANConfigurationUpdate(self.AMFPool[msg.SCTPAddr])
 			case n3iwf_message.EventN1UDPMessage:
-				// TODO: handle IKE message
+				n3iwf_ike.Dispatch(msg.UDPSendInfo, msg.Value.([]byte))
 			}
 		}
 	}
