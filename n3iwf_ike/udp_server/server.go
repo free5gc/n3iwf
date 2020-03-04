@@ -19,8 +19,8 @@ const (
 )
 
 const (
-	channelIDForPort500  = 1
-	channelIDForPort4500 = 2
+	ChannelIDForPort500  = 1
+	ChannelIDForPort4500 = 2
 )
 
 type sendParameters struct {
@@ -58,8 +58,8 @@ func Run() {
 		return
 	}
 
-	go reader(channelIDForPort500, listenerPort500)
-	go sender(channelIDForPort500, listenerPort500)
+	go reader(ChannelIDForPort500, listenerPort500)
+	go sender(ChannelIDForPort500, listenerPort500)
 
 	listenerPort4500, err := net.ListenUDP("udp", listenAddrPort4500)
 	if err != nil {
@@ -67,8 +67,8 @@ func Run() {
 		return
 	}
 
-	go reader(channelIDForPort4500, listenerPort4500)
-	go sender(channelIDForPort4500, listenerPort4500)
+	go reader(ChannelIDForPort4500, listenerPort4500)
+	go sender(ChannelIDForPort4500, listenerPort4500)
 
 }
 
@@ -99,7 +99,7 @@ func configBindAddr(listenAddrPort500 *net.UDPAddr, listenAddrPort4500 *net.UDPA
 }
 
 func Send(sendInfo *n3iwf_message.UDPSendInfoGroup, msg []byte) {
-	if sendInfo.ChannelID == channelIDForPort500 {
+	if sendInfo.ChannelID == ChannelIDForPort500 {
 
 		sendData := sendParameters{
 			DstAddr: sendInfo.Addr,
@@ -111,7 +111,7 @@ func Send(sendInfo *n3iwf_message.UDPSendInfoGroup, msg []byte) {
 		sendChanToPort500 <- sendData
 		mtxForChanPort500.Unlock()
 
-	} else if sendInfo.ChannelID == channelIDForPort4500 {
+	} else if sendInfo.ChannelID == ChannelIDForPort4500 {
 
 		sendData := sendParameters{
 			DstAddr: sendInfo.Addr,
@@ -129,7 +129,7 @@ func Send(sendInfo *n3iwf_message.UDPSendInfoGroup, msg []byte) {
 }
 
 func sender(channelID int, conn *net.UDPConn) {
-	if channelID == channelIDForPort500 {
+	if channelID == ChannelIDForPort500 {
 		for {
 
 			sendData := <-sendChanToPort500
@@ -143,7 +143,7 @@ func sender(channelID int, conn *net.UDPConn) {
 			}
 
 		}
-	} else if channelID == channelIDForPort4500 {
+	} else if channelID == ChannelIDForPort4500 {
 		for {
 
 			sendData := <-sendChanToPort4500
@@ -164,7 +164,7 @@ func sender(channelID int, conn *net.UDPConn) {
 
 func reader(channelID int, conn *net.UDPConn) {
 
-	if channelID > channelIDForPort4500 {
+	if channelID > ChannelIDForPort4500 {
 		ikeLog.Error("[IKE] Channel ID out of range")
 		return
 	}
