@@ -1,9 +1,16 @@
 package n3iwf_context
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
+	"math"
+	"math/big"
+	"net"
+
 	"github.com/sirupsen/logrus"
 
+	"gofree5gc/lib/ngap/ngapType"
 	"gofree5gc/src/n3iwf/logger"
 )
 
@@ -14,9 +21,25 @@ var ranUeNgapIdGenerator int64 = 0
 
 type N3IWFContext struct {
 	NFInfo                 N3IWFNFInfo
-	UePool                 map[int64]*N3IWFUe   // RanUeNgapID as key
-	AMFPool                map[string]*N3IWFAMF // SCTPAddr as key
-	AMFReInitAvailableList map[string]bool      //SCTPAddr as key
+	UePool                 map[int64]*N3IWFUe                 // RanUeNgapID as key
+	AMFPool                map[string]*N3IWFAMF               // SCTPAddr as key
+	AMFReInitAvailableList map[string]bool                    // SCTPAddr as key
+	IKESA                  map[uint64]*IKESecurityAssociation // SPI as key
+	AllocatedUEIPAddress   map[string]*N3IWFUe                // IPAddr as key
+
+	// N3IWF FQDN
+	FQDN string
+
+	// security data
+	CertificateAuthority []byte
+	N3IWFCertificate     []byte
+	N3IWFPrivateKey      *rsa.PrivateKey
+
+	// UEIPAddressRange
+	Subnet *net.IPNet
+
+	// Network interface mark for xfrm
+	Mark uint32
 }
 
 func init() {
@@ -27,6 +50,8 @@ func init() {
 	N3IWFSelf().UePool = make(map[int64]*N3IWFUe)
 	N3IWFSelf().AMFPool = make(map[string]*N3IWFAMF)
 	N3IWFSelf().AMFReInitAvailableList = make(map[string]bool)
+	N3IWFSelf().IKESA = make(map[uint64]*IKESecurityAssociation)
+	N3IWFSelf().AllocatedUEIPAddress = make(map[string]*N3IWFUe)
 }
 
 // Create new N3IWF context
@@ -92,4 +117,45 @@ func (context *N3IWFContext) CheckAMFReInit(sctpAddr string) bool {
 		return check
 	}
 	return true
+}
+
+func (context *N3IWFContext) NewIKESecurityAssociation() *IKESecurityAssociation {
+	ikeSecurityAssociation := &IKESecurityAssociation{}
+
+	var maxSPI *big.Int = new(big.Int).SetUint64(math.MaxUint64)
+	var localSPIuint64 uint64
+
+	for {
+		localSPI, err := rand.Int(rand.Reader, maxSPI)
+		if err != nil {
+			contextLog.Error("[Context] Error occurs when generate new IKE SPI")
+			return nil
+		}
+		localSPIuint64 = localSPI.Uint64()
+		if _, duplicate := context.IKESA[localSPIuint64]; !duplicate {
+			break
+		}
+	}
+
+	ikeSecurityAssociation.LocalSPI = localSPIuint64
+	context.IKESA[localSPIuint64] = ikeSecurityAssociation
+
+	return ikeSecurityAssociation
+}
+
+func (context *N3IWFContext) FindIKESecurityAssociationBySPI(spi uint64) *IKESecurityAssociation {
+	if ikeSecurityAssociation, ok := context.IKESA[spi]; ok {
+		return ikeSecurityAssociation
+	} else {
+		return nil
+	}
+}
+
+func (context *N3IWFContext) AMFSelection(ueSpecifiedGUAMI *ngapType.GUAMI) *N3IWFAMF {
+	for _, n3iwfAMF := range context.AMFPool {
+		if n3iwfAMF.FindAvalibleAMFByCompareGUAMI(ueSpecifiedGUAMI) {
+			return n3iwfAMF
+		}
+	}
+	return nil
 }
