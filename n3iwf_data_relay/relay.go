@@ -8,7 +8,6 @@ import (
 	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
 	"net"
 	"syscall"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	v1 "github.com/wmnsk/go-gtp/v1"
@@ -20,8 +19,6 @@ var relayLog *logrus.Entry
 func init() {
 	relayLog = logger.RelayLog
 }
-
-const teidECHO = 0
 
 func listenRawSocket(rawSocket *ipv4.RawConn) {
 	defer rawSocket.Close()
@@ -53,7 +50,7 @@ func ListenN1() error {
 
 	// Setup raw socket
 	// This raw socket will only capture GRE encapsulated packet
-	connection, err := net.ListenPacket("ipv4:gre", listenAddr)
+	connection, err := net.ListenPacket("ip4:gre", listenAddr)
 	if err != nil {
 		relayLog.Errorf("Error setting listen socket on %s: %+v", listenAddr, err)
 		return errors.New("ListenPacket failed")
@@ -129,56 +126,16 @@ func SetupGTP(upfIPAddr string) (*v1.UPlaneConn, net.Addr, error) {
 
 }
 
-func listenGTP(userPlaneConnection *v1.UPlaneConn, remoteAddr net.Addr) {
+func listenGTP(userPlaneConnection *v1.UPlaneConn) {
 	defer userPlaneConnection.Close()
 
 	payload := make([]byte, 1500)
 
 	for {
-		// Set read timeout 60 seconds
-		if err := userPlaneConnection.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
-			relayLog.Error("Set user plane connection read timeout failed")
-			return
-		}
-
 		n, _, teid, err := userPlaneConnection.ReadFromGTP(payload)
 		if err != nil {
-			// Handle read timeout
-			relayLog.Warn("Handle GTP connection idle timeout")
-
-			// Set echo response timeout 5 seconds
-			if err := userPlaneConnection.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
-				relayLog.Error("Set user plane connection read timeout failed")
-				return
-			}
-
-			// Send echo request
-			if err := userPlaneConnection.EchoRequest(remoteAddr); err != nil {
-				relayLog.Error("Send echo request failed")
-				return
-			}
-			n, _, teid, err := userPlaneConnection.ReadFromGTP(payload)
-			if err != nil {
-				relayLog.Error("Echo Timeout.")
-				return
-			}
-			if teid == teidECHO {
-				relayLog.Trace("Received UPF echo")
-			} else {
-				msg := n3iwf_message.HandlerMessage{
-					Event: n3iwf_message.EventGTPMessage,
-					TEID:  teid,
-					Value: payload[:n],
-				}
-
-				n3iwf_message.SendMessage(msg)
-			}
-			continue
-		}
-
-		if teid == teidECHO {
-			relayLog.Trace("Receive UPF echo")
-			continue
+			relayLog.Errorf("Read from GTP failed: %+v", err)
+			return
 		}
 
 		msg := n3iwf_message.HandlerMessage{
@@ -192,8 +149,8 @@ func listenGTP(userPlaneConnection *v1.UPlaneConn, remoteAddr net.Addr) {
 
 }
 
-func ListenGTP(userPlaneConnection *v1.UPlaneConn, remoteAddr net.Addr) error {
-	go listenGTP(userPlaneConnection, remoteAddr)
+func ListenGTP(userPlaneConnection *v1.UPlaneConn) error {
+	go listenGTP(userPlaneConnection)
 	return nil
 }
 

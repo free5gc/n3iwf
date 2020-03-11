@@ -3,6 +3,8 @@ package n3iwf_data_relay_test
 import (
 	"gofree5gc/src/n3iwf/n3iwf_context"
 	"gofree5gc/src/n3iwf/n3iwf_data_relay"
+	"gofree5gc/src/n3iwf/n3iwf_handler"
+	"sync"
 	"testing"
 )
 
@@ -19,9 +21,15 @@ func TestUserPlaneRelay(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n3iwfSelf.GTPBindAddress = "192.168.x.x"
+	go n3iwf_handler.Handle()
 
-	userPlaneConn, remoteAddr, err := n3iwf_data_relay.SetupGTP("192.168.x.x")
+	// Add UE inner IP to context
+	ue.IPSecInnerIP = "10.0.0.2"
+	n3iwfSelf.AllocatedUEIPAddress["10.0.0.2"] = ue
+
+	n3iwfSelf.GTPBindAddress = "172.31.0.153"
+
+	userPlaneConn, remoteAddr, err := n3iwf_data_relay.SetupGTP("172.31.0.152")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +46,11 @@ func TestUserPlaneRelay(t *testing.T) {
 	ue.GTPConnection = append(ue.GTPConnection, gtpConnection)
 
 	// Listen GTP
-	if err := n3iwf_data_relay.ListenGTP(userPlaneConn, remoteAddr); err != nil {
+	if err := n3iwf_data_relay.ListenGTP(userPlaneConn); err != nil {
 		t.Fatal(err)
 	}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	wg.Wait()
 }
