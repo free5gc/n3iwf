@@ -271,7 +271,6 @@ func SetupNASTCPServer() error {
 
 func ForwardCPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	ngap_message.SendUplinkNASTransport(ue.AMF, ue, packet)
-	return
 }
 
 func ForwardCPTrafficFromN2(ue *n3iwf_context.N3IWFUe, nasPDU []byte) {
@@ -287,6 +286,4 @@ func ForwardCPTrafficFromN2(ue *n3iwf_context.N3IWFUe, nasPDU []byte) {
 	} else {
 		relayLog.Tracef("Wrote %d bytes", n)
 	}
-
-	return
 }
