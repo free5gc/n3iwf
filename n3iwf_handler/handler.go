@@ -53,6 +53,14 @@ func Handle() {
 					continue
 				}
 				n3iwf_data_relay.ForwardUPTrafficFromN3(ue, msg.Value.([]byte))
+			case n3iwf_message.EventN1TunnelCPMessage:
+				self := n3iwf_context.N3IWFSelf()
+				ue, ok := self.AllocatedUEIPAddress[msg.UEInnerIP]
+				if !ok {
+					handlerLog.Error("UE context not found")
+					continue
+				}
+				n3iwf_data_relay.ForwardCPTrafficFromN1(ue, msg.Value.([]byte))
 			}
 		}
 	}
