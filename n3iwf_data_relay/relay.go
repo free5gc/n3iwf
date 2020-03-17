@@ -93,8 +93,9 @@ func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
 
 // SetupGTP set up GTP connection with UPF
 // return *v1.UPlaneConn and error
-func SetupGTP(upfIPAddr string) (*v1.UPlaneConn, net.Addr, error) {
+func SetupGTP(upfIPAddr string) (*n3iwf_context.GTPConnectionInfo, error) {
 	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	gtpConnection := new(n3iwf_context.GTPConnectionInfo)
 
 	// Set up GTP connection
 	upfUDPAddr := upfIPAddr + ":2152"
@@ -102,7 +103,7 @@ func SetupGTP(upfIPAddr string) (*v1.UPlaneConn, net.Addr, error) {
 	remoteUDPAddr, err := net.ResolveUDPAddr("udp", upfUDPAddr)
 	if err != nil {
 		relayLog.Errorf("Resolve UDP address %s failed: %+v", upfUDPAddr, err)
-		return nil, nil, errors.New("Resolve Address Failed")
+		return nil, errors.New("Resolve Address Failed")
 	}
 
 	n3iwfUDPAddr := n3iwfSelf.GTPBindAddress + ":2152"
@@ -110,7 +111,7 @@ func SetupGTP(upfIPAddr string) (*v1.UPlaneConn, net.Addr, error) {
 	localUDPAddr, err := net.ResolveUDPAddr("udp", n3iwfUDPAddr)
 	if err != nil {
 		relayLog.Errorf("Resolve UDP address %s failed: %+v", n3iwfUDPAddr, err)
-		return nil, nil, errors.New("Resolve Address Failed")
+		return nil, errors.New("Resolve Address Failed")
 	}
 
 	context := context.TODO()
@@ -119,10 +120,13 @@ func SetupGTP(upfIPAddr string) (*v1.UPlaneConn, net.Addr, error) {
 	userPlaneConnection, err := v1.DialUPlane(context, localUDPAddr, remoteUDPAddr)
 	if err != nil {
 		relayLog.Errorf("Dial to UPF failed: %+v", err)
-		return nil, nil, errors.New("Dial failed")
+		return nil, errors.New("Dial failed")
 	}
 
-	return userPlaneConnection, remoteUDPAddr, nil
+	gtpConnection.RemoteAddr = remoteUDPAddr
+	gtpConnection.UserPlaneConnection = userPlaneConnection
+
+	return gtpConnection, nil
 
 }
 
