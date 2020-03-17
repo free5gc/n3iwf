@@ -3,10 +3,14 @@ package ike_handler
 import (
 	"encoding/binary"
 	"errors"
+	"net"
 
 	"gofree5gc/lib/aper"
 	"gofree5gc/lib/ngap/ngapType"
+	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
 )
+
+// 3GPP specified EAP-5G
 
 // Access Network Parameters
 type ANParameters struct {
@@ -326,4 +330,73 @@ func BuildEAP5GNAS(nasPDU []byte) []byte {
 	binary.BigEndian.PutUint16(header[2:4], uint16(len(nasPDU)))
 
 	return append(header, nasPDU...)
+}
+
+// 3GPP specified IKE Notify
+
+// 3GPP specified IKE Notify Message Types
+const (
+	Vendor3GPPNotifyType5G_QOS_INFO     uint16 = 55501
+	Vendor3GPPNotifyTypeNAS_IP4_ADDRESS uint16 = 55502
+	Vendor3GPPNotifyTypeUP_IP4_ADDRESS  uint16 = 55504
+	Vendor3GPPNotifyTypeNAS_TCP_PORT    uint16 = 55506
+)
+
+// Used in NotifyType5G_QOS_INFO
+const (
+	NotifyType5G_QOS_INFOBitDSCPICheck uint8 = 1
+	NotifyType5G_QOS_INFOBitDCSICheck  uint8 = 1 << 1
+)
+
+func BuildNotify5G_QOS_INFO(pduSessionID uint8, qfiList []uint8, isDefault bool) *ike_message.Notification {
+	notifyData := make([]byte, 1)
+
+	// Append PDU session ID
+	notifyData = append(notifyData, pduSessionID)
+
+	// Append QFI list length
+	notifyData = append(notifyData, uint8(len(qfiList)))
+
+	// Append QFI list
+	notifyData = append(notifyData, qfiList...)
+
+	// Append default and differentiated service flags
+	var defaultAndDifferentiatedServiceFlags uint8
+	if isDefault {
+		defaultAndDifferentiatedServiceFlags |= NotifyType5G_QOS_INFOBitDCSICheck
+	}
+	notifyData = append(notifyData, defaultAndDifferentiatedServiceFlags)
+
+	// Assign length
+	notifyData[0] = uint8(len(notifyData))
+
+	return ike_message.BuildNotification(ike_message.TypeNone, Vendor3GPPNotifyType5G_QOS_INFO, nil, notifyData)
+}
+
+func BuildNotifyNAS_IP4_ADDRESS(nasIPAddr string) *ike_message.Notification {
+	if nasIPAddr == "" {
+		return nil
+	} else {
+		ipAddrByte := net.ParseIP(nasIPAddr)
+		return ike_message.BuildNotification(ike_message.TypeNone, Vendor3GPPNotifyTypeNAS_IP4_ADDRESS, nil, ipAddrByte)
+	}
+}
+
+func BuildNotifyUP_IP4_ADDRESS(upIPAddr string) *ike_message.Notification {
+	if upIPAddr == "" {
+		return nil
+	} else {
+		ipAddrByte := net.ParseIP(upIPAddr)
+		return ike_message.BuildNotification(ike_message.TypeNone, Vendor3GPPNotifyTypeUP_IP4_ADDRESS, nil, ipAddrByte)
+	}
+}
+
+func BuildNotifyNAS_TCP_PORT(port uint16) *ike_message.Notification {
+	if port == 0 {
+		return nil
+	} else {
+		portData := make([]byte, 2)
+		binary.BigEndian.PutUint16(portData, port)
+		return ike_message.BuildNotification(ike_message.TypeNone, Vendor3GPPNotifyTypeNAS_TCP_PORT, nil, portData)
+	}
 }
