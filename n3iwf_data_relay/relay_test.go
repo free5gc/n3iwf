@@ -29,24 +29,20 @@ func TestUserPlaneRelay(t *testing.T) {
 
 	n3iwfSelf.GTPBindAddress = "172.31.0.153"
 
-	userPlaneConn, remoteAddr, err := n3iwf_data_relay.SetupGTP("172.31.0.152")
+	gtpConnection, err := n3iwf_data_relay.SetupGTP("172.31.0.152")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	ueTEID := n3iwfSelf.NewTEID(ue)
 
-	gtpConnection := &n3iwf_context.GTPConnectionInfo{
-		RemoteAddr:          remoteAddr,
-		IncomingTEID:        ueTEID,
-		OutgoingTEID:        1,
-		UserPlaneConnection: userPlaneConn,
-	}
+	gtpConnection.IncomingTEID = ueTEID
+	gtpConnection.OutgoingTEID = 1
 
 	ue.GTPConnection = append(ue.GTPConnection, gtpConnection)
 
 	// Listen GTP
-	if err := n3iwf_data_relay.ListenGTP(userPlaneConn); err != nil {
+	if err := n3iwf_data_relay.ListenGTP(gtpConnection.UserPlaneConnection); err != nil {
 		t.Fatal(err)
 	}
 
