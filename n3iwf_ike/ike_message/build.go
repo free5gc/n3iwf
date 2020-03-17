@@ -35,9 +35,9 @@ func BuildCertificate(certificateEncode uint8, certificateData []byte) *Certific
 	return certificatePayload
 }
 
-func BuildEncryptedPayload(nextPayload uint8, encryptedData []byte) *Encrypted {
+func BuildEncryptedPayload(nextPayload IKEType, encryptedData []byte) *Encrypted {
 	encryptedPayload := new(Encrypted)
-	encryptedPayload.NextPayload = nextPayload
+	encryptedPayload.NextPayload = uint8(nextPayload)
 	encryptedPayload.EncryptedData = append(encryptedPayload.EncryptedData, encryptedData...)
 	return encryptedPayload
 }

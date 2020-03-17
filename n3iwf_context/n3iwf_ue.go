@@ -96,6 +96,10 @@ type IKESecurityAssociation struct {
 	DiffieHellmanGroup     *ike_message.Transform
 	ExpandedSequenceNumber *ike_message.Transform
 
+	// Used for key generating
+	ConcatenatedNonce      []byte
+	DiffieHellmanSharedKey []byte
+
 	// Keys
 	SK_d  []byte // used for child SA key deriving
 	SK_ai []byte // used by initiator for integrity checking
@@ -114,7 +118,6 @@ type IKESecurityAssociation struct {
 	IKEAuthResponseSA        *ike_message.SecurityAssociation
 	TrafficSelectorInitiator *ike_message.TrafficSelectorInitiator
 	TrafficSelectorResponder *ike_message.TrafficSelectorResponder
-	ConcatenatedNonce        []byte
 	LastEAPIdentifier        uint8
 
 	// Authentication data
@@ -126,18 +129,25 @@ type IKESecurityAssociation struct {
 }
 
 type ChildSecurityAssociation struct {
-	SPI                      uint64
-	PeerPublicIPAddr         net.IP
-	LocalPublicIPAddr        net.IP
+	// SPI
+	SPI uint64
+
+	// IP address
+	PeerPublicIPAddr  net.IP
+	LocalPublicIPAddr net.IP
+
+	// Traffic selector
 	TrafficSelectorInitiator net.IPNet
 	TrafficSelectorResponder net.IPNet
-	EncryptionAlgorithm      uint16
-	IncomingEncryptionKey    []byte
-	OutgoingEncryptionKey    []byte
-	IntegrityAlgorithm       uint16
-	IncomingIntegrityKey     []byte
-	OutgoingIntegrityKey     []byte
-	ESN                      bool
+
+	// Security
+	EncryptionAlgorithm   uint16
+	IncomingEncryptionKey []byte
+	OutgoingEncryptionKey []byte
+	IntegrityAlgorithm    uint16
+	IncomingIntegrityKey  []byte
+	OutgoingIntegrityKey  []byte
+	ESN                   bool
 }
 
 func (ue *N3IWFUe) init() {
