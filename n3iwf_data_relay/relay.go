@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/sirupsen/logrus"
-	v1 "github.com/wmnsk/go-gtp/v1"
+	gtpv1 "github.com/wmnsk/go-gtp/v1"
 	"golang.org/x/net/ipv4"
 )
 
@@ -43,7 +43,10 @@ func listenRawSocket(rawSocket *ipv4.RawConn) {
 
 }
 
-func ListenN1() error {
+// ListenN1UPTraffic bind and listen raw socket on N3IWF N1 interface
+// with UP_IP_ADDRESS, catching GRE encapsulated packets and send it
+// to N3IWF handler
+func ListenN1UPTraffic() error {
 	// Local IPSec address
 	n3iwfSelf := n3iwf_context.N3IWFSelf()
 	listenAddr := n3iwfSelf.IPSecGatewayAddress
@@ -67,6 +70,8 @@ func ListenN1() error {
 	return nil
 }
 
+// ForwardUPTrafficFromN1 forward user plane packets from N1 to UPF,
+// with GTP header encapsulated
 func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	if len(ue.GTPConnection) == 0 {
 		relayLog.Error("This UE doesn't have any available user plane session")
@@ -80,7 +85,7 @@ func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	n, err := userPlaneConnection.WriteToGTP(gtpConnection.OutgoingTEID, packet, gtpConnection.RemoteAddr)
 	if err != nil {
 		relayLog.Errorf("Write to UPF failed: %+v", err)
-		if err == v1.ErrConnNotOpened {
+		if err == gtpv1.ErrConnNotOpened {
 			relayLog.Error("The connection has been closed")
 			// TODO: Release the GTP resource
 		}
@@ -91,11 +96,10 @@ func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	}
 }
 
-// SetupGTP set up GTP connection with UPF
-// return *v1.UPlaneConn and error
-func SetupGTP(upfIPAddr string) (*n3iwf_context.GTPConnectionInfo, error) {
+// SetupGTPTunnelWithUPF set up GTP connection with UPF
+// return *gtpv1.UPlaneConn, net.Addr and error
+func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtpv1.UPlaneConn, net.Addr, error) {
 	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	gtpConnection := new(n3iwf_context.GTPConnectionInfo)
 
 	// Set up GTP connection
 	upfUDPAddr := upfIPAddr + ":2152"
@@ -103,7 +107,7 @@ func SetupGTP(upfIPAddr string) (*n3iwf_context.GTPConnectionInfo, error) {
 	remoteUDPAddr, err := net.ResolveUDPAddr("udp", upfUDPAddr)
 	if err != nil {
 		relayLog.Errorf("Resolve UDP address %s failed: %+v", upfUDPAddr, err)
-		return nil, errors.New("Resolve Address Failed")
+		return nil, nil, errors.New("Resolve Address Failed")
 	}
 
 	n3iwfUDPAddr := n3iwfSelf.GTPBindAddress + ":2152"
@@ -111,26 +115,23 @@ func SetupGTP(upfIPAddr string) (*n3iwf_context.GTPConnectionInfo, error) {
 	localUDPAddr, err := net.ResolveUDPAddr("udp", n3iwfUDPAddr)
 	if err != nil {
 		relayLog.Errorf("Resolve UDP address %s failed: %+v", n3iwfUDPAddr, err)
-		return nil, errors.New("Resolve Address Failed")
+		return nil, nil, errors.New("Resolve Address Failed")
 	}
 
 	context := context.TODO()
 
 	// Dial to UPF
-	userPlaneConnection, err := v1.DialUPlane(context, localUDPAddr, remoteUDPAddr)
+	userPlaneConnection, err := gtpv1.DialUPlane(context, localUDPAddr, remoteUDPAddr)
 	if err != nil {
 		relayLog.Errorf("Dial to UPF failed: %+v", err)
-		return nil, errors.New("Dial failed")
+		return nil, nil, errors.New("Dial failed")
 	}
 
-	gtpConnection.RemoteAddr = remoteUDPAddr
-	gtpConnection.UserPlaneConnection = userPlaneConnection
-
-	return gtpConnection, nil
+	return userPlaneConnection, remoteUDPAddr, nil
 
 }
 
-func listenGTP(userPlaneConnection *v1.UPlaneConn) {
+func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 	defer userPlaneConnection.Close()
 
 	payload := make([]byte, 1500)
@@ -153,11 +154,15 @@ func listenGTP(userPlaneConnection *v1.UPlaneConn) {
 
 }
 
-func ListenGTP(userPlaneConnection *v1.UPlaneConn) error {
+// ListenGTP binds and listens raw socket on N3IWF N3 interface,
+// catching GTP packets and send it to N3IWF handler
+func ListenGTP(userPlaneConnection *gtpv1.UPlaneConn) error {
 	go listenGTP(userPlaneConnection)
 	return nil
 }
 
+// ForwardUPTrafficFromN3 forward user plane packets from N3 to UE,
+// with GRE header and new IP header encapsulated
 func ForwardUPTrafficFromN3(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	// This is the IP header template for packets with GRE header encapsulated.
 	// The remaining mandatory fields are Dst and TotalLen, which specified

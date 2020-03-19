@@ -9,7 +9,7 @@ import (
 	"net"
 
 	"github.com/sirupsen/logrus"
-	v1 "github.com/wmnsk/go-gtp/v1"
+	gtpv1 "github.com/wmnsk/go-gtp/v1"
 	"golang.org/x/net/ipv4"
 
 	"gofree5gc/lib/ngap/ngapType"
@@ -28,7 +28,7 @@ type N3IWFContext struct {
 	AMFPool                map[string]*N3IWFAMF               // SCTPAddr as key
 	AMFReInitAvailableList map[string]bool                    // SCTPAddr as key
 	IKESA                  map[uint64]*IKESecurityAssociation // SPI as key
-	GTPConnection          map[string]*v1.UPlaneConn          // UPF address as key
+	GTPConnectionWithUPF   map[string]*gtpv1.UPlaneConn       // UPF address as key
 	AllocatedUEIPAddress   map[string]*N3IWFUe                // IPAddr as key
 	AllocatedUETEID        map[uint32]*N3IWFUe                // TEID as key
 
@@ -64,7 +64,7 @@ func init() {
 	N3IWFSelf().AMFPool = make(map[string]*N3IWFAMF)
 	N3IWFSelf().AMFReInitAvailableList = make(map[string]bool)
 	N3IWFSelf().IKESA = make(map[uint64]*IKESecurityAssociation)
-	N3IWFSelf().GTPConnection = make(map[string]*v1.UPlaneConn)
+	N3IWFSelf().GTPConnectionWithUPF = make(map[string]*gtpv1.UPlaneConn)
 	N3IWFSelf().AllocatedUEIPAddress = make(map[string]*N3IWFUe)
 	N3IWFSelf().AllocatedUETEID = make(map[uint32]*N3IWFUe)
 }

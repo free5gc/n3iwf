@@ -17,7 +17,7 @@ func TestUserPlaneRelay(t *testing.T) {
 
 	n3iwfSelf.IPSecGatewayAddress = "10.0.0.1"
 
-	if err := n3iwf_data_relay.ListenN1(); err != nil {
+	if err := n3iwf_data_relay.ListenN1UPTraffic(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -27,9 +27,13 @@ func TestUserPlaneRelay(t *testing.T) {
 	ue.IPSecInnerIP = "10.0.0.2"
 	n3iwfSelf.AllocatedUEIPAddress["10.0.0.2"] = ue
 
+	// GTP address is acquired from SMF
 	n3iwfSelf.GTPBindAddress = "172.31.0.153"
 
-	gtpConnection, err := n3iwf_data_relay.SetupGTP("172.31.0.152")
+	var err error
+	gtpConnection := &n3iwf_context.GTPConnectionInfo{}
+
+	gtpConnection.UserPlaneConnection, gtpConnection.RemoteAddr, err = n3iwf_data_relay.SetupGTPTunnelWithUPF("172.31.0.152")
 	if err != nil {
 		t.Fatal(err)
 	}

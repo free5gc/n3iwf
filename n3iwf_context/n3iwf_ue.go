@@ -9,7 +9,7 @@ import (
 	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
 	"net"
 
-	v1 "github.com/wmnsk/go-gtp/v1"
+	gtpv1 "github.com/wmnsk/go-gtp/v1"
 )
 
 const (
@@ -78,7 +78,7 @@ type GTPConnectionInfo struct {
 	RemoteAddr          net.Addr
 	IncomingTEID        uint32
 	OutgoingTEID        uint32
-	UserPlaneConnection *v1.UPlaneConn
+	UserPlaneConnection *gtpv1.UPlaneConn
 }
 
 type IKESecurityAssociation struct {
