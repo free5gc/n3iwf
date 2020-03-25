@@ -3,7 +3,6 @@ package ike_handler
 import (
 	"encoding/binary"
 	"errors"
-	"net"
 
 	"gofree5gc/lib/aper"
 	"gofree5gc/lib/ngap/ngapType"
@@ -20,46 +19,11 @@ type ANParameters struct {
 	EstablishmentCause *ngapType.RRCEstablishmentCause
 }
 
-// Types for EAP-5G
-// Used in IKE EAP expanded for vendor ID
-const VendorID3GPP = 10415
-
-// Used in IKE EAP expanded for vendor data
-const VendorTypeEAP5G = 3
-
-// Used in EAP-5G for message ID
-const (
-	EAP5GType5GStart = 1
-	EAP5GType5GNAS   = 2
-	EAP5GType5GStop  = 4
-)
-
-// Used in AN-Parameter field for IE types
-const (
-	ANParametersTypeGUAMI              = 1
-	ANParametersTypeSelectedPLMNID     = 2
-	ANParametersTypeRequestedNSSAI     = 3
-	ANParametersTypeEstablishmentCause = 4
-)
-
-// Used in IE Establishment Cause field for cause types
-const (
-	EstablishmentCauseEmergency          = 0
-	EstablishmentCauseHighPriorityAccess = 1
-	EstablishmentCauseMO_Signalling      = 3
-	EstablishmentCauseMO_Data            = 4
-	EstablishmentCauseMPS_PriorityAccess = 8
-	EstablishmentCauseMCS_PriorityAccess = 9
-)
-
-// Spare
-const EAP5GSpareValue = 0
-
 func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *ANParameters, nasPDU []byte, err error) {
 	if len(codedData) >= 2 {
 		eap5GMessageID = codedData[0]
 
-		if eap5GMessageID == EAP5GType5GStop {
+		if eap5GMessageID == ike_message.EAP5GType5GStop {
 			return
 		}
 
@@ -89,7 +53,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 					parameterLength := anParameterField[1]
 
 					switch parameterType {
-					case ANParametersTypeGUAMI:
+					case ike_message.ANParametersTypeGUAMI:
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -116,7 +80,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 						} else {
 							ikeLog.Warn("[IKE] AN-Parameter GUAMI field empty")
 						}
-					case ANParametersTypeSelectedPLMNID:
+					case ike_message.ANParametersTypeSelectedPLMNID:
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -143,7 +107,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 						} else {
 							ikeLog.Warn("[IKE] AN-Parameter PLMN field empty")
 						}
-					case ANParametersTypeRequestedNSSAI:
+					case ike_message.ANParametersTypeRequestedNSSAI:
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -224,7 +188,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 						} else {
 							ikeLog.Warn("[IKE] AN-Parameter value for NSSAI empty")
 						}
-					case ANParametersTypeEstablishmentCause:
+					case ike_message.ANParametersTypeEstablishmentCause:
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -240,21 +204,21 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 							establishmentCause := parameterValue[1] & 0x0f
 							switch establishmentCause {
-							case EstablishmentCauseEmergency:
+							case ike_message.EstablishmentCauseEmergency:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: Emergency")
-							case EstablishmentCauseHighPriorityAccess:
+							case ike_message.EstablishmentCauseHighPriorityAccess:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: High Priority Access")
-							case EstablishmentCauseMO_Signalling:
+							case ike_message.EstablishmentCauseMO_Signalling:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MO Signalling")
-							case EstablishmentCauseMO_Data:
+							case ike_message.EstablishmentCauseMO_Data:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MO Data")
-							case EstablishmentCauseMPS_PriorityAccess:
+							case ike_message.EstablishmentCauseMPS_PriorityAccess:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MPS Priority Access")
-							case EstablishmentCauseMCS_PriorityAccess:
+							case ike_message.EstablishmentCauseMCS_PriorityAccess:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MCS Priority Access")
 							default:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: Unknown. Treat as mo-Data")
-								establishmentCause = EstablishmentCauseMO_Data
+								establishmentCause = ike_message.EstablishmentCauseMO_Data
 							}
 
 							ngapEstablishmentCause := new(ngapType.RRCEstablishmentCause)
@@ -307,96 +271,5 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 		return
 	} else {
 		return 0, nil, nil, errors.New("No data to decode")
-	}
-}
-
-// BuildEAP5GStart build IKE EAP expanded vendor data for EAP-5G 5G-start
-func BuildEAP5GStart() []byte {
-	return []byte{EAP5GType5GStart, EAP5GSpareValue}
-}
-
-func BuildEAP5GNAS(nasPDU []byte) []byte {
-	if len(nasPDU) == 0 {
-		ikeLog.Error("[IKE] BuildEAP5GNAS(): NASPDU is nil")
-		return nil
-	}
-
-	header := make([]byte, 4)
-
-	// Message ID
-	header[0] = EAP5GType5GNAS
-
-	// NASPDU length (2 octets)
-	binary.BigEndian.PutUint16(header[2:4], uint16(len(nasPDU)))
-
-	return append(header, nasPDU...)
-}
-
-// 3GPP specified IKE Notify
-
-// 3GPP specified IKE Notify Message Types
-const (
-	Vendor3GPPNotifyType5G_QOS_INFO     uint16 = 55501
-	Vendor3GPPNotifyTypeNAS_IP4_ADDRESS uint16 = 55502
-	Vendor3GPPNotifyTypeUP_IP4_ADDRESS  uint16 = 55504
-	Vendor3GPPNotifyTypeNAS_TCP_PORT    uint16 = 55506
-)
-
-// Used in NotifyType5G_QOS_INFO
-const (
-	NotifyType5G_QOS_INFOBitDSCPICheck uint8 = 1
-	NotifyType5G_QOS_INFOBitDCSICheck  uint8 = 1 << 1
-)
-
-func BuildNotify5G_QOS_INFO(pduSessionID uint8, qfiList []uint8, isDefault bool) *ike_message.Notification {
-	notifyData := make([]byte, 1)
-
-	// Append PDU session ID
-	notifyData = append(notifyData, pduSessionID)
-
-	// Append QFI list length
-	notifyData = append(notifyData, uint8(len(qfiList)))
-
-	// Append QFI list
-	notifyData = append(notifyData, qfiList...)
-
-	// Append default and differentiated service flags
-	var defaultAndDifferentiatedServiceFlags uint8
-	if isDefault {
-		defaultAndDifferentiatedServiceFlags |= NotifyType5G_QOS_INFOBitDCSICheck
-	}
-	notifyData = append(notifyData, defaultAndDifferentiatedServiceFlags)
-
-	// Assign length
-	notifyData[0] = uint8(len(notifyData))
-
-	return ike_message.BuildNotification(ike_message.TypeNone, Vendor3GPPNotifyType5G_QOS_INFO, nil, notifyData)
-}
-
-func BuildNotifyNAS_IP4_ADDRESS(nasIPAddr string) *ike_message.Notification {
-	if nasIPAddr == "" {
-		return nil
-	} else {
-		ipAddrByte := net.ParseIP(nasIPAddr)
-		return ike_message.BuildNotification(ike_message.TypeNone, Vendor3GPPNotifyTypeNAS_IP4_ADDRESS, nil, ipAddrByte)
-	}
-}
-
-func BuildNotifyUP_IP4_ADDRESS(upIPAddr string) *ike_message.Notification {
-	if upIPAddr == "" {
-		return nil
-	} else {
-		ipAddrByte := net.ParseIP(upIPAddr)
-		return ike_message.BuildNotification(ike_message.TypeNone, Vendor3GPPNotifyTypeUP_IP4_ADDRESS, nil, ipAddrByte)
-	}
-}
-
-func BuildNotifyNAS_TCP_PORT(port uint16) *ike_message.Notification {
-	if port == 0 {
-		return nil
-	} else {
-		portData := make([]byte, 2)
-		binary.BigEndian.PutUint16(portData, port)
-		return ike_message.BuildNotification(ike_message.TypeNone, Vendor3GPPNotifyTypeNAS_TCP_PORT, nil, portData)
 	}
 }

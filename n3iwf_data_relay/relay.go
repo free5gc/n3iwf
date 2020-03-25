@@ -76,16 +76,22 @@ func ListenN1UPTraffic() error {
 // ForwardUPTrafficFromN1 forward user plane packets from N1 to UPF,
 // with GTP header encapsulated
 func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
-	if len(ue.GTPConnection) == 0 {
-		relayLog.Error("This UE doesn't have any available user plane session")
+	var pduSession *n3iwf_context.PDUSession
+
+	for _, pduSession = range ue.PduSessionList {
+		break
+	}
+
+	if pduSession == nil {
+		relayLog.Error("This UE doesn't have any available PDU session")
 		return
 	}
 
-	gtpConnection := ue.GTPConnection[0]
+	gtpConnection := pduSession.GTPConnection
 
 	userPlaneConnection := gtpConnection.UserPlaneConnection
 
-	n, err := userPlaneConnection.WriteToGTP(gtpConnection.OutgoingTEID, packet, gtpConnection.RemoteAddr)
+	n, err := userPlaneConnection.WriteToGTP(gtpConnection.OutgoingTEID, packet, gtpConnection.UPFUDPAddr)
 	if err != nil {
 		relayLog.Errorf("Write to UPF failed: %+v", err)
 		if err == gtpv1.ErrConnNotOpened {
