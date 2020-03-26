@@ -7,10 +7,7 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/sha1"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"hash"
 	"io"
@@ -219,8 +216,12 @@ func PKCS7Padding(plainText []byte, blockSize int) []byte {
 }
 
 // Certificate
+func CompareRootCertificate(certificateEncoding uint8, requestedCertificateAuthorityHash []byte) bool {
+	if certificateEncoding != ike_message.X509CertificateSignature {
+		ikeLog.Debugf("Not support certificate type: %d. Reject.", certificateEncoding)
+		return false
+	}
 
-func CompareRootCertificate(requestedCertificateAuthorityHash []byte, certificateEncoding uint8) bool {
 	n3iwfSelf := n3iwf_context.N3IWFSelf()
 
 	if len(n3iwfSelf.CertificateAuthority) == 0 {
@@ -228,34 +229,7 @@ func CompareRootCertificate(requestedCertificateAuthorityHash []byte, certificat
 		return false
 	}
 
-	certificateBlock, _ := pem.Decode(n3iwfSelf.CertificateAuthority)
-	certificate, err := x509.ParseCertificate(certificateBlock.Bytes)
-	if err != nil {
-		ikeLog.Errorf("[IKE] Parse certificate error: %+v", err)
-		return false
-	}
-
-	var rsaPublicKey *rsa.PublicKey
-
-	switch certificate.PublicKey.(type) {
-	case *rsa.PublicKey:
-		rsaPublicKey = certificate.PublicKey.(*rsa.PublicKey)
-	default:
-		ikeLog.Error("Unsupported public key type")
-		return false
-	}
-
-	rsaPublicKeyData := x509.MarshalPKCS1PublicKey(rsaPublicKey)
-
-	hashFunction := sha1.New()
-	if _, err := hashFunction.Write(rsaPublicKeyData); err != nil {
-		ikeLog.Errorf("[IKE] Hash function write error when compare root certificate: %+v", err)
-		return false
-	}
-
-	certificateAuthorityPublicKeySHA1 := hashFunction.Sum(nil)
-
-	return bytes.Equal(certificateAuthorityPublicKeySHA1, requestedCertificateAuthorityHash)
+	return bytes.Equal(n3iwfSelf.CertificateAuthority, requestedCertificateAuthorityHash)
 }
 
 // Key Gen for IKE SA

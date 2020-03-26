@@ -99,6 +99,7 @@ func ApplyXFRMRule(childSecurityAssociation *n3iwf_context.ChildSecurityAssociat
 
 	xfrmPolicy.Src = &childSecurityAssociation.TrafficSelectorInitiator
 	xfrmPolicy.Dst = &childSecurityAssociation.TrafficSelectorResponder
+	xfrmPolicy.Proto = netlink.Proto(childSecurityAssociation.SelectedIPProtocol)
 	xfrmPolicy.Dir = netlink.XFRM_DIR_IN
 	xfrmPolicy.Mark = mark
 	xfrmPolicy.Tmpls = []netlink.XfrmPolicyTmpl{

@@ -19,6 +19,7 @@ import (
 	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
 
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // Log
@@ -433,8 +434,15 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		}
 
 		// Certificate request and prepare coresponding certificate
+		// RFC 7296 section 3.7:
+		// The Certificate Request payload is processed by inspecting the
+		// Cert Encoding field to determine whether the processor has any
+		// certificates of this type.  If so, the Certification Authority field
+		// is inspected to determine if the processor has any certificates that
+		// can be validated up to one of the specified certification
+		// authorities.  This can be a chain of certificates.
 		if certificateRequest != nil {
-			if CompareRootCertificate(certificateRequest.CertificationAuthority, certificateRequest.CertificateEncoding) {
+			if CompareRootCertificate(certificateRequest.CertificateEncoding, certificateRequest.CertificationAuthority) {
 				responseCertificate = ike_message.BuildCertificate(ike_message.X509CertificateSignature, n3iwfSelf.N3IWFCertificate)
 			}
 		}
@@ -921,6 +929,8 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			ikeLog.Errorf("[IKE] Parse IP address to child security association failed: %+v", err)
 			return
 		}
+		// Select TCP traffic
+		childSecurityAssociationContext.SelectedIPProtocol = unix.IPPROTO_TCP
 
 		if err := GenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContext); err != nil {
 			ikeLog.Errorf("[IKE] Generate key for child SA failed: %+v", err)

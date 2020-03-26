@@ -157,6 +157,7 @@ type ChildSecurityAssociation struct {
 	LocalPublicIPAddr net.IP
 
 	// Traffic selector
+	SelectedIPProtocol       uint8
 	TrafficSelectorInitiator net.IPNet
 	TrafficSelectorResponder net.IPNet
 
