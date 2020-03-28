@@ -8,6 +8,8 @@ import (
 	"gofree5gc/lib/ngap/ngapType"
 	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
 	"net"
+
+	gtpv1 "github.com/wmnsk/go-gtp/v1"
 )
 
 const (
@@ -29,12 +31,14 @@ type N3IWFUe struct {
 	MaskedIMEISV          *ngapType.MaskedIMEISV // TS 38.413 9.3.1.54
 	Guti                  string
 	RRCEstablishmentCause int16
+	IPSecInnerIP          string
 
 	/* Relative Context */
 	AMF *N3IWFAMF
 
 	/* PDU Session */
 	PduSessionList map[int64]*PDUSession // pduSessionId as key
+	GTPConnection  []*GTPConnectionInfo
 
 	/* Security */
 	Kn3iwf               []uint8                          // 32 bytes (256 bits), value is from NGAP IE "Security Key"
@@ -70,7 +74,11 @@ type QosFlow struct {
 	Parameters ngapType.QosFlowLevelQosParameters
 }
 
-type GTPConnection struct {
+type GTPConnectionInfo struct {
+	RemoteAddr          net.Addr
+	IncomingTEID        uint32
+	OutgoingTEID        uint32
+	UserPlaneConnection *gtpv1.UPlaneConn
 }
 
 type IKESecurityAssociation struct {
