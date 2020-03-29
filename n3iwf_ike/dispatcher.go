@@ -40,6 +40,8 @@ func Dispatch(ueSendInfo *n3iwf_message.UDPSendInfoGroup, msg []byte) {
 		ike_handler.HandleIKESAINIT(ueSendInfo, ikeMessage)
 	case ike_message.IKE_AUTH:
 		ike_handler.HandleIKEAUTH(ueSendInfo, ikeMessage)
+	case ike_message.CREATE_CHILD_SA:
+		ike_handler.HandleCREATECHILDSA(ueSendInfo, ikeMessage)
 	default:
 		ikeLog.Warnf("Unimplemented IKE message type, exchange type: %d", ikeMessage.ExchangeType)
 	}
