@@ -14,6 +14,7 @@ import (
 	"gofree5gc/lib/ngap/ngapType"
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_context"
+	"gofree5gc/src/n3iwf/n3iwf_data_relay"
 	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
 	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
 	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
@@ -1304,7 +1305,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 
 	// Setup GTP tunnel for UE
 	ueAssociatedGTPConnection := pduSession.GTPConnection
-	if userPlaneConnection, ok := n3iwfSelf.GTPConnection[ueAssociatedGTPConnection.UPFIPAddr]; ok {
+	if userPlaneConnection, ok := n3iwfSelf.GTPConnectionWithUPF[ueAssociatedGTPConnection.UPFIPAddr]; ok {
 		// UPF UDP address
 		upfUDPAddr, err := net.ResolveUDPAddr("udp", ueAssociatedGTPConnection.UPFIPAddr+":2152")
 		if err != nil {
@@ -1329,7 +1330,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 		ngap_message.AppendPDUSessionResourceSetupListSURes(temporaryPDUSessionSetupData.SetupListSURes, pduSessionID, transfer)
 	} else {
 		// Setup GTP connection with UPF
-		userPlaneConnection, upfUDPAddr, err := n3iwf_data_relay.SetupGTP(ueAssociatedGTPConnection.UPFIPAddr)
+		userPlaneConnection, upfUDPAddr, err := n3iwf_data_relay.SetupGTPTunnelWithUPF(ueAssociatedGTPConnection.UPFIPAddr)
 		if err != nil {
 			ikeLog.Errorf("Setup GTP connection with UPF failed: %+v", err)
 			return
