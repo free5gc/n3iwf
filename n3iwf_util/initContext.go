@@ -1,6 +1,7 @@
 package n3iwf_util
 
 import (
+	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509"
 	"encoding/pem"
@@ -86,12 +87,17 @@ func InitN3IWFContext() bool {
 			contextLog.Error("Parse pem failed")
 			return false
 		}
-		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
 			contextLog.Errorf("Parse private key failed: %+v", err)
 			return false
 		}
-		n3iwfContext.N3IWFPrivateKey = key
+		rsaKey, ok := key.(*rsa.PrivateKey)
+		if !ok {
+			contextLog.Error("Private key is not a PKCS#8 rsa private key")
+			return false
+		}
+		n3iwfContext.N3IWFPrivateKey = rsaKey
 	}
 
 	// Certificate authority

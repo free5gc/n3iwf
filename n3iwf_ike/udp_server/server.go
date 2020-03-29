@@ -14,8 +14,8 @@ import (
 // IKE daemon listen on UDP 500 and 4500
 const (
 	maxQueueSize       int = 100000
-	defaultIKEPort500  int = 20500
-	defaultIKEPort4500 int = 24500
+	defaultIKEPort500  int = 500
+	defaultIKEPort4500 int = 4500
 )
 
 const (

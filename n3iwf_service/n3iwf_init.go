@@ -95,7 +95,9 @@ func (n3iwf *N3IWF) FilterCli(c *cli.Context) (args []string) {
 func (n3iwf *N3IWF) Start() {
 	initLog.Infoln("Server started")
 
-	n3iwf_util.InitN3IWFContext()
+	if !n3iwf_util.InitN3IWFContext() {
+		initLog.Error("Initicating context failed")
+	}
 
 	wg := sync.WaitGroup{}
 
@@ -110,11 +112,15 @@ func (n3iwf *N3IWF) Start() {
 	// Control plane
 	if err := n3iwf_data_relay.SetupNASTCPServer(); err != nil {
 		initLog.Errorf("Listen N1 control plane traffic failed: %+v", err)
+	} else {
+		initLog.Info("NAS TCP server successfully started.")
 	}
 	// User plane
 	if err := n3iwf_data_relay.ListenN1UPTraffic(); err != nil {
 		initLog.Errorf("Listen N1 user plane traffic failed: %+v", err)
 		return
+	} else {
+		initLog.Info("Listening N1 user plane traffic")
 	}
 	wg.Add(2)
 

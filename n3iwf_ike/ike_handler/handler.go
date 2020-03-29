@@ -73,7 +73,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 			securityAssociation = ikePayload.(*ike_message.SecurityAssociation)
 		case ike_message.TypeKE:
 			keyExcahge = ikePayload.(*ike_message.KeyExchange)
-		case ike_message.TypeN:
+		case ike_message.TypeNiNr:
 			nonce = ikePayload.(*ike_message.Nonce)
 		default:
 			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler", ikePayload.Type())
@@ -243,6 +243,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 
 	// Prepare authentication data - InitatorSignedOctet
 	// InitatorSignedOctet = RealMessage1 | NonceRData | MACedIDForI
+	// MACedIDForI is acquired in IKE_AUTH exchange
 	receivedIKEMessageData, err := ike_message.Encode(message)
 	if err != nil {
 		ikeLog.Errorln(err)
@@ -251,6 +252,16 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 	}
 	ikeSecurityAssociation.RemoteUnsignedAuthentication = append(receivedIKEMessageData, responseNonce.NonceData...)
 
+	// Prepare authentication data - ResponderSignedOctet
+	// ResponderSignedOctet = RealMessage2 | NonceIData | MACedIDForR
+	responseIKEMessageData, err := ike_message.Encode(responseIKEMessage)
+	if err != nil {
+		ikeLog.Errorln(err)
+		ikeLog.Error("[IKE] Encoding IKE message failed")
+		return
+	}
+	ikeSecurityAssociation.LocalUnsignedAuthentication = append(responseIKEMessageData, nonce.NonceData...)
+	// MACedIDForR
 	idPayload := []ike_message.IKEPayloadType{
 		ike_message.BuildIdentificationResponder(ike_message.ID_FQDN, []byte(n3iwfSelf.FQDN)),
 	}
@@ -271,16 +282,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 	}
 	ikeSecurityAssociation.LocalUnsignedAuthentication = append(ikeSecurityAssociation.LocalUnsignedAuthentication, pseudorandomFunction.Sum(nil)...)
 
-	// Prepare authentication data - ResponderSignedOctet
-	// ResponderSignedOctet = RealMessage2 | NonceIData | MACedIDForR
-	// MACedIDForR is acquired in IKE_AUTH exchange
-	responseIKEMessageData, err := ike_message.Encode(responseIKEMessage)
-	if err != nil {
-		ikeLog.Errorln(err)
-		ikeLog.Error("[IKE] Encoding IKE message failed")
-		return
-	}
-	ikeSecurityAssociation.LocalUnsignedAuthentication = append(responseIKEMessageData, nonce.NonceData...)
+	ikeLog.Tracef("Local unsigned authentication data:\n%s", ikeSecurityAssociation.LocalUnsignedAuthentication)
 
 	SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 }
@@ -406,6 +408,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		var requestEAPPayload *ike_message.EAP
 
 		if initiatorID != nil {
+			ikeLog.Info("Ecoding initiator for later IKE authentication")
 			ikeSecurityAssociation.InitiatorID = initiatorID
 
 			// Record maced identification for authentication
@@ -443,16 +446,19 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		// can be validated up to one of the specified certification
 		// authorities.  This can be a chain of certificates.
 		if certificateRequest != nil {
+			ikeLog.Info("UE request N3IWF certificate")
 			if CompareRootCertificate(certificateRequest.CertificateEncoding, certificateRequest.CertificationAuthority) {
 				responseCertificate = ike_message.BuildCertificate(ike_message.X509CertificateSignature, n3iwfSelf.N3IWFCertificate)
 			}
 		}
 
 		if certificate != nil {
+			ikeLog.Info("UE send its certficate")
 			ikeSecurityAssociation.InitiatorCertificate = certificate
 		}
 
 		if securityAssociation != nil {
+			ikeLog.Info("Parsing security association")
 			var chosenSecurityAssociation *ike_message.SecurityAssociation
 
 			for _, proposal := range securityAssociation.Proposals {
@@ -565,6 +571,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		}
 
 		if trafficSelectorInitiator != nil {
+			ikeLog.Info("Received traffic selector initiator from UE")
 			ikeSecurityAssociation.TrafficSelectorInitiator = trafficSelectorInitiator
 		} else {
 			ikeLog.Error("[IKE] The initiator traffic selector field is nil")
@@ -573,6 +580,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		}
 
 		if trafficSelectorResponder != nil {
+			ikeLog.Info("Received traffic selector initiator from UE")
 			ikeSecurityAssociation.TrafficSelectorResponder = trafficSelectorResponder
 		} else {
 			ikeLog.Error("[IKE] The initiator traffic selector field is nil")
@@ -597,6 +605,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		ikePayload = append(ikePayload, responseCertificate)
 
 		// Authentication Data
+		ikeLog.Tracef("Local authentication data:\n%s", ikeSecurityAssociation.LocalUnsignedAuthentication)
 		sha1HashFunction := sha1.New()
 		if _, err := sha1HashFunction.Write(ikeSecurityAssociation.LocalUnsignedAuthentication); err != nil {
 			ikeLog.Errorf("[IKE] Hash function write error: %+v", err)
@@ -1567,9 +1576,9 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 	case ike_message.TypePseudorandomFunction:
 		switch transformID {
 		case ike_message.PRF_HMAC_MD5:
-			return false
+			return true
 		case ike_message.PRF_HMAC_SHA1:
-			return false
+			return true
 		case ike_message.PRF_HMAC_TIGER:
 			return false
 		default:
@@ -1580,9 +1589,9 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 		case ike_message.AUTH_NONE:
 			return false
 		case ike_message.AUTH_HMAC_MD5_96:
-			return false
+			return true
 		case ike_message.AUTH_HMAC_SHA1_96:
-			return false
+			return true
 		case ike_message.AUTH_DES_MAC:
 			return false
 		case ike_message.AUTH_KPDK_MD5:
@@ -1599,11 +1608,11 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 		case ike_message.DH_768_BIT_MODP:
 			return false
 		case ike_message.DH_1024_BIT_MODP:
-			return false
+			return true
 		case ike_message.DH_1536_BIT_MODP:
 			return false
 		case ike_message.DH_2048_BIT_MODP:
-			return false
+			return true
 		case ike_message.DH_3072_BIT_MODP:
 			return false
 		case ike_message.DH_4096_BIT_MODP:
@@ -1739,139 +1748,6 @@ func is_Kernel_Supported(transformType uint8, transformID uint16, attributePrese
 		}
 	default:
 		return false
-	}
-}
-
-func getKeyLength(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) (int, bool) {
-	switch transformType {
-	case ike_message.TypeEncryptionAlgorithm:
-		switch transformID {
-		case ike_message.ENCR_DES_IV64:
-			return 0, false
-		case ike_message.ENCR_DES:
-			return 8, true
-		case ike_message.ENCR_3DES:
-			return 24, true
-		case ike_message.ENCR_RC5:
-			return 0, false
-		case ike_message.ENCR_IDEA:
-			return 0, false
-		case ike_message.ENCR_CAST:
-			if attributePresent {
-				switch attributeValue {
-				case 128:
-					return 16, true
-				case 256:
-					return 0, false
-				default:
-					return 0, false
-				}
-			}
-			return 0, false
-		case ike_message.ENCR_BLOWFISH: // Blowfish support variable key length
-			if attributePresent {
-				if attributeValue < 40 {
-					return 0, false
-				} else if attributeValue > 448 {
-					return 0, false
-				} else {
-					return int(attributeValue / 8), true
-				}
-			} else {
-				return 0, false
-			}
-		case ike_message.ENCR_3IDEA:
-			return 0, false
-		case ike_message.ENCR_DES_IV32:
-			return 0, false
-		case ike_message.ENCR_NULL:
-			return 0, true
-		case ike_message.ENCR_AES_CBC:
-			if attributePresent {
-				switch attributeValue {
-				case 128:
-					return 16, true
-				case 192:
-					return 24, true
-				case 256:
-					return 32, true
-				default:
-					return 0, false
-				}
-			} else {
-				return 0, false
-			}
-		case ike_message.ENCR_AES_CTR:
-			if attributePresent {
-				switch attributeValue {
-				case 128:
-					return 20, true
-				case 192:
-					return 28, true
-				case 256:
-					return 36, true
-				default:
-					return 0, false
-				}
-			} else {
-				return 0, false
-			}
-		default:
-			return 0, false
-		}
-	case ike_message.TypePseudorandomFunction:
-		switch transformID {
-		case ike_message.PRF_HMAC_MD5:
-			return 0, false
-		case ike_message.PRF_HMAC_SHA1:
-			return 0, false
-		case ike_message.PRF_HMAC_TIGER:
-			return 0, false
-		default:
-			return 0, false
-		}
-	case ike_message.TypeIntegrityAlgorithm:
-		switch transformID {
-		case ike_message.AUTH_NONE:
-			return 0, false
-		case ike_message.AUTH_HMAC_MD5_96:
-			return 0, false
-		case ike_message.AUTH_HMAC_SHA1_96:
-			return 0, false
-		case ike_message.AUTH_DES_MAC:
-			return 0, false
-		case ike_message.AUTH_KPDK_MD5:
-			return 0, false
-		case ike_message.AUTH_AES_XCBC_96:
-			return 0, false
-		default:
-			return 0, false
-		}
-	case ike_message.TypeDiffieHellmanGroup:
-		switch transformID {
-		case ike_message.DH_NONE:
-			return 0, false
-		case ike_message.DH_768_BIT_MODP:
-			return 0, false
-		case ike_message.DH_1024_BIT_MODP:
-			return 0, false
-		case ike_message.DH_1536_BIT_MODP:
-			return 0, false
-		case ike_message.DH_2048_BIT_MODP:
-			return 0, false
-		case ike_message.DH_3072_BIT_MODP:
-			return 0, false
-		case ike_message.DH_4096_BIT_MODP:
-			return 0, false
-		case ike_message.DH_6144_BIT_MODP:
-			return 0, false
-		case ike_message.DH_8192_BIT_MODP:
-			return 0, false
-		default:
-			return 0, false
-		}
-	default:
-		return 0, false
 	}
 }
 

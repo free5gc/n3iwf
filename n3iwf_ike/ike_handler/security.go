@@ -8,6 +8,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"hash"
 	"io"
@@ -56,8 +57,10 @@ func GenerateRandomUint8() (uint8, error) {
 // Diffie-Hellman Exchange
 // The strength supplied by group 1 may not be sufficient for typical uses
 const (
-	Group2PrimeString string = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF"
-	Group2Generator          = 2
+	Group2PrimeString  string = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381FFFFFFFFFFFFFFFF"
+	Group2Generator           = 2
+	Group14PrimeString string = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF"
+	Group14Generator          = 2
 )
 
 func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte, diffieHellmanGroupNumber uint16) (localPublicValue []byte, sharedKey []byte) {
@@ -69,6 +72,12 @@ func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte, di
 	case ike_message.DH_1024_BIT_MODP:
 		generator = new(big.Int).SetUint64(Group2Generator)
 		factor, ok = new(big.Int).SetString(Group2PrimeString, 16)
+		if !ok {
+			ikeLog.Errorf("[IKE] Error occurs when setting big number \"factor\" in %d group", diffieHellmanGroupNumber)
+		}
+	case ike_message.DH_2048_BIT_MODP:
+		generator = new(big.Int).SetUint64(Group14Generator)
+		factor, ok = new(big.Int).SetString(Group14PrimeString, 16)
 		if !ok {
 			ikeLog.Errorf("[IKE] Error occurs when setting big number \"factor\" in %d group", diffieHellmanGroupNumber)
 		}
@@ -114,6 +123,16 @@ func CalculateChecksum(key []byte, message []byte, algorithmType uint16) ([]byte
 			return nil, errors.New("Hash function write error")
 		}
 		return integrityFunction.Sum(nil), nil
+	case ike_message.AUTH_HMAC_SHA1_96:
+		if len(key) != 20 {
+			return nil, errors.New("Unmatched input key length")
+		}
+		integrityFunction := hmac.New(sha1.New, key)
+		if _, err := integrityFunction.Write(message); err != nil {
+			ikeLog.Errorf("[IKE] Hash function write error when calcualting checksum: %+v", err)
+			return nil, errors.New("Hash function write error")
+		}
+		return integrityFunction.Sum(nil)[:12], nil
 	default:
 		ikeLog.Errorf("[IKE] Unsupported integrity function: %d", algorithmType)
 		return nil, errors.New("Unsupported algorithm")
@@ -132,6 +151,23 @@ func VerifyIKEChecksum(key []byte, message []byte, checksum []byte, algorithmTyp
 			return false, errors.New("Hash function write error")
 		}
 		checksumOfMessage := integrityFunction.Sum(nil)
+
+		ikeLog.Tracef("Calculated checksum:\n%s\nReceived checksum:\n%s", hex.Dump(checksumOfMessage), hex.Dump(checksum))
+
+		return hmac.Equal(checksumOfMessage, checksum), nil
+	case ike_message.AUTH_HMAC_SHA1_96:
+		if len(key) != 20 {
+			return false, errors.New("Unmatched input key length")
+		}
+		integrityFunction := hmac.New(sha1.New, key)
+		if _, err := integrityFunction.Write(message); err != nil {
+			ikeLog.Errorf("[IKE] Hash function write error when verifying IKE checksum: %+v", err)
+			return false, errors.New("Hash function write error")
+		}
+		checksumOfMessage := integrityFunction.Sum(nil)[:12]
+
+		ikeLog.Tracef("Calculated checksum:\n%s\nReceived checksum:\n%s", hex.Dump(checksumOfMessage), hex.Dump(checksum))
+
 		return hmac.Equal(checksumOfMessage, checksum), nil
 	default:
 		ikeLog.Errorf("[IKE] Unsupported integrity function: %d", algorithmType)
@@ -145,6 +181,8 @@ func EncryptMessage(key []byte, message []byte, algorithmType uint16) ([]byte, e
 	case ike_message.ENCR_AES_CBC:
 		// padding message
 		message = PKCS7Padding(message, aes.BlockSize)
+		message[len(message)-1]--
+
 		block, err := aes.NewCipher(key)
 		if err != nil {
 			ikeLog.Errorf("[IKE] Error occur when create new cipher: %+v", err)
@@ -196,8 +234,12 @@ func DecryptMessage(key []byte, cipherText []byte, algorithmType uint16) ([]byte
 		cbcBlockMode := cipher.NewCBCDecrypter(block, initializationVector)
 		cbcBlockMode.CryptBlocks(plainText, encryptedMessage)
 
-		padding := int(plainText[len(plainText)-1])
+		ikeLog.Tracef("Decrypted content:\n%s", hex.Dump(plainText))
+
+		padding := int(plainText[len(plainText)-1]) + 1
 		plainText = plainText[:len(plainText)-padding]
+
+		ikeLog.Tracef("Decrypted content with out padding:\n%s", hex.Dump(plainText))
 
 		return plainText, nil
 	default:
@@ -293,12 +335,18 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *n3iwf_context.IKESecurityAssoci
 		ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 		return errors.New("New pseudorandom function failed")
 	}
+
+	ikeLog.Tracef("DH shared key:\n%s", hex.Dump(ikeSecurityAssociation.DiffieHellmanSharedKey))
+
 	if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.DiffieHellmanSharedKey); err != nil {
 		ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
 		return errors.New("Pseudorandom function write failed")
 	}
 
 	SKEYSEED := pseudorandomFunction.Sum(nil)
+
+	ikeLog.Tracef("SKEYSEED:\n%s", hex.Dump(SKEYSEED))
+
 	seed := concatenateNonceAndSPI(ikeSecurityAssociation.ConcatenatedNonce, ikeSecurityAssociation.RemoteSPI, ikeSecurityAssociation.LocalSPI)
 
 	var keyStream, generatedKeyBlock []byte
@@ -331,6 +379,14 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *n3iwf_context.IKESecurityAssoci
 	keyStream = keyStream[length_SK_pi:]
 	ikeSecurityAssociation.SK_pr = keyStream[:length_SK_pr]
 	keyStream = keyStream[length_SK_pr:]
+
+	ikeLog.Tracef("SK_d:\n%s", hex.Dump(ikeSecurityAssociation.SK_d))
+	ikeLog.Tracef("SK_ai:\n%s", hex.Dump(ikeSecurityAssociation.SK_ai))
+	ikeLog.Tracef("SK_ar:\n%s", hex.Dump(ikeSecurityAssociation.SK_ar))
+	ikeLog.Tracef("SK_ei:\n%s", hex.Dump(ikeSecurityAssociation.SK_ei))
+	ikeLog.Tracef("SK_er:\n%s", hex.Dump(ikeSecurityAssociation.SK_er))
+	ikeLog.Tracef("SK_pi:\n%s", hex.Dump(ikeSecurityAssociation.SK_pi))
+	ikeLog.Tracef("SK_pr:\n%s", hex.Dump(ikeSecurityAssociation.SK_pr))
 
 	return nil
 }
@@ -450,14 +506,14 @@ func DecryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociati
 	// Load needed information
 	transformIntegrityAlgorithm := ikeSecurityAssociation.IntegrityAlgorithm
 	transformEncryptionAlgorithm := ikeSecurityAssociation.EncryptionAlgorithm
-	integrityKeyLength, ok := getKeyLength(transformIntegrityAlgorithm.TransformType, transformIntegrityAlgorithm.TransformID, transformIntegrityAlgorithm.AttributePresent, transformIntegrityAlgorithm.AttributeValue)
+	checksumLength, ok := getOutputLength(transformIntegrityAlgorithm.TransformType, transformIntegrityAlgorithm.TransformID, transformIntegrityAlgorithm.AttributePresent, transformIntegrityAlgorithm.AttributeValue)
 	if !ok {
 		ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
 		return nil, errors.New("Get key length failed")
 	}
 
 	// Checksum
-	checksum := encryptedPayload.EncryptedData[len(encryptedPayload.EncryptedData)-integrityKeyLength:]
+	checksum := encryptedPayload.EncryptedData[len(encryptedPayload.EncryptedData)-checksumLength:]
 
 	ikeMessageData, err := ike_message.Encode(message)
 	if err != nil {
@@ -466,7 +522,7 @@ func DecryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociati
 		return nil, errors.New("Encoding IKE message failed")
 	}
 
-	ok, err = VerifyIKEChecksum(ikeSecurityAssociation.SK_ai, ikeMessageData[:len(ikeMessageData)-integrityKeyLength], checksum, transformIntegrityAlgorithm.TransformID)
+	ok, err = VerifyIKEChecksum(ikeSecurityAssociation.SK_ai, ikeMessageData[:len(ikeMessageData)-checksumLength], checksum, transformIntegrityAlgorithm.TransformID)
 	if err != nil {
 		ikeLog.Errorf("[IKE] Error occur when verifying checksum: %+v", err)
 		return nil, errors.New("Error verify checksum")
@@ -477,7 +533,7 @@ func DecryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociati
 	}
 
 	// Decrypt
-	encryptedData := encryptedPayload.EncryptedData[:len(encryptedPayload.EncryptedData)-integrityKeyLength]
+	encryptedData := encryptedPayload.EncryptedData[:len(encryptedPayload.EncryptedData)-checksumLength]
 	plainText, err := DecryptMessage(ikeSecurityAssociation.SK_ei, encryptedData, transformEncryptionAlgorithm.TransformID)
 	if err != nil {
 		ikeLog.Errorf("[IKE] Error occur when decrypting message: %+v", err)
@@ -525,7 +581,7 @@ func EncryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociati
 	// Load needed information
 	transformIntegrityAlgorithm := ikeSecurityAssociation.IntegrityAlgorithm
 	transformEncryptionAlgorithm := ikeSecurityAssociation.EncryptionAlgorithm
-	integrityKeyLength, ok := getKeyLength(transformIntegrityAlgorithm.TransformType, transformIntegrityAlgorithm.TransformID, transformIntegrityAlgorithm.AttributePresent, transformIntegrityAlgorithm.AttributeValue)
+	checksumLength, ok := getOutputLength(transformIntegrityAlgorithm.TransformType, transformIntegrityAlgorithm.TransformID, transformIntegrityAlgorithm.AttributePresent, transformIntegrityAlgorithm.AttributeValue)
 	if !ok {
 		ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
 		return errors.New("Get key length failed")
@@ -544,7 +600,7 @@ func EncryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociati
 		return errors.New("Error encrypting message")
 	}
 
-	encryptedData = append(encryptedData, make([]byte, integrityKeyLength)...)
+	encryptedData = append(encryptedData, make([]byte, checksumLength)...)
 	responseEncryptedPayload := ike_message.BuildEncryptedPayload(ikePayload[0].Type(), encryptedData)
 
 	responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseEncryptedPayload)
@@ -555,14 +611,183 @@ func EncryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociati
 		ikeLog.Error(err)
 		return errors.New("Encoding IKE message error")
 	}
-	checksumOfMessage, err := CalculateChecksum(ikeSecurityAssociation.SK_ar, responseIKEMessageData[:len(responseIKEMessageData)-integrityKeyLength], transformIntegrityAlgorithm.TransformID)
+	checksumOfMessage, err := CalculateChecksum(ikeSecurityAssociation.SK_ar, responseIKEMessageData[:len(responseIKEMessageData)-checksumLength], transformIntegrityAlgorithm.TransformID)
 	if err != nil {
 		ikeLog.Errorf("[IKE] Calculating checksum failed: %+v", err)
 		return errors.New("Error calculating checksum")
 	}
-	checksumField := responseEncryptedPayload.EncryptedData[len(responseEncryptedPayload.EncryptedData)-integrityKeyLength:]
+	checksumField := responseEncryptedPayload.EncryptedData[len(responseEncryptedPayload.EncryptedData)-checksumLength:]
 	copy(checksumField, checksumOfMessage)
 
 	return nil
 
+}
+
+// Get information of algorithm
+func getKeyLength(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) (int, bool) {
+	switch transformType {
+	case ike_message.TypeEncryptionAlgorithm:
+		switch transformID {
+		case ike_message.ENCR_DES_IV64:
+			return 0, false
+		case ike_message.ENCR_DES:
+			return 8, true
+		case ike_message.ENCR_3DES:
+			return 24, true
+		case ike_message.ENCR_RC5:
+			return 0, false
+		case ike_message.ENCR_IDEA:
+			return 0, false
+		case ike_message.ENCR_CAST:
+			if attributePresent {
+				switch attributeValue {
+				case 128:
+					return 16, true
+				case 256:
+					return 0, false
+				default:
+					return 0, false
+				}
+			}
+			return 0, false
+		case ike_message.ENCR_BLOWFISH: // Blowfish support variable key length
+			if attributePresent {
+				if attributeValue < 40 {
+					return 0, false
+				} else if attributeValue > 448 {
+					return 0, false
+				} else {
+					return int(attributeValue / 8), true
+				}
+			} else {
+				return 0, false
+			}
+		case ike_message.ENCR_3IDEA:
+			return 0, false
+		case ike_message.ENCR_DES_IV32:
+			return 0, false
+		case ike_message.ENCR_NULL:
+			return 0, true
+		case ike_message.ENCR_AES_CBC:
+			if attributePresent {
+				switch attributeValue {
+				case 128:
+					return 16, true
+				case 192:
+					return 24, true
+				case 256:
+					return 32, true
+				default:
+					return 0, false
+				}
+			} else {
+				return 0, false
+			}
+		case ike_message.ENCR_AES_CTR:
+			if attributePresent {
+				switch attributeValue {
+				case 128:
+					return 20, true
+				case 192:
+					return 28, true
+				case 256:
+					return 36, true
+				default:
+					return 0, false
+				}
+			} else {
+				return 0, false
+			}
+		default:
+			return 0, false
+		}
+	case ike_message.TypePseudorandomFunction:
+		switch transformID {
+		case ike_message.PRF_HMAC_MD5:
+			return 16, true
+		case ike_message.PRF_HMAC_SHA1:
+			return 20, true
+		case ike_message.PRF_HMAC_TIGER:
+			return 0, false
+		default:
+			return 0, false
+		}
+	case ike_message.TypeIntegrityAlgorithm:
+		switch transformID {
+		case ike_message.AUTH_NONE:
+			return 0, false
+		case ike_message.AUTH_HMAC_MD5_96:
+			return 16, true
+		case ike_message.AUTH_HMAC_SHA1_96:
+			return 20, true
+		case ike_message.AUTH_DES_MAC:
+			return 0, false
+		case ike_message.AUTH_KPDK_MD5:
+			return 0, false
+		case ike_message.AUTH_AES_XCBC_96:
+			return 0, false
+		default:
+			return 0, false
+		}
+	case ike_message.TypeDiffieHellmanGroup:
+		switch transformID {
+		case ike_message.DH_NONE:
+			return 0, false
+		case ike_message.DH_768_BIT_MODP:
+			return 0, false
+		case ike_message.DH_1024_BIT_MODP:
+			return 0, false
+		case ike_message.DH_1536_BIT_MODP:
+			return 0, false
+		case ike_message.DH_2048_BIT_MODP:
+			return 0, false
+		case ike_message.DH_3072_BIT_MODP:
+			return 0, false
+		case ike_message.DH_4096_BIT_MODP:
+			return 0, false
+		case ike_message.DH_6144_BIT_MODP:
+			return 0, false
+		case ike_message.DH_8192_BIT_MODP:
+			return 0, false
+		default:
+			return 0, false
+		}
+	default:
+		return 0, false
+	}
+}
+
+func getOutputLength(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) (int, bool) {
+	switch transformType {
+	case ike_message.TypePseudorandomFunction:
+		switch transformID {
+		case ike_message.PRF_HMAC_MD5:
+			return 16, true
+		case ike_message.PRF_HMAC_SHA1:
+			return 20, true
+		case ike_message.PRF_HMAC_TIGER:
+			return 0, false
+		default:
+			return 0, false
+		}
+	case ike_message.TypeIntegrityAlgorithm:
+		switch transformID {
+		case ike_message.AUTH_NONE:
+			return 0, false
+		case ike_message.AUTH_HMAC_MD5_96:
+			return 12, true
+		case ike_message.AUTH_HMAC_SHA1_96:
+			return 12, true
+		case ike_message.AUTH_DES_MAC:
+			return 0, false
+		case ike_message.AUTH_KPDK_MD5:
+			return 0, false
+		case ike_message.AUTH_AES_XCBC_96:
+			return 0, false
+		default:
+			return 0, false
+		}
+	default:
+		return 0, false
+	}
 }

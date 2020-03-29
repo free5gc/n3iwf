@@ -2,6 +2,7 @@ package ike_message
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -28,6 +29,8 @@ type IKEMessage struct {
 }
 
 func Encode(ikeMessage *IKEMessage) ([]byte, error) {
+	ikeLog.Info("Encoding IKE message")
+
 	if ikeMessage != nil {
 		ikeLog.Info("[IKE] Start encoding IKE message")
 
@@ -54,6 +57,9 @@ func Encode(ikeMessage *IKEMessage) ([]byte, error) {
 		ikeMessageData = append(ikeMessageData, ikeMessagePayloadData...)
 		binary.BigEndian.PutUint32(ikeMessageData[24:28], uint32(len(ikeMessageData)))
 
+		ikeLog.Tracef("Encoded %d bytes", len(ikeMessageData))
+		ikeLog.Tracef("IKE message data:\n%s", hex.Dump(ikeMessageData))
+
 		return ikeMessageData, nil
 	} else {
 		return nil, errors.New("[IKE] Encode(): Input IKE message is nil")
@@ -61,6 +67,8 @@ func Encode(ikeMessage *IKEMessage) ([]byte, error) {
 }
 
 func EncodePayload(ikePayload []IKEPayloadType) ([]byte, error) {
+	ikeLog.Info("Encoding IKE payloads")
+
 	ikeMessagePayloadData := make([]byte, 0)
 
 	for index, payload := range ikePayload {
@@ -92,6 +100,8 @@ func EncodePayload(ikePayload []IKEPayloadType) ([]byte, error) {
 func Decode(rawData []byte) (*IKEMessage, error) {
 	// IKE message packet format this implementation referenced is
 	// defined in RFC 7296, Section 3.1
+	ikeLog.Info("Decoding IKE message")
+	ikeLog.Tracef("Received IKE message:\n%s", hex.Dump(rawData))
 
 	// bounds checking
 	if len(rawData) < 28 {
@@ -129,6 +139,8 @@ func Decode(rawData []byte) (*IKEMessage, error) {
 }
 
 func DecodePayload(nextPayload uint8, rawData []byte) ([]IKEPayloadType, error) {
+	ikeLog.Info("Decoding IKE payloads")
+
 	var ikePayload []IKEPayloadType
 
 	for len(rawData) > 0 {
@@ -751,7 +763,7 @@ func (notification *Notification) unmarshal(rawData []byte) error {
 			return errors.New("Notification: No sufficient bytes to decode next notification")
 		}
 		spiSize := rawData[1]
-		if len(rawData) <= int(4+spiSize) {
+		if len(rawData) < int(4+spiSize) {
 			return errors.New("Notification: No sufficient bytes to get SPI according to the length specified in header")
 		}
 
@@ -1234,7 +1246,7 @@ func (configuration *Configuration) unmarshal(rawData []byte) error {
 		for len(configurationAttributeData) > 0 {
 			ikeLog.Trace("[IKE][Configuration] unmarshal(): Unmarshal 1 configuration attribute")
 			// bounds checking
-			if len(configurationAttributeData) <= 4 {
+			if len(configurationAttributeData) < 4 {
 				return errors.New("ConfigurationAttribute: No sufficient bytes to decode next configuration attribute")
 			}
 			length := binary.BigEndian.Uint16(configurationAttributeData[2:4])
