@@ -6,7 +6,10 @@ import (
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_context"
 	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
+	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
 	"net"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -196,5 +199,91 @@ func ForwardUPTrafficFromN3(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	if err := rawSocket.WriteTo(ipHeader, greEncapsulatedPacket, nil); err != nil {
 		relayLog.Errorf("Write to raw socket failed: %+v", err)
 		return
+	}
+}
+
+func tcpConnectionHandler(connection net.Conn) {
+	defer connection.Close()
+
+	// N3IWF context
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+
+	ueIP := strings.Split(connection.RemoteAddr().String(), ":")[0]
+	ue, ok := n3iwfSelf.AllocatedUEIPAddress[ueIP]
+	if !ok {
+		relayLog.Error("UE context not found")
+		return
+	}
+	ue.TCPConnection = connection
+
+	buffer := make([]byte, 65535)
+	for {
+		readBytes, err := connection.Read(buffer)
+		if err != nil {
+			if err.Error() == "EOF" {
+				relayLog.Warn("Connection close by peer")
+				ue.TCPConnection = nil
+				return
+			} else {
+				relayLog.Errorf("Read TCP connection failed: %+v", err)
+			}
+		}
+
+		msg := n3iwf_message.HandlerMessage{
+			Event:     n3iwf_message.EventN1TunnelCPMessage,
+			UEInnerIP: ueIP,
+			Value:     buffer[:readBytes],
+		}
+
+		n3iwf_message.SendMessage(msg)
+	}
+}
+
+func tcpServerListen(tcpListener net.Listener) {
+	defer tcpListener.Close()
+
+	for {
+		connection, err := tcpListener.Accept()
+		if err != nil {
+			relayLog.Error("TCP server accept failed. Close the listener...")
+			return
+		}
+
+		go tcpConnectionHandler(connection)
+	}
+}
+
+func SetupNASTCPServer() error {
+	// N3IWF context
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	tcpAddr := n3iwfSelf.IPSecGatewayAddress + ":" + strconv.FormatUint(uint64(n3iwfSelf.TCPPort), 10)
+
+	tcpListener, err := net.Listen("tcp", tcpAddr)
+	if err != nil {
+		relayLog.Errorf("Listen TCP address failed: %+v", err)
+		return errors.New("Listen failed")
+	}
+
+	go tcpServerListen(tcpListener)
+
+	return nil
+}
+
+func ForwardCPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
+	ngap_message.SendUplinkNASTransport(ue.AMF, ue, packet)
+}
+
+func ForwardCPTrafficFromN2(ue *n3iwf_context.N3IWFUe, nasPDU []byte) {
+	tcpConnection := ue.TCPConnection
+
+	if tcpConnection == nil {
+		relayLog.Error("This UE has no NAS TCP connection with N3IWF")
+		return
+	}
+
+	if n, err := tcpConnection.Write(nasPDU); err != nil {
+		relayLog.Errorf("Write to TCP connection failed: %+v", err)
+	} else {
+		relayLog.Tracef("Wrote %d bytes", n)
 	}
 }

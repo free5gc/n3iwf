@@ -50,6 +50,7 @@ type N3IWFContext struct {
 	IKEBindAddress      string
 	IPSecGatewayAddress string
 	GTPBindAddress      string
+	TCPPort             uint16
 
 	// N3IWF N1 interface raw socket
 	N1RawSocket *ipv4.RawConn

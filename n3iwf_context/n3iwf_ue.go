@@ -48,6 +48,9 @@ type N3IWFUe struct {
 	N3IWFIKESecurityAssociation   *IKESecurityAssociation
 	N3IWFChildSecurityAssociation *ChildSecurityAssociation
 
+	/* NAS TCP Connection */
+	TCPConnection net.Conn
+
 	/* Others */
 	Guami                            *ngapType.GUAMI
 	IndexToRfsp                      int64

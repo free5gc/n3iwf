@@ -14,6 +14,7 @@ type Configuration struct {
 	IKEBindAddr          string                    `yaml:"IKEBindAddr"`
 	IPSecGatewayAddr     string
 	GTPBindAddr          string
+	TCPPort              uint16
 	FQDN                 string // e.g. n3iwf.free5gc.org
 	PrivateKey           string // file path
 	CertificateAuthority string // file path
