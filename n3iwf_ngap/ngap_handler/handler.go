@@ -1184,7 +1184,13 @@ func HandleDownlinkNASTransport(amf *n3iwf_context.N3IWFAMF, message *ngapType.N
 
 	if nasPDU != nil {
 		// TODO: Send NAS PDU to UE
-		if n3iwfUe.UDPSendInfoGroup != nil {
+		if n3iwfUe.TCPConnection != nil {
+			if n, err := n3iwfUe.TCPConnection.Write(nasPDU.Value); err != nil {
+				ngapLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
+			} else {
+				ngapLog.Tracef("Wrote %d bytes", n)
+			}
+		} else if n3iwfUe.UDPSendInfoGroup != nil {
 			var identifier uint8
 			ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
 
@@ -1216,18 +1222,8 @@ func HandleDownlinkNASTransport(amf *n3iwf_context.N3IWFAMF, message *ngapType.N
 
 			// Send IKE message to UE
 			ike_handler.SendIKEMessageToUE(n3iwfUe.UDPSendInfoGroup, responseIKEMessage)
-
 		} else {
-			if n3iwfUe.TCPConnection != nil {
-				// Send NAS via IPSec security association
-				if n, err := n3iwfUe.TCPConnection.Write(nasPDU.Value); err != nil {
-					ngapLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
-				} else {
-					ngapLog.Tracef("Wrote %d bytes", n)
-				}
-			} else {
-				ngapLog.Error("No IPSec NAS signalling SA to send")
-			}
+			ngapLog.Error("No connection found for UE to send NAS message")
 		}
 	}
 }

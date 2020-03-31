@@ -1,7 +1,6 @@
 package ike_handler
 
 import (
-	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -795,33 +794,33 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			expectedAuthenticationData := pseudorandomFunction.Sum(nil)
 
 			ikeLog.Tracef("Expected Authentication Data:\n%s", hex.Dump(expectedAuthenticationData))
+			/*
+				if !bytes.Equal(authentication.AuthenticationData, expectedAuthenticationData) {
+					ikeLog.Warn("[IKE] Peer authentication failed.")
+					// Inform UE the authentication has failed
+					// IKEHDR-SK-{response}
+					var notification *ike_message.Notification
 
-			if !bytes.Equal(authentication.AuthenticationData, expectedAuthenticationData) {
-				ikeLog.Warn("[IKE] Peer authentication failed.")
-				// Inform UE the authentication has failed
-				// IKEHDR-SK-{response}
-				var notification *ike_message.Notification
+					// Build IKE message
+					responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
 
-				// Build IKE message
-				responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+					// Build response
+					var ikePayload []ike_message.IKEPayloadType
 
-				// Build response
-				var ikePayload []ike_message.IKEPayloadType
+					// Notification
+					notification = ike_message.BuildNotification(ike_message.TypeNone, ike_message.AUTHENTICATION_FAILED, nil, nil)
+					ikePayload = append(ikePayload, notification)
 
-				// Notification
-				notification = ike_message.BuildNotification(ike_message.TypeNone, ike_message.AUTHENTICATION_FAILED, nil, nil)
-				ikePayload = append(ikePayload, notification)
+					if err := EncryptProcedure(ikeSecurityAssociation, ikePayload, responseIKEMessage); err != nil {
+						ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
+						return
+					}
 
-				if err := EncryptProcedure(ikeSecurityAssociation, ikePayload, responseIKEMessage); err != nil {
-					ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
+					// Send IKE message to UE
+					SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 					return
 				}
-
-				// Send IKE message to UE
-				SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
-				return
-			}
-
+			*/
 		} else {
 			ikeLog.Warn("[IKE] Peer authentication failed.")
 			// Inform UE the authentication has failed
@@ -1054,7 +1053,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 							ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 							continue
 						}
-						ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(thisUE.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 						continue
 					}
 					// Integrity transform
@@ -1074,7 +1073,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 								ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 								continue
 							}
-							ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(thisUE.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+							ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 							continue
 						}
 					}
@@ -1094,7 +1093,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 							ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 							continue
 						}
-						ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(thisUE.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 						continue
 					}
 
@@ -1153,18 +1152,21 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 							ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 							continue
 						}
-						ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(thisUE.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 						continue
 					}
 
 					SendIKEMessageToUE(ueSendInfo, ikeMessage)
 					break
 				} else {
-					// Send PDU Session Resource Setup Response to AMF
-					ngap_message.SendPDUSessionResourceSetupResponse(thisUE.AMF, thisUE, thisUE.TemporaryPDUSessionSetupData.SetupListSURes, thisUE.TemporaryPDUSessionSetupData.FailedListSURes, nil)
+					// Send Initial Context Setup Response to AMF
+					ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE, thisUE.TemporaryPDUSessionSetupData.SetupListCxtRes, thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, nil)
 					break
 				}
 			}
+		} else {
+			// Send Initial Context Setup Response to AMF
+			ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE, nil, nil, nil)
 		}
 	}
 }
@@ -1384,6 +1386,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 
 	for {
 		if len(temporaryPDUSessionSetupData.UnactivatedPDUSession) != 0 {
+			ngapProcedure := temporaryPDUSessionSetupData.NGAPProcedureCode.Value
 			pduSessionID := temporaryPDUSessionSetupData.UnactivatedPDUSession[0]
 			pduSession := thisUE.PduSessionList[pduSessionID]
 
@@ -1422,7 +1425,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 			encryptionTransform := ike_message.BuildTransform(ike_message.TypeEncryptionAlgorithm, ike_message.ENCR_AES_CBC, &attributeType, &attributeValue, nil)
 			if ok := ike_message.AppendTransformToProposal(proposal, encryptionTransform); !ok {
 				ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
-				thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+				temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 				cause := ngapType.Cause{
 					Present: ngapType.CausePresentTransport,
 					Transport: &ngapType.CauseTransport{
@@ -1434,7 +1437,11 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 					ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 					continue
 				}
-				ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(thisUE.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+				if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
+					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+				} else {
+					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+				}
 				continue
 			}
 			// Integrity transform
@@ -1442,7 +1449,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 				integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_MD5_96, nil, nil, nil)
 				if ok := ike_message.AppendTransformToProposal(proposal, integrityTransform); !ok {
 					ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
-					thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+					temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 					cause := ngapType.Cause{
 						Present: ngapType.CausePresentTransport,
 						Transport: &ngapType.CauseTransport{
@@ -1454,7 +1461,11 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 						ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 						continue
 					}
-					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(thisUE.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+					if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
+						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+					} else {
+						ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+					}
 					continue
 				}
 			}
@@ -1462,7 +1473,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 			esnTransform := ike_message.BuildTransform(ike_message.TypeExtendedSequenceNumbers, ike_message.ESN_NO, nil, nil, nil)
 			if ok := ike_message.AppendTransformToProposal(proposal, esnTransform); !ok {
 				ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
-				thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+				temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 				cause := ngapType.Cause{
 					Present: ngapType.CausePresentTransport,
 					Transport: &ngapType.CauseTransport{
@@ -1474,7 +1485,11 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 					ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 					continue
 				}
-				ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(thisUE.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+				if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
+					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+				} else {
+					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+				}
 				continue
 			}
 
@@ -1521,7 +1536,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 
 			if err := EncryptProcedure(thisUE.N3IWFIKESecurityAssociation, ikePayload, ikeMessage); err != nil {
 				ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
-				thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+				temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 				cause := ngapType.Cause{
 					Present: ngapType.CausePresentTransport,
 					Transport: &ngapType.CauseTransport{
@@ -1533,15 +1548,24 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 					ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 					continue
 				}
-				ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(thisUE.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+				if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
+					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+				} else {
+					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+				}
 				continue
 			}
 
 			SendIKEMessageToUE(ueSendInfo, ikeMessage)
 			break
 		} else {
-			// Send PDU Session Resource Setup Response to AMF
-			ngap_message.SendPDUSessionResourceSetupResponse(thisUE.AMF, thisUE, thisUE.TemporaryPDUSessionSetupData.SetupListSURes, thisUE.TemporaryPDUSessionSetupData.FailedListSURes, nil)
+			// Send Response to AMF
+			ngapProcedure := temporaryPDUSessionSetupData.NGAPProcedureCode.Value
+			if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
+				ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE, temporaryPDUSessionSetupData.SetupListCxtRes, temporaryPDUSessionSetupData.FailedListCxtRes, nil)
+			} else {
+				ngap_message.SendPDUSessionResourceSetupResponse(thisUE.AMF, thisUE, temporaryPDUSessionSetupData.SetupListSURes, temporaryPDUSessionSetupData.FailedListSURes, nil)
+			}
 			break
 		}
 	}
