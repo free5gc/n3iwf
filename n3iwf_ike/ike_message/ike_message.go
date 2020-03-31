@@ -891,6 +891,7 @@ func (trafficSelector *TrafficSelectorInitiator) marshal() ([]byte, error) {
 			if individualTrafficSelector.TSType == TS_IPV4_ADDR_RANGE {
 				// Address length checking
 				if len(individualTrafficSelector.StartAddress) != 4 {
+					ikeLog.Errorf("Address length %d", len(individualTrafficSelector.StartAddress))
 					return nil, errors.New("TrafficSelector: Start IPv4 address length is not correct")
 				}
 				if len(individualTrafficSelector.EndAddress) != 4 {

@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"net"
 	"strings"
@@ -192,10 +193,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 		var localPublicValue []byte
 
 		localPublicValue, sharedKeyData = CalculateDiffieHellmanMaterials(GenerateRandomNumber(), keyExcahge.KeyExchangeData, chosenDiffieHellmanGroup)
-		responseKeyExchange = &ike_message.KeyExchange{
-			DiffieHellmanGroup: chosenDiffieHellmanGroup,
-			KeyExchangeData:    localPublicValue,
-		}
+		responseKeyExchange = ike_message.BUildKeyExchange(chosenDiffieHellmanGroup, localPublicValue)
 	} else {
 		ikeLog.Error("[IKE] The key exchange field is nil")
 		// TODO: send error message to UE
@@ -206,9 +204,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 		localNonce := GenerateRandomNumber().Bytes()
 		concatenatedNonce = append(nonce.NonceData, localNonce...)
 
-		responseNonce = &ike_message.Nonce{
-			NonceData: localNonce,
-		}
+		responseNonce = ike_message.BuildNonce(localNonce)
 	} else {
 		ikeLog.Error("[IKE] The nonce field is nil")
 		// TODO: send error message to UE
@@ -282,7 +278,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 	}
 	ikeSecurityAssociation.LocalUnsignedAuthentication = append(ikeSecurityAssociation.LocalUnsignedAuthentication, pseudorandomFunction.Sum(nil)...)
 
-	ikeLog.Tracef("Local unsigned authentication data:\n%s", ikeSecurityAssociation.LocalUnsignedAuthentication)
+	ikeLog.Tracef("Local unsigned authentication data:\n%s", hex.Dump(ikeSecurityAssociation.LocalUnsignedAuthentication))
 
 	SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 }
@@ -605,7 +601,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		ikePayload = append(ikePayload, responseCertificate)
 
 		// Authentication Data
-		ikeLog.Tracef("Local authentication data:\n%s", ikeSecurityAssociation.LocalUnsignedAuthentication)
+		ikeLog.Tracef("Local authentication data:\n%s", hex.Dump(ikeSecurityAssociation.LocalUnsignedAuthentication))
 		sha1HashFunction := sha1.New()
 		if _, err := sha1HashFunction.Write(ikeSecurityAssociation.LocalUnsignedAuthentication); err != nil {
 			ikeLog.Errorf("[IKE] Hash function write error: %+v", err)
@@ -773,6 +769,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		var responseSecurityAssociation *ike_message.SecurityAssociation
 		var responseTrafficSelectorInitiator *ike_message.TrafficSelectorInitiator
 		var responseTrafficSelectorResponder *ike_message.TrafficSelectorResponder
+		var responseNotification *ike_message.Notification
 
 		if authentication != nil {
 			// Verifying remote AUTH
@@ -796,6 +793,8 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				return
 			}
 			expectedAuthenticationData := pseudorandomFunction.Sum(nil)
+
+			ikeLog.Tracef("Expected Authentication Data:\n%s", hex.Dump(expectedAuthenticationData))
 
 			if !bytes.Equal(authentication.AuthenticationData, expectedAuthenticationData) {
 				ikeLog.Warn("[IKE] Peer authentication failed.")
@@ -822,6 +821,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 				return
 			}
+
 		} else {
 			ikeLog.Warn("[IKE] Peer authentication failed.")
 			// Inform UE the authentication has failed
@@ -882,6 +882,9 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			for {
 				ueIPAddr = GenerateRandomIPinRange(n3iwfSelf.Subnet)
 				if ueIPAddr != nil {
+					if ueIPAddr.String() == n3iwfSelf.IPSecGatewayAddress {
+						continue
+					}
 					if _, ok := n3iwfSelf.AllocatedUEIPAddress[ueIPAddr.String()]; !ok {
 						// Should be release if there is any error occur
 						n3iwfSelf.AllocatedUEIPAddress[ueIPAddr.String()] = thisUE
@@ -890,17 +893,24 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				}
 			}
 			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_ADDRESS, ueIPAddr))
+			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_NETMASK, n3iwfSelf.Subnet.Mask))
+
+			ikeLog.Tracef("ueIPAddr: %+v", ueIPAddr)
 
 			// Prepare individual traffic selectors
 			individualTrafficSelectorInitiator := ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-				0, 65535, ueIPAddr, ueIPAddr)
+				0, 65535, ueIPAddr.To4(), ueIPAddr.To4())
 			individualTrafficSelectorResponder := ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-				0, 65535, n3iwfIPAddr, n3iwfIPAddr)
+				0, 65535, n3iwfIPAddr.To4(), n3iwfIPAddr.To4())
 
 			responseTrafficSelectorInitiator = ike_message.BuildTrafficSelectorInitiator([]*ike_message.IndividualTrafficSelector{individualTrafficSelectorInitiator})
 			responseTrafficSelectorResponder = ike_message.BuildTrafficSelectorResponder([]*ike_message.IndividualTrafficSelector{individualTrafficSelectorResponder})
 
-			responseConfiguration = ike_message.BuildConfigurationPayload(ike_message.CFG_REPLY, attributes)
+			// Record traffic selector to IKE security association
+			ikeSecurityAssociation.TrafficSelectorInitiator = responseTrafficSelectorInitiator
+			ikeSecurityAssociation.TrafficSelectorResponder = responseTrafficSelectorResponder
+
+			responseConfiguration = ike_message.BuildConfiguration(ike_message.CFG_REPLY, attributes)
 		} else {
 			ikeLog.Error("[IKE] UE did not send any configuration request for its IP address.")
 			return
@@ -967,6 +977,14 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		// Traffic Selector Initiator and Responder
 		ikePayload = append(ikePayload, responseTrafficSelectorInitiator)
 		ikePayload = append(ikePayload, responseTrafficSelectorResponder)
+
+		// Notification(NAS_IP_ADDRESS)
+		responseNotification = ike_message.BuildNotifyNAS_IP4_ADDRESS(n3iwfSelf.IPSecGatewayAddress)
+		ikePayload = append(ikePayload, responseNotification)
+
+		// Notification(NSA_TCP_PORT)
+		responseNotification = ike_message.BuildNotifyNAS_TCP_PORT(n3iwfSelf.TCPPort)
+		ikePayload = append(ikePayload, responseNotification)
 
 		if err := EncryptProcedure(ikeSecurityAssociation, ikePayload, responseIKEMessage); err != nil {
 			ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
@@ -1751,17 +1769,6 @@ func is_Kernel_Supported(transformType uint8, transformID uint16, attributePrese
 	}
 }
 
-func concatenateNonceAndSPI(nonce []byte, SPI_initiator uint64, SPI_responder uint64) []byte {
-	spi := make([]byte, 8)
-
-	binary.BigEndian.PutUint64(spi, SPI_initiator)
-	newSlice := append(nonce, spi...)
-	binary.BigEndian.PutUint64(spi, SPI_responder)
-	newSlice = append(newSlice, spi...)
-
-	return newSlice
-}
-
 func GenerateRandomIPinRange(subnet *net.IPNet) net.IP {
 	ipAddr := make([]byte, 4)
 
@@ -1791,6 +1798,9 @@ func parseIPAddressInformationToChildSecurityAssociation(
 
 	childSecurityAssociation.PeerPublicIPAddr = uePublicIPAddr
 	childSecurityAssociation.LocalPublicIPAddr = net.ParseIP(n3iwf_context.N3IWFSelf().IKEBindAddress)
+
+	ikeLog.Tracef("Initiator's address: %+v", trafficSelectorInitiator.TrafficSelectors[0].StartAddress)
+	ikeLog.Tracef("Responder's address: %+v", trafficSelectorResponder.TrafficSelectors[0].StartAddress)
 
 	childSecurityAssociation.TrafficSelectorInitiator = net.IPNet{
 		IP:   trafficSelectorInitiator.TrafficSelectors[0].StartAddress,

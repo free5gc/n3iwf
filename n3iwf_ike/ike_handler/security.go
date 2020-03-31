@@ -8,6 +8,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha1"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"hash"
@@ -337,6 +338,7 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *n3iwf_context.IKESecurityAssoci
 	}
 
 	ikeLog.Tracef("DH shared key:\n%s", hex.Dump(ikeSecurityAssociation.DiffieHellmanSharedKey))
+	ikeLog.Tracef("Concatenated nonce:\n%s", hex.Dump(ikeSecurityAssociation.ConcatenatedNonce))
 
 	if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.DiffieHellmanSharedKey); err != nil {
 		ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
@@ -601,7 +603,7 @@ func EncryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociati
 	}
 
 	encryptedData = append(encryptedData, make([]byte, checksumLength)...)
-	responseEncryptedPayload := ike_message.BuildEncryptedPayload(ikePayload[0].Type(), encryptedData)
+	responseEncryptedPayload := ike_message.BuildEncrypted(ikePayload[0].Type(), encryptedData)
 
 	responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseEncryptedPayload)
 
@@ -790,4 +792,15 @@ func getOutputLength(transformType uint8, transformID uint16, attributePresent b
 	default:
 		return 0, false
 	}
+}
+
+func concatenateNonceAndSPI(nonce []byte, SPI_initiator uint64, SPI_responder uint64) []byte {
+	spi := make([]byte, 8)
+
+	binary.BigEndian.PutUint64(spi, SPI_initiator)
+	newSlice := append(nonce, spi...)
+	binary.BigEndian.PutUint64(spi, SPI_responder)
+	newSlice = append(newSlice, spi...)
+
+	return newSlice
 }

@@ -97,6 +97,7 @@ func (n3iwf *N3IWF) Start() {
 
 	if !n3iwf_util.InitN3IWFContext() {
 		initLog.Error("Initicating context failed")
+		return
 	}
 
 	wg := sync.WaitGroup{}
@@ -127,6 +128,8 @@ func (n3iwf *N3IWF) Start() {
 	// IKE
 	udp_server.Run()
 	wg.Add(1)
+
+	initLog.Info("N3IWF running...")
 
 	wg.Wait()
 

@@ -3,12 +3,12 @@ package n3iwf_data_relay
 import (
 	"context"
 	"errors"
+	"fmt"
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_context"
 	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
 	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
 	"net"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -262,7 +262,7 @@ func tcpServerListen(tcpListener net.Listener) {
 func SetupNASTCPServer() error {
 	// N3IWF context
 	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	tcpAddr := n3iwfSelf.IPSecGatewayAddress + ":" + strconv.FormatUint(uint64(n3iwfSelf.TCPPort), 10)
+	tcpAddr := fmt.Sprintf("%s:%d", n3iwfSelf.IPSecGatewayAddress, n3iwfSelf.TCPPort)
 
 	tcpListener, err := net.Listen("tcp", tcpAddr)
 	if err != nil {

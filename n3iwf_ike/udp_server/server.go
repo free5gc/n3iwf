@@ -4,8 +4,8 @@ import (
 	"net"
 	"sync"
 
-	"gofree5gc/src/n3iwf/factory"
 	"gofree5gc/src/n3iwf/logger"
+	"gofree5gc/src/n3iwf/n3iwf_context"
 	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
 
 	"github.com/sirupsen/logrus"
@@ -73,27 +73,18 @@ func Run() {
 }
 
 func configBindAddr(listenAddrPort500 *net.UDPAddr, listenAddrPort4500 *net.UDPAddr) {
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+
 	// Configure UDP port
 	listenAddrPort500.Port, listenAddrPort4500.Port = defaultIKEPort500, defaultIKEPort4500
 
 	// Configure IP address
-	config := factory.N3iwfConfig.Configuration
-	if config != nil {
-		if config.IKEBindAddr != "" {
-			ip := net.ParseIP(config.IKEBindAddr)
-			if ip != nil {
-				ikeLog.Tracef("[IKE] Binding %v", ip)
-				listenAddrPort500.IP, listenAddrPort4500.IP = ip, ip
-			} else {
-				ikeLog.Warn("[IKE] Invalid IKE bind IP address, binding 0.0.0.0")
-				listenAddrPort500.IP, listenAddrPort4500.IP = net.IPv4zero, net.IPv4zero
-			}
-		} else {
-			ikeLog.Warn("[IKE] No IP address configuration available, binding 0.0.0.0")
-			listenAddrPort500.IP, listenAddrPort4500.IP = net.IPv4zero, net.IPv4zero
-		}
+	ip := net.ParseIP(n3iwfSelf.IKEBindAddress)
+	if ip != nil {
+		ikeLog.Tracef("[IKE] Binding %v", ip)
+		listenAddrPort500.IP, listenAddrPort4500.IP = ip, ip
 	} else {
-		ikeLog.Warn("[IKE] No IP address configuration available, binding 0.0.0.0")
+		ikeLog.Warn("[IKE] Invalid IKE bind IP address, binding 0.0.0.0")
 		listenAddrPort500.IP, listenAddrPort4500.IP = net.IPv4zero, net.IPv4zero
 	}
 }
