@@ -15,6 +15,7 @@ import (
 	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
 	"math/rand"
 	"net"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -720,6 +721,7 @@ func HandleInitialContextSetupRequest(amf *n3iwf_context.N3IWFAMF, message *ngap
 	// Send IKE message to UE
 	ike_handler.SendIKEMessageToUE(n3iwfUe.UDPSendInfoGroup, responseIKEMessage)
 
+	n3iwfUe.UDPSendInfoGroup = nil
 	n3iwfUe.N3IWFIKESecurityAssociation.State++
 }
 
@@ -1184,13 +1186,7 @@ func HandleDownlinkNASTransport(amf *n3iwf_context.N3IWFAMF, message *ngapType.N
 
 	if nasPDU != nil {
 		// TODO: Send NAS PDU to UE
-		if n3iwfUe.TCPConnection != nil {
-			if n, err := n3iwfUe.TCPConnection.Write(nasPDU.Value); err != nil {
-				ngapLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
-			} else {
-				ngapLog.Tracef("Wrote %d bytes", n)
-			}
-		} else if n3iwfUe.UDPSendInfoGroup != nil {
+		if n3iwfUe.UDPSendInfoGroup != nil {
 			var identifier uint8
 			ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
 
@@ -1223,7 +1219,23 @@ func HandleDownlinkNASTransport(amf *n3iwf_context.N3IWFAMF, message *ngapType.N
 			// Send IKE message to UE
 			ike_handler.SendIKEMessageToUE(n3iwfUe.UDPSendInfoGroup, responseIKEMessage)
 		} else {
-			ngapLog.Error("No connection found for UE to send NAS message")
+			for i := 0; i < 3; i++ {
+				if n3iwfUe.TCPConnection == nil {
+					ngapLog.Warnf("No NAS signalling session found, retry %d", i+1)
+					time.Sleep(500 * time.Millisecond)
+				} else {
+					break
+				}
+			}
+			if n3iwfUe.TCPConnection != nil {
+				if n, err := n3iwfUe.TCPConnection.Write(nasPDU.Value); err != nil {
+					ngapLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
+				} else {
+					ngapLog.Infof("Wrote %d bytes", n)
+				}
+			} else {
+				ngapLog.Error("No connection found for UE to send NAS message")
+			}
 		}
 	}
 }
@@ -1432,7 +1444,7 @@ func HandlePDUSessionResourceSetupRequest(amf *n3iwf_context.N3IWFAMF, message *
 				}
 				// Integrity transform
 				if pduSession.SecurityIntegrity {
-					integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_MD5_96, nil, nil, nil)
+					integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_SHA1_96, nil, nil, nil)
 					if ok := ike_message.AppendTransformToProposal(proposal, integrityTransform); !ok {
 						ngapLog.Error("Generate IKE message failed: Cannot append to proposal")
 						n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession = n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]

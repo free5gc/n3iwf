@@ -2,6 +2,7 @@ package n3iwf_data_relay
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"gofree5gc/src/n3iwf/logger"
@@ -234,6 +235,8 @@ func tcpConnectionHandler(connection net.Conn) {
 				relayLog.Errorf("Read TCP connection failed: %+v", err)
 			}
 		}
+
+		relayLog.Tracef("Get NAS PDU from UE:\nNAS length: %d\nNAS content:\n%s", readBytes, hex.Dump(buffer[:readBytes]))
 
 		msg := n3iwf_message.HandlerMessage{
 			Event:     n3iwf_message.EventN1TunnelCPMessage,

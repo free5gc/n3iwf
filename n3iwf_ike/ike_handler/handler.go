@@ -1059,7 +1059,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 					}
 					// Integrity transform
 					if pduSession.SecurityIntegrity {
-						integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_MD5_96, nil, nil, nil)
+						integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_SHA1_96, nil, nil, nil)
 						if ok := ike_message.AppendTransformToProposal(proposal, integrityTransform); !ok {
 							ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
 							thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
