@@ -794,6 +794,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			expectedAuthenticationData := pseudorandomFunction.Sum(nil)
 
 			ikeLog.Tracef("Expected Authentication Data:\n%s", hex.Dump(expectedAuthenticationData))
+			// TODO: Finish authentication test for UE and N3IWF
 			/*
 				if !bytes.Equal(authentication.AuthenticationData, expectedAuthenticationData) {
 					ikeLog.Warn("[IKE] Peer authentication failed.")
