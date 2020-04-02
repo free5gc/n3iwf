@@ -1489,17 +1489,17 @@ func HandlePDUSessionResourceSetupRequest(amf *n3iwf_context.N3IWFAMF, message *
 				ikePayload = append(ikePayload, nonce)
 
 				// TSi
-				ueIPAddr := net.ParseIP(n3iwfUe.IPSecInnerIP)
+				n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
 				individualTrafficSelector := ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-					0, 65535, ueIPAddr, ueIPAddr)
+					0, 65535, n3iwfIPAddr.To4(), n3iwfIPAddr.To4())
 				trafficSelectorInitiator := ike_message.BuildTrafficSelectorInitiator([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
 
 				ikePayload = append(ikePayload, trafficSelectorInitiator)
 
 				// TSr
-				n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
+				ueIPAddr := net.ParseIP(n3iwfUe.IPSecInnerIP)
 				individualTrafficSelector = ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-					0, 65535, n3iwfIPAddr, n3iwfIPAddr)
+					0, 65535, ueIPAddr.To4(), ueIPAddr.To4())
 				trafficSelectorResponder := ike_message.BuildTrafficSelectorResponder([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
 
 				ikePayload = append(ikePayload, trafficSelectorResponder)

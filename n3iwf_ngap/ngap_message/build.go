@@ -1724,7 +1724,9 @@ func BuildPDUSessionResourceSetupResponseTransfer(pduSession *n3iwf_context.PDUS
 	qosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel = new(ngapType.GTPTunnel)
 
 	gtpTunnel := qosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel
-	binary.BigEndian.PutUint32(gtpTunnel.GTPTEID.Value, pduSession.GTPConnection.IncomingTEID)
+	teid := make([]byte, 4)
+	binary.BigEndian.PutUint32(teid, pduSession.GTPConnection.IncomingTEID)
+	gtpTunnel.GTPTEID.Value = teid
 	gtpTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(n3iwfSelf.GTPBindAddress, "")
 
 	// Associated Qos Flow List

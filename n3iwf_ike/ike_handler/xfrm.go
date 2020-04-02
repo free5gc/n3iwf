@@ -46,7 +46,7 @@ func (xfrmIntegrityAlgorithmType XFRMIntegrityAlgorithmType) String() string {
 	}
 }
 
-func ApplyXFRMRule(childSecurityAssociation *n3iwf_context.ChildSecurityAssociation) error {
+func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *n3iwf_context.ChildSecurityAssociation) error {
 	N3IWFSelf := n3iwf_context.N3IWFSelf()
 
 	// Build XFRM information data structure for incoming traffic.
@@ -58,13 +58,29 @@ func ApplyXFRMRule(childSecurityAssociation *n3iwf_context.ChildSecurityAssociat
 
 	// Direction: {private_network} -> this_server
 	// State
-	xfrmEncryptionAlgorithm := &netlink.XfrmStateAlgo{
-		Name: XFRMEncryptionAlgorithmType(childSecurityAssociation.EncryptionAlgorithm).String(),
-		Key:  childSecurityAssociation.IncomingEncryptionKey,
-	}
-	xfrmIntegrityAlgorithm := &netlink.XfrmStateAlgo{
-		Name: XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
-		Key:  childSecurityAssociation.IncomingIntegrityKey,
+	var xfrmEncryptionAlgorithm, xfrmIntegrityAlgorithm *netlink.XfrmStateAlgo
+	if n3iwf_is_initiator {
+		xfrmEncryptionAlgorithm = &netlink.XfrmStateAlgo{
+			Name: XFRMEncryptionAlgorithmType(childSecurityAssociation.EncryptionAlgorithm).String(),
+			Key:  childSecurityAssociation.ResponderToInitiatorEncryptionKey,
+		}
+		if childSecurityAssociation.IntegrityAlgorithm != 0 {
+			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
+				Name: XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
+				Key:  childSecurityAssociation.ResponderToInitiatorIntegrityKey,
+			}
+		}
+	} else {
+		xfrmEncryptionAlgorithm = &netlink.XfrmStateAlgo{
+			Name: XFRMEncryptionAlgorithmType(childSecurityAssociation.EncryptionAlgorithm).String(),
+			Key:  childSecurityAssociation.InitiatorToResponderEncryptionKey,
+		}
+		if childSecurityAssociation.IntegrityAlgorithm != 0 {
+			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
+				Name: XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
+				Key:  childSecurityAssociation.InitiatorToResponderIntegrityKey,
+			}
+		}
 	}
 
 	xfrmState := new(netlink.XfrmState)
@@ -97,8 +113,8 @@ func ApplyXFRMRule(childSecurityAssociation *n3iwf_context.ChildSecurityAssociat
 
 	xfrmPolicy := new(netlink.XfrmPolicy)
 
-	xfrmPolicy.Src = &childSecurityAssociation.TrafficSelectorInitiator
-	xfrmPolicy.Dst = &childSecurityAssociation.TrafficSelectorResponder
+	xfrmPolicy.Src = &childSecurityAssociation.TrafficSelectorRemote
+	xfrmPolicy.Dst = &childSecurityAssociation.TrafficSelectorLocal
 	xfrmPolicy.Proto = netlink.Proto(childSecurityAssociation.SelectedIPProtocol)
 	xfrmPolicy.Dir = netlink.XFRM_DIR_IN
 	xfrmPolicy.Mark = mark
@@ -114,8 +130,17 @@ func ApplyXFRMRule(childSecurityAssociation *n3iwf_context.ChildSecurityAssociat
 
 	// Direction: this_server -> {private_network}
 	// State
-	xfrmEncryptionAlgorithm.Key = childSecurityAssociation.OutgoingEncryptionKey
-	xfrmIntegrityAlgorithm.Key = childSecurityAssociation.OutgoingIntegrityKey
+	if n3iwf_is_initiator {
+		xfrmEncryptionAlgorithm.Key = childSecurityAssociation.InitiatorToResponderEncryptionKey
+		if childSecurityAssociation.IntegrityAlgorithm != 0 {
+			xfrmIntegrityAlgorithm.Key = childSecurityAssociation.InitiatorToResponderIntegrityKey
+		}
+	} else {
+		xfrmEncryptionAlgorithm.Key = childSecurityAssociation.ResponderToInitiatorEncryptionKey
+		if childSecurityAssociation.IntegrityAlgorithm != 0 {
+			xfrmIntegrityAlgorithm.Key = childSecurityAssociation.ResponderToInitiatorIntegrityKey
+		}
+	}
 
 	xfrmState.Src, xfrmState.Dst = xfrmState.Dst, xfrmState.Src
 

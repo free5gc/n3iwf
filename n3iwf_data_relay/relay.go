@@ -31,6 +31,7 @@ func listenRawSocket(rawSocket *ipv4.RawConn) {
 
 	for {
 		ipHeader, ipPayload, _, err := rawSocket.ReadFrom(buffer)
+		relayLog.Tracef("Read %d bytes", len(ipPayload))
 		if err != nil {
 			relayLog.Errorf("Error read from raw socket: %+v", err)
 			return
@@ -77,6 +78,7 @@ func ListenN1UPTraffic() error {
 // ForwardUPTrafficFromN1 forward user plane packets from N1 to UPF,
 // with GTP header encapsulated
 func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
+	relayLog.Info("Forward N1 -> N3")
 	var pduSession *n3iwf_context.PDUSession
 
 	for _, pduSession = range ue.PduSessionList {
@@ -148,6 +150,7 @@ func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 
 	for {
 		n, _, teid, err := userPlaneConnection.ReadFromGTP(payload)
+		relayLog.Tracef("Read %d bytes", n)
 		if err != nil {
 			relayLog.Errorf("Read from GTP failed: %+v", err)
 			return
@@ -177,6 +180,7 @@ func ForwardUPTrafficFromN3(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	// This is the IP header template for packets with GRE header encapsulated.
 	// The remaining mandatory fields are Dst and TotalLen, which specified
 	// the destination IP address and the packet total length.
+	relayLog.Info("Forward N1 <- N3")
 	ipHeader := &ipv4.Header{
 		Version:  4,
 		Len:      20,
@@ -206,6 +210,8 @@ func ForwardUPTrafficFromN3(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	if err := rawSocket.WriteTo(ipHeader, greEncapsulatedPacket, nil); err != nil {
 		relayLog.Errorf("Write to raw socket failed: %+v", err)
 		return
+	} else {
+		relayLog.Tracef("Wrote %d bytes", packetTotalLength)
 	}
 }
 
@@ -279,10 +285,12 @@ func SetupNASTCPServer() error {
 }
 
 func ForwardCPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
+	relayLog.Info("Forward N1 -> N2")
 	ngap_message.SendUplinkNASTransport(ue.AMF, ue, packet)
 }
 
 func ForwardCPTrafficFromN2(ue *n3iwf_context.N3IWFUe, nasPDU []byte) {
+	relayLog.Info("Forward N1 <- N2")
 	tcpConnection := ue.TCPConnection
 
 	if tcpConnection == nil {
