@@ -895,6 +895,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_ADDRESS, ueIPAddr))
 			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_NETMASK, n3iwfSelf.Subnet.Mask))
 
+			thisUE.IPSecInnerIP = ueIPAddr.String()
 			ikeLog.Tracef("ueIPAddr: %+v", ueIPAddr)
 
 			// Prepare individual traffic selectors
@@ -944,7 +945,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			ikeLog.Errorf("[IKE] Create child security association context failed: %+v", err)
 			return
 		}
-		err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueSendInfo.Addr.IP, ikeSecurityAssociation.TrafficSelectorInitiator, ikeSecurityAssociation.TrafficSelectorResponder)
+		err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueSendInfo.Addr.IP, ikeSecurityAssociation.TrafficSelectorResponder.TrafficSelectors[0], ikeSecurityAssociation.TrafficSelectorInitiator.TrafficSelectors[0])
 		if err != nil {
 			ikeLog.Errorf("[IKE] Parse IP address to child security association failed: %+v", err)
 			return
@@ -995,7 +996,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
 
 		// Aplly XFRM rules
-		if err = ApplyXFRMRule(childSecurityAssociationContext); err != nil {
+		if err = ApplyXFRMRule(false, childSecurityAssociationContext); err != nil {
 			ikeLog.Errorf("[IKE] Applying XFRM rules failed: %+v", err)
 			return
 		}
@@ -1059,7 +1060,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 					}
 					// Integrity transform
 					if pduSession.SecurityIntegrity {
-						integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_MD5_96, nil, nil, nil)
+						integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_SHA1_96, nil, nil, nil)
 						if ok := ike_message.AppendTransformToProposal(proposal, integrityTransform); !ok {
 							ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
 							thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
@@ -1206,7 +1207,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 	}
 
 	// Find corresponding IKE security association
-	localSPI := message.ResponderSPI
+	localSPI := message.InitiatorSPI
 	ikeSecurityAssociation := n3iwfSelf.FindIKESecurityAssociationBySPI(localSPI)
 	if ikeSecurityAssociation == nil {
 		ikeLog.Warn("[IKE] Unrecognized SPI")
@@ -1314,7 +1315,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 		ikeLog.Errorf("[IKE] Create child security association context failed: %+v", err)
 		return
 	}
-	err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueSendInfo.Addr.IP, trafficSelectorInitiator, trafficSelectorResponder)
+	err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueSendInfo.Addr.IP, trafficSelectorInitiator.TrafficSelectors[0], trafficSelectorResponder.TrafficSelectors[0])
 	if err != nil {
 		ikeLog.Errorf("[IKE] Parse IP address to child security association failed: %+v", err)
 		return
@@ -1328,7 +1329,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 	}
 
 	// Aplly XFRM rules
-	if err = ApplyXFRMRule(childSecurityAssociationContext); err != nil {
+	if err = ApplyXFRMRule(true, childSecurityAssociationContext); err != nil {
 		ikeLog.Errorf("[IKE] Applying XFRM rules failed: %+v", err)
 		return
 	}
@@ -1365,6 +1366,11 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 			ikeLog.Errorf("Setup GTP connection with UPF failed: %+v", err)
 			return
 		}
+		// Listen GTP tunnel
+		if err := n3iwf_data_relay.ListenGTP(userPlaneConnection); err != nil {
+			ikeLog.Errorf("Listening GTP tunnel failed: %+v", err)
+			return
+		}
 
 		// UE TEID
 		ueTEID := n3iwfSelf.NewTEID(thisUE)
@@ -1373,6 +1379,9 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
 		ueAssociatedGTPConnection.IncomingTEID = ueTEID
 		ueAssociatedGTPConnection.UserPlaneConnection = userPlaneConnection
+
+		// Store GTP connection with UPF into N3IWF context
+		n3iwfSelf.GTPConnectionWithUPF[ueAssociatedGTPConnection.UPFIPAddr] = userPlaneConnection
 
 		// Append NGAP PDU session resource setup response transfer
 		transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
@@ -1814,8 +1823,8 @@ func GenerateRandomIPinRange(subnet *net.IPNet) net.IP {
 func parseIPAddressInformationToChildSecurityAssociation(
 	childSecurityAssociation *n3iwf_context.ChildSecurityAssociation,
 	uePublicIPAddr net.IP,
-	trafficSelectorInitiator *ike_message.TrafficSelectorInitiator,
-	trafficSelectorResponder *ike_message.TrafficSelectorResponder) error {
+	trafficSelectorLocal *ike_message.IndividualTrafficSelector,
+	trafficSelectorRemote *ike_message.IndividualTrafficSelector) error {
 
 	if childSecurityAssociation == nil {
 		return errors.New("childSecurityAssociation is nil")
@@ -1824,16 +1833,16 @@ func parseIPAddressInformationToChildSecurityAssociation(
 	childSecurityAssociation.PeerPublicIPAddr = uePublicIPAddr
 	childSecurityAssociation.LocalPublicIPAddr = net.ParseIP(n3iwf_context.N3IWFSelf().IKEBindAddress)
 
-	ikeLog.Tracef("Initiator's address: %+v", trafficSelectorInitiator.TrafficSelectors[0].StartAddress)
-	ikeLog.Tracef("Responder's address: %+v", trafficSelectorResponder.TrafficSelectors[0].StartAddress)
+	ikeLog.Tracef("Local TS: %+v", trafficSelectorLocal.StartAddress)
+	ikeLog.Tracef("Remote TS: %+v", trafficSelectorRemote.StartAddress)
 
-	childSecurityAssociation.TrafficSelectorInitiator = net.IPNet{
-		IP:   trafficSelectorInitiator.TrafficSelectors[0].StartAddress,
+	childSecurityAssociation.TrafficSelectorLocal = net.IPNet{
+		IP:   trafficSelectorLocal.StartAddress,
 		Mask: []byte{255, 255, 255, 255},
 	}
 
-	childSecurityAssociation.TrafficSelectorResponder = net.IPNet{
-		IP:   trafficSelectorResponder.TrafficSelectors[0].StartAddress,
+	childSecurityAssociation.TrafficSelectorRemote = net.IPNet{
+		IP:   trafficSelectorRemote.StartAddress,
 		Mask: []byte{255, 255, 255, 255},
 	}
 

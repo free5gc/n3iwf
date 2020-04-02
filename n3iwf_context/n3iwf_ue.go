@@ -157,18 +157,18 @@ type ChildSecurityAssociation struct {
 	LocalPublicIPAddr net.IP
 
 	// Traffic selector
-	SelectedIPProtocol       uint8
-	TrafficSelectorInitiator net.IPNet
-	TrafficSelectorResponder net.IPNet
+	SelectedIPProtocol    uint8
+	TrafficSelectorLocal  net.IPNet
+	TrafficSelectorRemote net.IPNet
 
 	// Security
-	EncryptionAlgorithm   uint16
-	IncomingEncryptionKey []byte
-	OutgoingEncryptionKey []byte
-	IntegrityAlgorithm    uint16
-	IncomingIntegrityKey  []byte
-	OutgoingIntegrityKey  []byte
-	ESN                   bool
+	EncryptionAlgorithm               uint16
+	InitiatorToResponderEncryptionKey []byte
+	ResponderToInitiatorEncryptionKey []byte
+	IntegrityAlgorithm                uint16
+	InitiatorToResponderIntegrityKey  []byte
+	ResponderToInitiatorIntegrityKey  []byte
+	ESN                               bool
 
 	// UE context
 	ThisUE *N3IWFUe

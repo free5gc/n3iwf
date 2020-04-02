@@ -465,13 +465,13 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *n3iwf_context.IKESecurityAsso
 		keyStream = append(keyStream, generatedKeyBlock...)
 	}
 
-	childSecurityAssociation.IncomingEncryptionKey = append(childSecurityAssociation.IncomingEncryptionKey, keyStream[:lengthEncryptionKeyIPSec]...)
+	childSecurityAssociation.InitiatorToResponderEncryptionKey = append(childSecurityAssociation.InitiatorToResponderEncryptionKey, keyStream[:lengthEncryptionKeyIPSec]...)
 	keyStream = keyStream[lengthEncryptionKeyIPSec:]
-	childSecurityAssociation.IncomingIntegrityKey = append(childSecurityAssociation.IncomingIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
+	childSecurityAssociation.InitiatorToResponderIntegrityKey = append(childSecurityAssociation.InitiatorToResponderIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
 	keyStream = keyStream[lengthIntegrityKeyIPSec:]
-	childSecurityAssociation.OutgoingEncryptionKey = append(childSecurityAssociation.OutgoingEncryptionKey, keyStream[:lengthEncryptionKeyIPSec]...)
+	childSecurityAssociation.ResponderToInitiatorEncryptionKey = append(childSecurityAssociation.ResponderToInitiatorEncryptionKey, keyStream[:lengthEncryptionKeyIPSec]...)
 	keyStream = keyStream[lengthEncryptionKeyIPSec:]
-	childSecurityAssociation.OutgoingIntegrityKey = append(childSecurityAssociation.OutgoingIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
+	childSecurityAssociation.ResponderToInitiatorIntegrityKey = append(childSecurityAssociation.ResponderToInitiatorIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
 
 	return nil
 
