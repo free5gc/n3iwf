@@ -25,26 +25,33 @@ func BuildIKEHeader(
 }
 
 func BuildNotification(protocolID uint8, notifyMessageType uint16, spi []byte, notificationData []byte) *Notification {
-	notificationPayload := new(Notification)
-	notificationPayload.ProtocolID = protocolID
-	notificationPayload.NotifyMessageType = notifyMessageType
-	notificationPayload.SPI = append(notificationPayload.SPI, spi...)
-	notificationPayload.NotificationData = append(notificationPayload.NotificationData, notificationData...)
-	return notificationPayload
+	notification := new(Notification)
+	notification.ProtocolID = protocolID
+	notification.NotifyMessageType = notifyMessageType
+	notification.SPI = append(notification.SPI, spi...)
+	notification.NotificationData = append(notification.NotificationData, notificationData...)
+	return notification
 }
 
 func BuildCertificate(certificateEncode uint8, certificateData []byte) *Certificate {
-	certificatePayload := new(Certificate)
-	certificatePayload.CertificateEncoding = certificateEncode
-	certificatePayload.CertificateData = append(certificatePayload.CertificateData, certificateData...)
-	return certificatePayload
+	certificate := new(Certificate)
+	certificate.CertificateEncoding = certificateEncode
+	certificate.CertificateData = append(certificate.CertificateData, certificateData...)
+	return certificate
 }
 
-func BuildEncryptedPayload(nextPayload IKEType, encryptedData []byte) *Encrypted {
-	encryptedPayload := new(Encrypted)
-	encryptedPayload.NextPayload = uint8(nextPayload)
-	encryptedPayload.EncryptedData = append(encryptedPayload.EncryptedData, encryptedData...)
-	return encryptedPayload
+func BuildEncrypted(nextPayload IKEType, encryptedData []byte) *Encrypted {
+	encrypted := new(Encrypted)
+	encrypted.NextPayload = uint8(nextPayload)
+	encrypted.EncryptedData = append(encrypted.EncryptedData, encryptedData...)
+	return encrypted
+}
+
+func BUildKeyExchange(diffiehellmanGroup uint16, keyExchangeData []byte) *KeyExchange {
+	keyExchange := new(KeyExchange)
+	keyExchange.DiffieHellmanGroup = diffiehellmanGroup
+	keyExchange.KeyExchangeData = append(keyExchange.KeyExchangeData, keyExchangeData...)
+	return keyExchange
 }
 
 func BuildIdentificationInitiator(idType uint8, idData []byte) *IdentificationInitiator {
@@ -68,7 +75,7 @@ func BuildAuthentication(authenticationMethod uint8, authenticationData []byte) 
 	return authentication
 }
 
-func BuildConfigurationPayload(configurationType uint8, attributes []*IndividualConfigurationAttribute) *Configuration {
+func BuildConfiguration(configurationType uint8, attributes []*IndividualConfigurationAttribute) *Configuration {
 	configuration := new(Configuration)
 	configuration.ConfigurationType = configurationType
 	configuration.ConfigurationAttribute = append(configuration.ConfigurationAttribute, attributes...)
@@ -82,6 +89,12 @@ func BuildConfigurationAttribute(attributeType uint16, attributeValue []byte) *I
 	return configurationAttribute
 }
 
+func BuildNonce(nonceData []byte) *Nonce {
+	nonce := new(Nonce)
+	nonce.NonceData = append(nonce.NonceData, nonceData...)
+	return nonce
+}
+
 func BuildTrafficSelectorInitiator(trafficSelectors []*IndividualTrafficSelector) *TrafficSelectorInitiator {
 	trafficSelectorInitiator := new(TrafficSelectorInitiator)
 	trafficSelectorInitiator.TrafficSelectors = append(trafficSelectorInitiator.TrafficSelectors, trafficSelectors...)
@@ -92,12 +105,6 @@ func BuildTrafficSelectorResponder(trafficSelectors []*IndividualTrafficSelector
 	trafficSelectorResponder := new(TrafficSelectorResponder)
 	trafficSelectorResponder.TrafficSelectors = append(trafficSelectorResponder.TrafficSelectors, trafficSelectors...)
 	return trafficSelectorResponder
-}
-
-func BuildNonce(nonceData []byte) *Nonce {
-	nonce := new(Nonce)
-	nonce.NonceData = append(nonce.NonceData, nonceData...)
-	return nonce
 }
 
 func BuildIndividualTrafficSelector(tsType uint8, ipProtocolID uint8, startPort uint16, endPort uint16, startAddr []byte, endAddr []byte) *IndividualTrafficSelector {
@@ -191,7 +198,7 @@ func BuildEAPfailure(identifier uint8) *EAP {
 	return eap
 }
 
-func BuildEAPExpanded(vendorID uint32, vendorType uint32, vendorData []byte) EAPTypeFormat {
+func BuildEAPExpanded(vendorID uint32, vendorType uint32, vendorData []byte) *EAPExpanded {
 	eapExpanded := new(EAPExpanded)
 	eapExpanded.VendorID = vendorID
 	eapExpanded.VendorType = vendorType
@@ -253,7 +260,7 @@ func BuildNotifyNAS_IP4_ADDRESS(nasIPAddr string) *Notification {
 	if nasIPAddr == "" {
 		return nil
 	} else {
-		ipAddrByte := net.ParseIP(nasIPAddr)
+		ipAddrByte := net.ParseIP(nasIPAddr).To4()
 		return BuildNotification(TypeNone, Vendor3GPPNotifyTypeNAS_IP4_ADDRESS, nil, ipAddrByte)
 	}
 }
@@ -262,7 +269,7 @@ func BuildNotifyUP_IP4_ADDRESS(upIPAddr string) *Notification {
 	if upIPAddr == "" {
 		return nil
 	} else {
-		ipAddrByte := net.ParseIP(upIPAddr)
+		ipAddrByte := net.ParseIP(upIPAddr).To4()
 		return BuildNotification(TypeNone, Vendor3GPPNotifyTypeUP_IP4_ADDRESS, nil, ipAddrByte)
 	}
 }

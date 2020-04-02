@@ -1,6 +1,7 @@
 package n3iwf_util
 
 import (
+	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509"
 	"encoding/pem"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"gofree5gc/lib/path_util"
 	"gofree5gc/src/n3iwf/factory"
 	"gofree5gc/src/n3iwf/logger"
 	"gofree5gc/src/n3iwf/n3iwf_context"
@@ -23,6 +25,11 @@ func init() {
 
 func InitN3IWFContext() bool {
 	var ok bool
+
+	if factory.N3iwfConfig.Configuration == nil {
+		contextLog.Error("No N3IWF configuration found")
+		return false
+	}
 
 	n3iwfContext := n3iwf_context.N3IWFSelf()
 	n3iwfContext.NFInfo = factory.N3iwfConfig.Configuration.N3IWFInfo
@@ -72,11 +79,17 @@ func InitN3IWFContext() bool {
 	}
 
 	// Private key
-	if factory.N3iwfConfig.Configuration.PrivateKey == "" {
-		contextLog.Error("No private key file path specified")
-		return false
-	} else {
-		content, err := ioutil.ReadFile(factory.N3iwfConfig.Configuration.PrivateKey)
+	{
+		var keyPath string
+
+		if factory.N3iwfConfig.Configuration.PrivateKey == "" {
+			contextLog.Warn("No private key file path specified, load default key file...")
+			keyPath = path_util.Gofree5gcPath("gofree5gc/support/TLS/n3iwf.key")
+		} else {
+			keyPath = factory.N3iwfConfig.Configuration.PrivateKey
+		}
+
+		content, err := ioutil.ReadFile(keyPath)
 		if err != nil {
 			contextLog.Errorf("Cannot read private key data from file: %+v", err)
 			return false
@@ -86,21 +99,39 @@ func InitN3IWFContext() bool {
 			contextLog.Error("Parse pem failed")
 			return false
 		}
-		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
-			contextLog.Errorf("Parse private key failed: %+v", err)
+			contextLog.Warnf("Parse PKCS8 private key failed: %+v", err)
+			contextLog.Info("Parse using PKCS1...")
+
+			key, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err != nil {
+				contextLog.Errorf("Parse PKCS1 pricate key failed: %+v", err)
+				return false
+			}
+		}
+		rsaKey, ok := key.(*rsa.PrivateKey)
+		if !ok {
+			contextLog.Error("Private key is not an rsa private key")
 			return false
 		}
-		n3iwfContext.N3IWFPrivateKey = key
+
+		n3iwfContext.N3IWFPrivateKey = rsaKey
 	}
 
 	// Certificate authority
-	if factory.N3iwfConfig.Configuration.CertificateAuthority == "" {
-		contextLog.Error("No certificate authority file path specified")
-		return false
-	} else {
+	{
+		var keyPath string
+
+		if factory.N3iwfConfig.Configuration.CertificateAuthority == "" {
+			contextLog.Warn("No certificate authority file path specified, load default CA certificate...")
+			keyPath = path_util.Gofree5gcPath("gofree5gc/support/TLS/n3iwf.pem")
+		} else {
+			keyPath = factory.N3iwfConfig.Configuration.CertificateAuthority
+		}
+
 		// Read .pem
-		content, err := ioutil.ReadFile(factory.N3iwfConfig.Configuration.CertificateAuthority)
+		content, err := ioutil.ReadFile(keyPath)
 		if err != nil {
 			contextLog.Errorf("Cannot read certificate authority data from file: %+v", err)
 			return false
@@ -128,12 +159,18 @@ func InitN3IWFContext() bool {
 	}
 
 	// Certificate
-	if factory.N3iwfConfig.Configuration.Certificate == "" {
-		contextLog.Error("No certificate file path specified")
-		return false
-	} else {
+	{
+		var keyPath string
+
+		if factory.N3iwfConfig.Configuration.Certificate == "" {
+			contextLog.Warn("No certificate file path specified, load default certificate...")
+			keyPath = path_util.Gofree5gcPath("gofree5gc/support/TLS/n3iwf.pem")
+		} else {
+			keyPath = factory.N3iwfConfig.Configuration.Certificate
+		}
+
 		// Read .pem
-		content, err := ioutil.ReadFile(factory.N3iwfConfig.Configuration.Certificate)
+		content, err := ioutil.ReadFile(keyPath)
 		if err != nil {
 			contextLog.Errorf("Cannot read certificate data from file: %+v", err)
 			return false
