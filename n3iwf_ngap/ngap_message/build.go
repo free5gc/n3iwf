@@ -1,6 +1,7 @@
 package ngap_message
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 
 	"gofree5gc/lib/aper"
@@ -1709,16 +1710,32 @@ func BuildRRCInactiveTransitionReport() ([]byte, error) {
 }
 
 func BuildPDUSessionResourceSetupResponseTransfer(pduSession *n3iwf_context.PDUSession) ([]byte, error) {
+	// N3IWF context
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 
 	transfer := ngapType.PDUSessionResourceSetupResponseTransfer{}
 
 	// TODO: use tunnel info allocated by n3iwf
 	// QOS Flow Per TNL Information
 	qosFlowPerTNLInformation := &transfer.QosFlowPerTNLInformation
+
+	// UP transport layer information - UE(RAN) side
 	qosFlowPerTNLInformation.UPTransportLayerInformation.Present = ngapType.UPTransportLayerInformationPresentGTPTunnel
 	qosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel = new(ngapType.GTPTunnel)
-	qosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel.GTPTEID.Value = pduSession.DLGTPTNLInfo.GTPTEID.Value
-	qosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel.TransportLayerAddress = pduSession.DLGTPTNLInfo.TransportLayerAddress
+
+	gtpTunnel := qosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel
+	binary.BigEndian.PutUint32(gtpTunnel.GTPTEID.Value, pduSession.GTPConnection.IncomingTEID)
+	gtpTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(n3iwfSelf.GTPBindAddress, "")
+
+	// Associated Qos Flow List
+	for _, qfi := range pduSession.QFIList {
+		associatedQosFlowItem := ngapType.AssociatedQosFlowItem{
+			QosFlowIdentifier: ngapType.QosFlowIdentifier{
+				Value: int64(qfi),
+			},
+		}
+		qosFlowPerTNLInformation.AssociatedQosFlowList.List = append(qosFlowPerTNLInformation.AssociatedQosFlowList.List, associatedQosFlowItem)
+	}
 
 	return aper.MarshalWithParams(transfer, "valueExt")
 }

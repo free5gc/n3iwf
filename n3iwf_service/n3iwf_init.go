@@ -13,6 +13,7 @@ import (
 	"gofree5gc/src/app"
 	"gofree5gc/src/n3iwf/factory"
 	"gofree5gc/src/n3iwf/logger"
+	"gofree5gc/src/n3iwf/n3iwf_data_relay"
 	"gofree5gc/src/n3iwf/n3iwf_handler"
 	"gofree5gc/src/n3iwf/n3iwf_ike/udp_server"
 	"gofree5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
@@ -96,24 +97,32 @@ func (n3iwf *N3IWF) Start() {
 
 	n3iwf_util.InitN3IWFContext()
 
-	go n3iwf_handler.Handle()
-
 	wg := sync.WaitGroup{}
 
+	// N3IWF handler
+	go n3iwf_handler.Handle()
+	wg.Add(1)
+
+	// NGAP
 	n3iwf_sctp.InitiateSCTP(&wg)
 
-	udp_server.Run()
+	// Relay listeners
+	// Control plane
+	if err := n3iwf_data_relay.SetupNASTCPServer(); err != nil {
+		initLog.Errorf("Listen N1 control plane traffic failed: %+v", err)
+	}
+	// User plane
+	if err := n3iwf_data_relay.ListenN1UPTraffic(); err != nil {
+		initLog.Errorf("Listen N1 user plane traffic failed: %+v", err)
+		return
+	}
+	wg.Add(2)
 
+	// IKE
+	udp_server.Run()
 	wg.Add(1)
 
 	wg.Wait()
-
-	//self := n3iwf_context.N3IWFSelf()
-	//self := amf_context.AMF_Self()
-	//supi := "imsi-0010202"
-	//ue := self.NewAmfUe(supi)
-	//ue.GroupID = "12121212-208-93-01010101"
-	//ue.TimeZone = "UTC"
 
 }
 

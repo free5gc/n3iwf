@@ -6,7 +6,10 @@ import (
 
 	"gofree5gc/lib/aper"
 	"gofree5gc/lib/ngap/ngapType"
+	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
 )
+
+// 3GPP specified EAP-5G
 
 // Access Network Parameters
 type ANParameters struct {
@@ -16,46 +19,11 @@ type ANParameters struct {
 	EstablishmentCause *ngapType.RRCEstablishmentCause
 }
 
-// Types for EAP-5G
-// Used in IKE EAP expanded for vendor ID
-const VendorID3GPP = 10415
-
-// Used in IKE EAP expanded for vendor data
-const VendorTypeEAP5G = 3
-
-// Used in EAP-5G for message ID
-const (
-	EAP5GType5GStart = 1
-	EAP5GType5GNAS   = 2
-	EAP5GType5GStop  = 4
-)
-
-// Used in AN-Parameter field for IE types
-const (
-	ANParametersTypeGUAMI              = 1
-	ANParametersTypeSelectedPLMNID     = 2
-	ANParametersTypeRequestedNSSAI     = 3
-	ANParametersTypeEstablishmentCause = 4
-)
-
-// Used in IE Establishment Cause field for cause types
-const (
-	EstablishmentCauseEmergency          = 0
-	EstablishmentCauseHighPriorityAccess = 1
-	EstablishmentCauseMO_Signalling      = 3
-	EstablishmentCauseMO_Data            = 4
-	EstablishmentCauseMPS_PriorityAccess = 8
-	EstablishmentCauseMCS_PriorityAccess = 9
-)
-
-// Spare
-const EAP5GSpareValue = 0
-
 func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *ANParameters, nasPDU []byte, err error) {
 	if len(codedData) >= 2 {
 		eap5GMessageID = codedData[0]
 
-		if eap5GMessageID == EAP5GType5GStop {
+		if eap5GMessageID == ike_message.EAP5GType5GStop {
 			return
 		}
 
@@ -85,7 +53,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 					parameterLength := anParameterField[1]
 
 					switch parameterType {
-					case ANParametersTypeGUAMI:
+					case ike_message.ANParametersTypeGUAMI:
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -112,7 +80,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 						} else {
 							ikeLog.Warn("[IKE] AN-Parameter GUAMI field empty")
 						}
-					case ANParametersTypeSelectedPLMNID:
+					case ike_message.ANParametersTypeSelectedPLMNID:
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -139,7 +107,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 						} else {
 							ikeLog.Warn("[IKE] AN-Parameter PLMN field empty")
 						}
-					case ANParametersTypeRequestedNSSAI:
+					case ike_message.ANParametersTypeRequestedNSSAI:
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -220,7 +188,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 						} else {
 							ikeLog.Warn("[IKE] AN-Parameter value for NSSAI empty")
 						}
-					case ANParametersTypeEstablishmentCause:
+					case ike_message.ANParametersTypeEstablishmentCause:
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -236,21 +204,21 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 							establishmentCause := parameterValue[1] & 0x0f
 							switch establishmentCause {
-							case EstablishmentCauseEmergency:
+							case ike_message.EstablishmentCauseEmergency:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: Emergency")
-							case EstablishmentCauseHighPriorityAccess:
+							case ike_message.EstablishmentCauseHighPriorityAccess:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: High Priority Access")
-							case EstablishmentCauseMO_Signalling:
+							case ike_message.EstablishmentCauseMO_Signalling:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MO Signalling")
-							case EstablishmentCauseMO_Data:
+							case ike_message.EstablishmentCauseMO_Data:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MO Data")
-							case EstablishmentCauseMPS_PriorityAccess:
+							case ike_message.EstablishmentCauseMPS_PriorityAccess:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MPS Priority Access")
-							case EstablishmentCauseMCS_PriorityAccess:
+							case ike_message.EstablishmentCauseMCS_PriorityAccess:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MCS Priority Access")
 							default:
 								ikeLog.Trace("[IKE] AN-Parameter establishment cause: Unknown. Treat as mo-Data")
-								establishmentCause = EstablishmentCauseMO_Data
+								establishmentCause = ike_message.EstablishmentCauseMO_Data
 							}
 
 							ngapEstablishmentCause := new(ngapType.RRCEstablishmentCause)
@@ -304,26 +272,4 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 	} else {
 		return 0, nil, nil, errors.New("No data to decode")
 	}
-}
-
-// BuildEAP5GStart build IKE EAP expanded vendor data for EAP-5G 5G-start
-func BuildEAP5GStart() []byte {
-	return []byte{EAP5GType5GStart, EAP5GSpareValue}
-}
-
-func BuildEAP5GNAS(nasPDU []byte) []byte {
-	if len(nasPDU) == 0 {
-		ikeLog.Error("[IKE] BuildEAP5GNAS(): NASPDU is nil")
-		return nil
-	}
-
-	header := make([]byte, 4)
-
-	// Message ID
-	header[0] = EAP5GType5GNAS
-
-	// NASPDU length (2 octets)
-	binary.BigEndian.PutUint16(header[2:4], uint16(len(nasPDU)))
-
-	return append(header, nasPDU...)
 }

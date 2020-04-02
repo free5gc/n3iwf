@@ -24,13 +24,14 @@ var teidGenerator uint32 = 1
 
 type N3IWFContext struct {
 	NFInfo                 N3IWFNFInfo
-	UePool                 map[int64]*N3IWFUe                 // RanUeNgapID as key
-	AMFPool                map[string]*N3IWFAMF               // SCTPAddr as key
-	AMFReInitAvailableList map[string]bool                    // SCTPAddr as key
-	IKESA                  map[uint64]*IKESecurityAssociation // SPI as key
-	GTPConnectionWithUPF   map[string]*gtpv1.UPlaneConn       // UPF address as key
-	AllocatedUEIPAddress   map[string]*N3IWFUe                // IPAddr as key
-	AllocatedUETEID        map[uint32]*N3IWFUe                // TEID as key
+	UePool                 map[int64]*N3IWFUe                   // RanUeNgapID as key
+	AMFPool                map[string]*N3IWFAMF                 // SCTPAddr as key
+	AMFReInitAvailableList map[string]bool                      // SCTPAddr as key
+	IKESA                  map[uint64]*IKESecurityAssociation   // SPI as key
+	ChildSA                map[uint32]*ChildSecurityAssociation // SPI as key
+	GTPConnectionWithUPF   map[string]*gtpv1.UPlaneConn         // UPF address as key
+	AllocatedUEIPAddress   map[string]*N3IWFUe                  // IPAddr as key
+	AllocatedUETEID        map[uint32]*N3IWFUe                  // TEID as key
 
 	// N3IWF FQDN
 	FQDN string
@@ -65,6 +66,7 @@ func init() {
 	N3IWFSelf().AMFPool = make(map[string]*N3IWFAMF)
 	N3IWFSelf().AMFReInitAvailableList = make(map[string]bool)
 	N3IWFSelf().IKESA = make(map[uint64]*IKESecurityAssociation)
+	N3IWFSelf().ChildSA = make(map[uint32]*ChildSecurityAssociation)
 	N3IWFSelf().GTPConnectionWithUPF = make(map[string]*gtpv1.UPlaneConn)
 	N3IWFSelf().AllocatedUEIPAddress = make(map[string]*N3IWFUe)
 	N3IWFSelf().AllocatedUETEID = make(map[uint32]*N3IWFUe)

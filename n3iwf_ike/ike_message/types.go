@@ -49,6 +49,17 @@ const (
 	TypeExtendedSequenceNumbers
 )
 
+// used for SecurityAssociation-Proposal-Transform AttributeFormat
+const (
+	AttributeFormatUseTLV = iota
+	AttributeFormatUseTV
+)
+
+// used for SecurityAssociation-Proposal-Trandform AttributeType
+const (
+	AttributeTypeKeyLength = 14
+)
+
 // used for SecurityAssociation-Proposal-Transform TransformID
 const (
 	ENCR_DES_IV64 = 1
@@ -223,4 +234,54 @@ const (
 	IPProtocolTCP  = 6
 	IPProtocolUDP  = 17
 	IPProtocolGRE  = 47
+)
+
+// Types for EAP-5G
+// Used in IKE EAP expanded for vendor ID
+const VendorID3GPP = 10415
+
+// Used in IKE EAP expanded for vendor data
+const VendorTypeEAP5G = 3
+
+// Used in EAP-5G for message ID
+const (
+	EAP5GType5GStart = 1
+	EAP5GType5GNAS   = 2
+	EAP5GType5GStop  = 4
+)
+
+// Used in AN-Parameter field for IE types
+const (
+	ANParametersTypeGUAMI              = 1
+	ANParametersTypeSelectedPLMNID     = 2
+	ANParametersTypeRequestedNSSAI     = 3
+	ANParametersTypeEstablishmentCause = 4
+)
+
+// Used in IE Establishment Cause field for cause types
+const (
+	EstablishmentCauseEmergency          = 0
+	EstablishmentCauseHighPriorityAccess = 1
+	EstablishmentCauseMO_Signalling      = 3
+	EstablishmentCauseMO_Data            = 4
+	EstablishmentCauseMPS_PriorityAccess = 8
+	EstablishmentCauseMCS_PriorityAccess = 9
+)
+
+// Spare
+const EAP5GSpareValue = 0
+
+// 3GPP specified IKE Notify
+// 3GPP specified IKE Notify Message Types
+const (
+	Vendor3GPPNotifyType5G_QOS_INFO     uint16 = 55501
+	Vendor3GPPNotifyTypeNAS_IP4_ADDRESS uint16 = 55502
+	Vendor3GPPNotifyTypeUP_IP4_ADDRESS  uint16 = 55504
+	Vendor3GPPNotifyTypeNAS_TCP_PORT    uint16 = 55506
+)
+
+// Used in NotifyType5G_QOS_INFO
+const (
+	NotifyType5G_QOS_INFOBitDSCPICheck uint8 = 1
+	NotifyType5G_QOS_INFOBitDCSICheck  uint8 = 1 << 1
 )
