@@ -8,7 +8,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"gofree5gc/src/n3iwf/logger"
+	"free5gc/src/n3iwf/logger"
 )
 
 // Log

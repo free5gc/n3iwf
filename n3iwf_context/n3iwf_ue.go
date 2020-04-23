@@ -4,9 +4,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"gofree5gc/lib/ngap/ngapType"
-	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
-	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
+	"free5gc/lib/ngap/ngapType"
+	"free5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
+	"free5gc/src/n3iwf/n3iwf_ike/ike_message"
 	"net"
 
 	gtpv1 "github.com/wmnsk/go-gtp/v1"

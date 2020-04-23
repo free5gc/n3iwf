@@ -3,10 +3,10 @@ package ngap_message
 import (
 	"github.com/sirupsen/logrus"
 
-	"gofree5gc/lib/ngap/ngapType"
-	"gofree5gc/src/n3iwf/logger"
-	"gofree5gc/src/n3iwf/n3iwf_context"
-	"gofree5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
+	"free5gc/lib/ngap/ngapType"
+	"free5gc/src/n3iwf/logger"
+	"free5gc/src/n3iwf/n3iwf_context"
+	"free5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
 )
 
 var ngaplog *logrus.Entry

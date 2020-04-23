@@ -1,10 +1,10 @@
 package n3iwf_data_relay_test
 
 import (
-	"gofree5gc/lib/ngap/ngapType"
-	"gofree5gc/src/n3iwf/n3iwf_context"
-	"gofree5gc/src/n3iwf/n3iwf_data_relay"
-	"gofree5gc/src/n3iwf/n3iwf_handler"
+	"free5gc/lib/ngap/ngapType"
+	"free5gc/src/n3iwf/n3iwf_context"
+	"free5gc/src/n3iwf/n3iwf_data_relay"
+	"free5gc/src/n3iwf/n3iwf_handler"
 	"sync"
 	"testing"
 	"time"

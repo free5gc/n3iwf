@@ -5,18 +5,18 @@ import (
 	"fmt"
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/stretchr/testify/assert"
-	"gofree5gc/lib/aper"
-	"gofree5gc/lib/ngap"
-	"gofree5gc/lib/ngap/ngapConvert"
-	"gofree5gc/lib/ngap/ngapSctp"
-	"gofree5gc/lib/ngap/ngapType"
-	"gofree5gc/lib/path_util"
-	"gofree5gc/src/n3iwf/factory"
-	"gofree5gc/src/n3iwf/n3iwf_context"
-	"gofree5gc/src/n3iwf/n3iwf_handler"
-	"gofree5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
-	"gofree5gc/src/n3iwf/n3iwf_util"
-	"gofree5gc/src/test/ngapTestpacket"
+	"free5gc/lib/aper"
+	"free5gc/lib/ngap"
+	"free5gc/lib/ngap/ngapConvert"
+	"free5gc/lib/ngap/ngapSctp"
+	"free5gc/lib/ngap/ngapType"
+	"free5gc/lib/path_util"
+	"free5gc/src/n3iwf/factory"
+	"free5gc/src/n3iwf/n3iwf_context"
+	"free5gc/src/n3iwf/n3iwf_handler"
+	"free5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
+	"free5gc/src/n3iwf/n3iwf_util"
+	"free5gc/src/test/ngapTestpacket"
 	"log"
 	"sync"
 	"testing"
@@ -33,7 +33,7 @@ var testAmf *n3iwf_context.N3IWFAMF
 func init() {
 
 	// parse config file
-	configFile := path_util.Gofree5gcPath("gofree5gc/src/n3iwf/n3iwf_util/test/testN3iwfcfg.conf")
+	configFile := path_util.Gofree5gcPath("free5gc/src/n3iwf/n3iwf_util/test/testN3iwfcfg.conf")
 	factory.InitConfigFactory(configFile)
 	testConfig = factory.N3iwfConfig.Configuration
 

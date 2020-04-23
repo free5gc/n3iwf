@@ -1,18 +1,18 @@
 package n3iwf_handler
 
 import (
-	"gofree5gc/src/n3iwf/n3iwf_context"
-	"gofree5gc/src/n3iwf/n3iwf_data_relay"
-	"gofree5gc/src/n3iwf/n3iwf_ike"
-	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_message"
+	"free5gc/src/n3iwf/n3iwf_context"
+	"free5gc/src/n3iwf/n3iwf_data_relay"
+	"free5gc/src/n3iwf/n3iwf_ike"
+	"free5gc/src/n3iwf/n3iwf_ngap/ngap_message"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
-	"gofree5gc/src/n3iwf/logger"
-	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
-	"gofree5gc/src/n3iwf/n3iwf_ngap"
-	"gofree5gc/src/n3iwf/n3iwf_ngap/ngap_handler"
+	"free5gc/src/n3iwf/logger"
+	"free5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
+	"free5gc/src/n3iwf/n3iwf_ngap"
+	"free5gc/src/n3iwf/n3iwf_ngap/ngap_handler"
 )
 
 var handlerLog *logrus.Entry

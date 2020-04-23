@@ -2,9 +2,9 @@ package n3iwf_context
 
 import (
 	"bytes"
-	"gofree5gc/lib/aper"
-	"gofree5gc/lib/ngap/ngapConvert"
-	"gofree5gc/lib/ngap/ngapType"
+	"free5gc/lib/aper"
+	"free5gc/lib/ngap/ngapConvert"
+	"free5gc/lib/ngap/ngapType"
 )
 
 type N3IWFAMF struct {

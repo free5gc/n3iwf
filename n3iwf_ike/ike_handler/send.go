@@ -1,9 +1,9 @@
 package ike_handler
 
 import (
-	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
-	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
-	"gofree5gc/src/n3iwf/n3iwf_ike/udp_server"
+	"free5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
+	"free5gc/src/n3iwf/n3iwf_ike/ike_message"
+	"free5gc/src/n3iwf/n3iwf_ike/udp_server"
 )
 
 func SendIKEMessageToUE(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {

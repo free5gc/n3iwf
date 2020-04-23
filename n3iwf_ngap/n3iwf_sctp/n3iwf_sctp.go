@@ -9,9 +9,9 @@ import (
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 
-	"gofree5gc/src/n3iwf/factory"
-	"gofree5gc/src/n3iwf/logger"
-	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
+	"free5gc/src/n3iwf/factory"
+	"free5gc/src/n3iwf/logger"
+	"free5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
 )
 
 type SCTPSession struct {

@@ -4,12 +4,12 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 
-	"gofree5gc/lib/aper"
-	"gofree5gc/lib/ngap"
-	"gofree5gc/lib/ngap/ngapConvert"
-	"gofree5gc/lib/ngap/ngapType"
-	"gofree5gc/src/n3iwf/n3iwf_context"
-	"gofree5gc/src/n3iwf/n3iwf_util"
+	"free5gc/lib/aper"
+	"free5gc/lib/ngap"
+	"free5gc/lib/ngap/ngapConvert"
+	"free5gc/lib/ngap/ngapType"
+	"free5gc/src/n3iwf/n3iwf_context"
+	"free5gc/src/n3iwf/n3iwf_util"
 )
 
 func BuildNGSetupRequest() ([]byte, error) {
