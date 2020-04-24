@@ -1,10 +1,10 @@
 package main
 
 import (
-	"gofree5gc/src/app"
-	"gofree5gc/src/n3iwf/logger"
-	"gofree5gc/src/n3iwf/n3iwf_service"
-	"gofree5gc/src/n3iwf/version"
+	"free5gc/src/app"
+	"free5gc/src/n3iwf/logger"
+	"free5gc/src/n3iwf/n3iwf_service"
+	"free5gc/src/n3iwf/version"
 	"os"
 
 	"github.com/sirupsen/logrus"

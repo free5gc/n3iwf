@@ -3,9 +3,9 @@ package n3iwf_util
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"gofree5gc/lib/aper"
-	"gofree5gc/lib/ngap/ngapType"
-	"gofree5gc/src/n3iwf/n3iwf_context"
+	"free5gc/lib/aper"
+	"free5gc/lib/ngap/ngapType"
+	"free5gc/src/n3iwf/n3iwf_context"
 	"strings"
 )
 

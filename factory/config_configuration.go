@@ -5,7 +5,7 @@
 package factory
 
 import (
-	"gofree5gc/src/n3iwf/n3iwf_context"
+	"free5gc/src/n3iwf/n3iwf_context"
 )
 
 type Configuration struct {

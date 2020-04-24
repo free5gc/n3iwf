@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"gofree5gc/src/n3iwf/logger"
+	"free5gc/src/n3iwf/logger"
 )
 
 var N3iwfConfig Config

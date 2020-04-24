@@ -9,16 +9,16 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
-	"gofree5gc/lib/path_util"
-	"gofree5gc/src/app"
-	"gofree5gc/src/n3iwf/factory"
-	"gofree5gc/src/n3iwf/logger"
-	"gofree5gc/src/n3iwf/n3iwf_data_relay"
-	"gofree5gc/src/n3iwf/n3iwf_handler"
-	"gofree5gc/src/n3iwf/n3iwf_ike/udp_server"
-	"gofree5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
-	"gofree5gc/src/n3iwf/n3iwf_util"
-	//"gofree5gc/src/n3iwf/n3iwf_context"
+	"free5gc/lib/path_util"
+	"free5gc/src/app"
+	"free5gc/src/n3iwf/factory"
+	"free5gc/src/n3iwf/logger"
+	"free5gc/src/n3iwf/n3iwf_data_relay"
+	"free5gc/src/n3iwf/n3iwf_handler"
+	"free5gc/src/n3iwf/n3iwf_ike/udp_server"
+	"free5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
+	"free5gc/src/n3iwf/n3iwf_util"
+	//"free5gc/src/n3iwf/n3iwf_context"
 )
 
 type N3IWF struct{}
@@ -62,7 +62,7 @@ func (*N3IWF) Initialize(c *cli.Context) {
 	if config.n3iwfcfg != "" {
 		factory.InitConfigFactory(path_util.Gofree5gcPath(config.n3iwfcfg))
 	} else {
-		DefaultSmfConfigPath := path_util.Gofree5gcPath("gofree5gc/config/n3iwfcfg.conf")
+		DefaultSmfConfigPath := path_util.Gofree5gcPath("free5gc/config/n3iwfcfg.conf")
 		factory.InitConfigFactory(DefaultSmfConfigPath)
 	}
 

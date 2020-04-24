@@ -1,11 +1,11 @@
 package n3iwf_ike
 
 import (
-	"gofree5gc/src/n3iwf/logger"
-	"gofree5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
-	"gofree5gc/src/n3iwf/n3iwf_ike/ike_handler"
-	"gofree5gc/src/n3iwf/n3iwf_ike/ike_message"
-	"gofree5gc/src/n3iwf/n3iwf_ike/udp_server"
+	"free5gc/src/n3iwf/logger"
+	"free5gc/src/n3iwf/n3iwf_handler/n3iwf_message"
+	"free5gc/src/n3iwf/n3iwf_ike/ike_handler"
+	"free5gc/src/n3iwf/n3iwf_ike/ike_message"
+	"free5gc/src/n3iwf/n3iwf_ike/udp_server"
 
 	"github.com/sirupsen/logrus"
 )

@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"gofree5gc/src/n3iwf/n3iwf_handler"
+	"free5gc/src/n3iwf/n3iwf_handler"
 )
 
 func TestServer(t *testing.T) {

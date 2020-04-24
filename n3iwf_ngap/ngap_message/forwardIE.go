@@ -1,8 +1,8 @@
 package ngap_message
 
 import (
-	"gofree5gc/lib/aper"
-	"gofree5gc/lib/ngap/ngapType"
+	"free5gc/lib/aper"
+	"free5gc/lib/ngap/ngapType"
 )
 
 func AppendPDUSessionResourceSetupListCxtRes(list *ngapType.PDUSessionResourceSetupListCxtRes, pduSessionID int64, transfer []byte) {
