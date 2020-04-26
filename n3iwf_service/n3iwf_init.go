@@ -60,7 +60,7 @@ func (*N3IWF) Initialize(c *cli.Context) {
 	}
 
 	if config.n3iwfcfg != "" {
-		factory.InitConfigFactory(path_util.Gofree5gcPath(config.n3iwfcfg))
+		factory.InitConfigFactory(config.n3iwfcfg)
 	} else {
 		DefaultSmfConfigPath := path_util.Gofree5gcPath("free5gc/config/n3iwfcfg.conf")
 		factory.InitConfigFactory(DefaultSmfConfigPath)
