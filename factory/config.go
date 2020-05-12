@@ -4,9 +4,19 @@
 
 package factory
 
-import (
-	"free5gc/src/n3iwf/n3iwf_context"
-)
+import "free5gc/src/n3iwf/n3iwf_context"
+
+type Config struct {
+	Info *Info `yaml:"info"`
+
+	Configuration *Configuration `yaml:"configuration"`
+}
+
+type Info struct {
+	Version string `yaml:"version,omitempty"`
+
+	Description string `yaml:"description,omitempty"`
+}
 
 type Configuration struct {
 	N3IWFInfo            n3iwf_context.N3IWFNFInfo `yaml:"N3IWFInformation"`
