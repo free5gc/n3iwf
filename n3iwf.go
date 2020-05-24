@@ -3,7 +3,7 @@ package main
 import (
 	"free5gc/src/app"
 	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/n3iwf_service"
+	"free5gc/src/n3iwf/service"
 	"free5gc/src/n3iwf/version"
 	"os"
 
@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-var N3IWF = &n3iwf_service.N3IWF{}
+var N3IWF = &service.N3IWF{}
 
 var appLog *logrus.Entry
 
