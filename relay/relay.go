@@ -37,13 +37,7 @@ func listenRawSocket(rawSocket *ipv4.RawConn) {
 			return
 		}
 
-		msg := n3iwf_message.HandlerMessage{
-			Event:     n3iwf_message.EventN1TunnelUPMessage,
-			UEInnerIP: ipHeader.Src.String(),
-			Value:     ipPayload[4:],
-		}
-
-		n3iwf_message.SendMessage(msg)
+		go ForwardUPTrafficFromN1(ipHeader.Src.String(), ipPayload[4:])
 	}
 
 }
@@ -77,8 +71,15 @@ func ListenN1UPTraffic() error {
 
 // ForwardUPTrafficFromN1 forward user plane packets from N1 to UPF,
 // with GTP header encapsulated
-func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
-	relayLog.Info("Forward N1 -> N3")
+func ForwardUPTrafficFromN1(ueInnerIP string, packet []byte) {
+	// Find UE information
+	self := n3iwf_context.N3IWFSelf()
+	ue, ok := self.AllocatedUEIPAddress[ueInnerIP]
+	if !ok {
+		relayLog.Error("UE context not found")
+		return
+	}
+
 	var pduSession *n3iwf_context.PDUSession
 
 	for _, pduSession = range ue.PduSessionList {
@@ -103,6 +104,7 @@ func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
 		}
 		return
 	} else {
+		relayLog.Trace("Forward N1 -> N3")
 		relayLog.Tracef("Wrote %d bytes", n)
 		return
 	}
@@ -156,13 +158,7 @@ func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 			return
 		}
 
-		msg := n3iwf_message.HandlerMessage{
-			Event: n3iwf_message.EventGTPMessage,
-			TEID:  teid,
-			Value: payload[:n],
-		}
-
-		n3iwf_message.SendMessage(msg)
+		go ForwardUPTrafficFromN3(teid, payload[:n])
 	}
 
 }
@@ -176,11 +172,19 @@ func ListenGTP(userPlaneConnection *gtpv1.UPlaneConn) error {
 
 // ForwardUPTrafficFromN3 forward user plane packets from N3 to UE,
 // with GRE header and new IP header encapsulated
-func ForwardUPTrafficFromN3(ue *n3iwf_context.N3IWFUe, packet []byte) {
+func ForwardUPTrafficFromN3(ueTEID uint32, packet []byte) {
 	// This is the IP header template for packets with GRE header encapsulated.
 	// The remaining mandatory fields are Dst and TotalLen, which specified
 	// the destination IP address and the packet total length.
-	relayLog.Info("Forward N1 <- N3")
+
+	// Find UE information
+	self := n3iwf_context.N3IWFSelf()
+	ue, ok := self.AllocatedUETEID[ueTEID]
+	if !ok {
+		relayLog.Error("UE context not found")
+		return
+	}
+
 	ipHeader := &ipv4.Header{
 		Version:  4,
 		Len:      20,
@@ -211,6 +215,7 @@ func ForwardUPTrafficFromN3(ue *n3iwf_context.N3IWFUe, packet []byte) {
 		relayLog.Errorf("Write to raw socket failed: %+v", err)
 		return
 	} else {
+		relayLog.Trace("Forward N1 <- N3")
 		relayLog.Tracef("Wrote %d bytes", packetTotalLength)
 	}
 }

@@ -39,22 +39,6 @@ func Handle() {
 					ngap_message.SendRANConfigurationUpdate(self.AMFPool[msg.SCTPAddr])
 				case n3iwf_message.EventN1UDPMessage:
 					ike.Dispatch(msg.UDPSendInfo, msg.Value.([]byte))
-				case n3iwf_message.EventN1TunnelUPMessage:
-					self := context.N3IWFSelf()
-					ue, ok := self.AllocatedUEIPAddress[msg.UEInnerIP]
-					if !ok {
-						handlerLog.Error("UE context not found")
-						continue
-					}
-					relay.ForwardUPTrafficFromN1(ue, msg.Value.([]byte))
-				case n3iwf_message.EventGTPMessage:
-					self := context.N3IWFSelf()
-					ue, ok := self.AllocatedUETEID[msg.TEID]
-					if !ok {
-						handlerLog.Error("UE context not found")
-						continue
-					}
-					relay.ForwardUPTrafficFromN3(ue, msg.Value.([]byte))
 				case n3iwf_message.EventN1TunnelCPMessage:
 					self := context.N3IWFSelf()
 					ue, ok := self.AllocatedUEIPAddress[msg.UEInnerIP]
