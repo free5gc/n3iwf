@@ -77,7 +77,7 @@ func listenAndServe(localAddr *net.UDPAddr, errChan chan<- error) {
 		forwardData := make([]byte, n)
 		copy(forwardData, data[:n])
 
-		ike.Dispatch(listener, localAddr, remoteAddr, forwardData)
+		go ike.Dispatch(listener, localAddr, remoteAddr, forwardData)
 
 	}
 }
