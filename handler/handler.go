@@ -7,7 +7,6 @@ import (
 
 	"free5gc/src/n3iwf/context"
 	n3iwf_message "free5gc/src/n3iwf/handler/message"
-	"free5gc/src/n3iwf/ike"
 	"free5gc/src/n3iwf/logger"
 	"free5gc/src/n3iwf/ngap"
 	"free5gc/src/n3iwf/ngap/handler"
@@ -37,8 +36,6 @@ func Handle() {
 					self := context.N3IWFSelf()
 					self.AMFReInitAvailableList[msg.SCTPAddr] = true
 					ngap_message.SendRANConfigurationUpdate(self.AMFPool[msg.SCTPAddr])
-				case n3iwf_message.EventN1UDPMessage:
-					ike.Dispatch(msg.UDPSendInfo, msg.Value.([]byte))
 				case n3iwf_message.EventN1TunnelCPMessage:
 					self := context.N3IWFSelf()
 					ue, ok := self.AllocatedUEIPAddress[msg.UEInnerIP]

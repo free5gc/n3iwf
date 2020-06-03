@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"free5gc/lib/ngap/ngapType"
-	n3iwf_message "free5gc/src/n3iwf/handler/message"
 	ike_message "free5gc/src/n3iwf/ike/message"
 	"net"
 
@@ -46,7 +45,7 @@ type N3IWFUe struct {
 	N3IWFChildSecurityAssociation *ChildSecurityAssociation
 
 	/* NAS IKE Connection */
-	UDPSendInfoGroup *n3iwf_message.UDPSendInfoGroup
+	IKEConnection *UDPSocketInfo
 	/* NAS TCP Connection */
 	TCPConnection net.Conn
 
@@ -172,6 +171,12 @@ type ChildSecurityAssociation struct {
 
 	// UE context
 	ThisUE *N3IWFUe
+}
+
+type UDPSocketInfo struct {
+	Conn      *net.UDPConn
+	N3IWFAddr *net.UDPAddr
+	UEAddr    *net.UDPAddr
 }
 
 func (ue *N3IWFUe) init() {

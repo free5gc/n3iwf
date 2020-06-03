@@ -10,7 +10,6 @@ import (
 	n3iwf_message "free5gc/src/n3iwf/handler/message"
 	"free5gc/src/n3iwf/ike/handler"
 	ike_message "free5gc/src/n3iwf/ike/message"
-	"free5gc/src/n3iwf/ike/udp_server"
 	"free5gc/src/n3iwf/logger"
 	ngap_message "free5gc/src/n3iwf/ngap/message"
 	"math/rand"
@@ -719,9 +718,8 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 	}
 
 	// Send IKE message to UE
-	handler.SendIKEMessageToUE(n3iwfUe.UDPSendInfoGroup, responseIKEMessage)
+	handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr, n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
 
-	n3iwfUe.UDPSendInfoGroup = nil
 	n3iwfUe.N3IWFIKESecurityAssociation.State++
 }
 
@@ -1186,7 +1184,7 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 
 	if nasPDU != nil {
 		// TODO: Send NAS PDU to UE
-		if n3iwfUe.UDPSendInfoGroup != nil {
+		if n3iwfUe.N3IWFChildSecurityAssociation == nil {
 			var identifier uint8
 			ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
 
@@ -1217,7 +1215,7 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 			}
 
 			// Send IKE message to UE
-			handler.SendIKEMessageToUE(n3iwfUe.UDPSendInfoGroup, responseIKEMessage)
+			handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr, n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
 		} else {
 			for i := 0; i < 3; i++ {
 				if n3iwfUe.TCPConnection == nil {
@@ -1527,26 +1525,7 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 					continue
 				}
 
-				ueUDPAddr, err := net.ResolveUDPAddr("udp", n3iwfUe.IPAddrv4+":500")
-				if err != nil {
-					ngapLog.Errorf("Resolve UE UDP address failed: %+v", err)
-					n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession = n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
-					cause := buildCause(ngapType.CausePresentTransport, ngapType.CauseTransportPresentTransportResourceUnavailable)
-					transfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-					if err != nil {
-						ngapLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
-						continue
-					}
-					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(n3iwfUe.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
-					continue
-				}
-
-				ueSendInfo := &n3iwf_message.UDPSendInfoGroup{
-					ChannelID: udp_server.ChannelIDForPort500,
-					Addr:      ueUDPAddr,
-				}
-
-				handler.SendIKEMessageToUE(ueSendInfo, ikeMessage)
+				handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr, n3iwfUe.IKEConnection.UEAddr, ikeMessage)
 				break
 			} else {
 				// Send PDU Session Resource Setup Response to AMF
