@@ -1217,22 +1217,27 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 			// Send IKE message to UE
 			handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr, n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
 		} else {
+			// Check ue.TCPConnection. If failed, retry 2 times.
 			for i := 0; i < 3; i++ {
 				if n3iwfUe.TCPConnection == nil {
-					ngapLog.Warnf("No NAS signalling session found, retry %d", i+1)
+					if i == 2 {
+						ngapLog.Warn("No connection found for UE to send NAS message.")
+						return
+					} else {
+						ngapLog.Warn("No NAS signalling session found, retry...")
+					}
 					time.Sleep(500 * time.Millisecond)
 				} else {
 					break
 				}
 			}
-			if n3iwfUe.TCPConnection != nil {
-				if n, err := n3iwfUe.TCPConnection.Write(nasPDU.Value); err != nil {
-					ngapLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
-				} else {
-					ngapLog.Infof("Wrote %d bytes", n)
-				}
+
+			// Send to UE
+			if n, err := n3iwfUe.TCPConnection.Write(nasPDU.Value); err != nil {
+				ngapLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
 			} else {
-				ngapLog.Error("No connection found for UE to send NAS message")
+				ngapLog.Trace("Forward N1 <- N2")
+				ngapLog.Tracef("Wrote %d bytes", n)
 			}
 		}
 	}

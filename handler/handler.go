@@ -11,7 +11,6 @@ import (
 	"free5gc/src/n3iwf/ngap"
 	"free5gc/src/n3iwf/ngap/handler"
 	ngap_message "free5gc/src/n3iwf/ngap/message"
-	"free5gc/src/n3iwf/relay"
 )
 
 var handlerLog *logrus.Entry
@@ -36,14 +35,6 @@ func Handle() {
 					self := context.N3IWFSelf()
 					self.AMFReInitAvailableList[msg.SCTPAddr] = true
 					ngap_message.SendRANConfigurationUpdate(self.AMFPool[msg.SCTPAddr])
-				case n3iwf_message.EventN1TunnelCPMessage:
-					self := context.N3IWFSelf()
-					ue, ok := self.AllocatedUEIPAddress[msg.UEInnerIP]
-					if !ok {
-						handlerLog.Error("UE context not found")
-						continue
-					}
-					relay.ForwardCPTrafficFromN1(ue, msg.Value.([]byte))
 				}
 			}
 		case <-time.After(1 * time.Second):

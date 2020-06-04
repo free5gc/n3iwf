@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	n3iwf_context "free5gc/src/n3iwf/context"
-	n3iwf_message "free5gc/src/n3iwf/handler/message"
 	"free5gc/src/n3iwf/logger"
 	ngap_message "free5gc/src/n3iwf/ngap/message"
 	"net"
@@ -234,9 +233,9 @@ func tcpConnectionHandler(connection net.Conn) {
 	}
 	ue.TCPConnection = connection
 
-	buffer := make([]byte, 65535)
+	data := make([]byte, 65535)
 	for {
-		readBytes, err := connection.Read(buffer)
+		n, err := connection.Read(data)
 		if err != nil {
 			if err.Error() == "EOF" {
 				relayLog.Warn("Connection close by peer")
@@ -247,15 +246,9 @@ func tcpConnectionHandler(connection net.Conn) {
 			}
 		}
 
-		relayLog.Tracef("Get NAS PDU from UE:\nNAS length: %d\nNAS content:\n%s", readBytes, hex.Dump(buffer[:readBytes]))
+		relayLog.Tracef("Get NAS PDU from UE:\nNAS length: %d\nNAS content:\n%s", n, hex.Dump(data[:n]))
 
-		msg := n3iwf_message.HandlerMessage{
-			Event:     n3iwf_message.EventN1TunnelCPMessage,
-			UEInnerIP: ueIP,
-			Value:     buffer[:readBytes],
-		}
-
-		n3iwf_message.SendMessage(msg)
+		go ForwardCPTrafficFromN1(ue, data[:n])
 	}
 }
 
@@ -290,22 +283,6 @@ func SetupNASTCPServer() error {
 }
 
 func ForwardCPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
-	relayLog.Info("Forward N1 -> N2")
+	relayLog.Trace("Forward N1 -> N2")
 	ngap_message.SendUplinkNASTransport(ue.AMF, ue, packet)
-}
-
-func ForwardCPTrafficFromN2(ue *n3iwf_context.N3IWFUe, nasPDU []byte) {
-	relayLog.Info("Forward N1 <- N2")
-	tcpConnection := ue.TCPConnection
-
-	if tcpConnection == nil {
-		relayLog.Error("This UE has no NAS TCP connection with N3IWF")
-		return
-	}
-
-	if n, err := tcpConnection.Write(nasPDU); err != nil {
-		relayLog.Errorf("Write to TCP connection failed: %+v", err)
-	} else {
-		relayLog.Tracef("Wrote %d bytes", n)
-	}
 }
