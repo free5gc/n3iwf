@@ -12,12 +12,11 @@ import (
 	"free5gc/lib/path_util"
 	"free5gc/src/app"
 	"free5gc/src/n3iwf/factory"
-	"free5gc/src/n3iwf/ike/udp_server"
+	ike_service "free5gc/src/n3iwf/ike/service"
 	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/ngap/service"
+	ngap_service "free5gc/src/n3iwf/ngap/service"
 	"free5gc/src/n3iwf/relay"
 	"free5gc/src/n3iwf/util"
-	//"free5gc/src/n3iwf/n3iwf_context"
 )
 
 type N3IWF struct{}
@@ -61,8 +60,8 @@ func (*N3IWF) Initialize(c *cli.Context) {
 	if config.n3iwfcfg != "" {
 		factory.InitConfigFactory(config.n3iwfcfg)
 	} else {
-		DefaultSmfConfigPath := path_util.Gofree5gcPath("free5gc/config/n3iwfcfg.conf")
-		factory.InitConfigFactory(DefaultSmfConfigPath)
+		DefaultN3iwfConfigPath := path_util.Gofree5gcPath("free5gc/config/n3iwfcfg.conf")
+		factory.InitConfigFactory(DefaultN3iwfConfigPath)
 	}
 
 	if app.ContextSelf().Logger.N3IWF.DebugLevel != "" {
@@ -107,7 +106,7 @@ func (n3iwf *N3IWF) Start() {
 	wg := sync.WaitGroup{}
 
 	// NGAP
-	if err := service.Run(); err != nil {
+	if err := ngap_service.Run(); err != nil {
 		initLog.Errorf("Start NGAP service failed: %+v", err)
 		return
 	} else {
@@ -133,7 +132,7 @@ func (n3iwf *N3IWF) Start() {
 	}
 
 	// IKE
-	if err := udp_server.Run(); err != nil {
+	if err := ike_service.Run(); err != nil {
 		initLog.Errorf("Start IKE service failed: %+v", err)
 		return
 	} else {

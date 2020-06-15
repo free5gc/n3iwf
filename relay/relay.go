@@ -23,24 +23,6 @@ func init() {
 	relayLog = logger.RelayLog
 }
 
-func listenRawSocket(rawSocket *ipv4.RawConn) {
-	defer rawSocket.Close()
-
-	buffer := make([]byte, 1500)
-
-	for {
-		ipHeader, ipPayload, _, err := rawSocket.ReadFrom(buffer)
-		relayLog.Tracef("Read %d bytes", len(ipPayload))
-		if err != nil {
-			relayLog.Errorf("Error read from raw socket: %+v", err)
-			return
-		}
-
-		go ForwardUPTrafficFromN1(ipHeader.Src.String(), ipPayload[4:])
-	}
-
-}
-
 // ListenN1UPTraffic bind and listen raw socket on N3IWF N1 interface
 // with UP_IP_ADDRESS, catching GRE encapsulated packets and send it
 // to N3IWF handler
@@ -66,6 +48,24 @@ func ListenN1UPTraffic() error {
 	go listenRawSocket(rawSocket)
 
 	return nil
+}
+
+func listenRawSocket(rawSocket *ipv4.RawConn) {
+	defer rawSocket.Close()
+
+	buffer := make([]byte, 1500)
+
+	for {
+		ipHeader, ipPayload, _, err := rawSocket.ReadFrom(buffer)
+		relayLog.Tracef("Read %d bytes", len(ipPayload))
+		if err != nil {
+			relayLog.Errorf("Error read from raw socket: %+v", err)
+			return
+		}
+
+		go ForwardUPTrafficFromN1(ipHeader.Src.String(), ipPayload[4:])
+	}
+
 }
 
 // ForwardUPTrafficFromN1 forward user plane packets from N1 to UPF,
@@ -144,6 +144,13 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtpv1.UPlaneConn, net.Addr, error
 
 }
 
+// ListenGTP binds and listens raw socket on N3IWF N3 interface,
+// catching GTP packets and send it to N3IWF handler
+func ListenGTP(userPlaneConnection *gtpv1.UPlaneConn) error {
+	go listenGTP(userPlaneConnection)
+	return nil
+}
+
 func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 	defer userPlaneConnection.Close()
 
@@ -160,13 +167,6 @@ func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 		go ForwardUPTrafficFromN3(teid, payload[:n])
 	}
 
-}
-
-// ListenGTP binds and listens raw socket on N3IWF N3 interface,
-// catching GTP packets and send it to N3IWF handler
-func ListenGTP(userPlaneConnection *gtpv1.UPlaneConn) error {
-	go listenGTP(userPlaneConnection)
-	return nil
 }
 
 // ForwardUPTrafficFromN3 forward user plane packets from N3 to UE,
@@ -219,6 +219,36 @@ func ForwardUPTrafficFromN3(ueTEID uint32, packet []byte) {
 	}
 }
 
+func SetupNASTCPServer() error {
+	// N3IWF context
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	tcpAddr := fmt.Sprintf("%s:%d", n3iwfSelf.IPSecGatewayAddress, n3iwfSelf.TCPPort)
+
+	tcpListener, err := net.Listen("tcp", tcpAddr)
+	if err != nil {
+		relayLog.Errorf("Listen TCP address failed: %+v", err)
+		return errors.New("Listen failed")
+	}
+
+	go tcpServerListen(tcpListener)
+
+	return nil
+}
+
+func tcpServerListen(tcpListener net.Listener) {
+	defer tcpListener.Close()
+
+	for {
+		connection, err := tcpListener.Accept()
+		if err != nil {
+			relayLog.Error("TCP server accept failed. Close the listener...")
+			return
+		}
+
+		go tcpConnectionHandler(connection)
+	}
+}
+
 func tcpConnectionHandler(connection net.Conn) {
 	defer connection.Close()
 
@@ -250,36 +280,6 @@ func tcpConnectionHandler(connection net.Conn) {
 
 		go ForwardCPTrafficFromN1(ue, data[:n])
 	}
-}
-
-func tcpServerListen(tcpListener net.Listener) {
-	defer tcpListener.Close()
-
-	for {
-		connection, err := tcpListener.Accept()
-		if err != nil {
-			relayLog.Error("TCP server accept failed. Close the listener...")
-			return
-		}
-
-		go tcpConnectionHandler(connection)
-	}
-}
-
-func SetupNASTCPServer() error {
-	// N3IWF context
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	tcpAddr := fmt.Sprintf("%s:%d", n3iwfSelf.IPSecGatewayAddress, n3iwfSelf.TCPPort)
-
-	tcpListener, err := net.Listen("tcp", tcpAddr)
-	if err != nil {
-		relayLog.Errorf("Listen TCP address failed: %+v", err)
-		return errors.New("Listen failed")
-	}
-
-	go tcpServerListen(tcpListener)
-
-	return nil
 }
 
 func ForwardCPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
