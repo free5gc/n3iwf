@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 
+	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 
 	"free5gc/lib/path_util"
@@ -32,10 +33,38 @@ func InitN3IWFContext() bool {
 	}
 
 	n3iwfContext := context.N3IWFSelf()
-	n3iwfContext.NFInfo = factory.N3iwfConfig.Configuration.N3IWFInfo
 
+	// N3IWF NF information
+	n3iwfContext.NFInfo = factory.N3iwfConfig.Configuration.N3IWFInfo
 	if ok = formatSupportedTAList(&n3iwfContext.NFInfo); !ok {
 		return false
+	}
+
+	// AMF SCTP addresses
+	if len(factory.N3iwfConfig.Configuration.AMFSCTPAddresses) == 0 {
+		contextLog.Error("No AMF specified")
+		return false
+	} else {
+		for _, amfAddress := range factory.N3iwfConfig.Configuration.AMFSCTPAddresses {
+			amfSCTPAddr := new(sctp.SCTPAddr)
+			// IP addresses
+			for _, ipAddrStr := range amfAddress.IPAddresses {
+				if ipAddr, err := net.ResolveIPAddr("ip", ipAddrStr); err != nil {
+					contextLog.Errorf("Resolve AMF IP address failed: %+v", err)
+					return false
+				} else {
+					amfSCTPAddr.IPAddrs = append(amfSCTPAddr.IPAddrs, *ipAddr)
+				}
+			}
+			// Port
+			if amfAddress.Port == 0 {
+				amfSCTPAddr.Port = 38412
+			} else {
+				amfSCTPAddr.Port = amfAddress.Port
+			}
+			// Append to context
+			n3iwfContext.AMFSCTPAddresses = append(n3iwfContext.AMFSCTPAddresses, amfSCTPAddr)
+		}
 	}
 
 	// IKE bind address

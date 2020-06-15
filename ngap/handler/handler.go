@@ -5,9 +5,7 @@ import (
 	"free5gc/lib/aper"
 	"free5gc/lib/ngap/ngapConvert"
 	"free5gc/lib/ngap/ngapType"
-	"free5gc/lib/timer"
 	"free5gc/src/n3iwf/context"
-	n3iwf_message "free5gc/src/n3iwf/handler/message"
 	"free5gc/src/n3iwf/ike/handler"
 	ike_message "free5gc/src/n3iwf/ike/message"
 	"free5gc/src/n3iwf/logger"
@@ -16,6 +14,7 @@ import (
 	"net"
 	"time"
 
+	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,12 +24,7 @@ func init() {
 	ngapLog = logger.NgapLog
 }
 
-func HandleEventSCTPConnect(sctpAddr string) {
-	ngapLog.Infoln("[N3IWF] Handle SCTP connect event")
-	ngap_message.SendNGSetupRequest(sctpAddr)
-}
-
-func HandleNGSetupResponse(sctpAddr string, message *ngapType.NGAPPDU) {
+func HandleNGSetupResponse(sctpAddr string, conn *sctp.SCTPConn, message *ngapType.NGAPPDU) {
 	ngapLog.Infoln("[N3IWF] Handle NG Setup Response")
 
 	var amfName *ngapType.AMFName
@@ -106,12 +100,12 @@ func HandleNGSetupResponse(sctpAddr string, message *ngapType.NGAPPDU) {
 
 		criticalityDiagnostics := buildCriticalityDiagnostics(&procedureCode, &triggeringMessage, &procedureCriticality, &iesCriticalityDiagnostics)
 
-		ngap_message.SendErrorIndicationWithSctpAddr(sctpAddr, nil, nil, cause, &criticalityDiagnostics)
+		ngap_message.SendErrorIndicationWithSctpConn(conn, nil, nil, cause, &criticalityDiagnostics)
 
 		return
 	}
 
-	amfInfo := n3iwfSelf.NewN3iwfAmf(sctpAddr)
+	amfInfo := n3iwfSelf.NewN3iwfAmf(sctpAddr, conn)
 
 	if amfName != nil {
 		amfInfo.AMFName = amfName
@@ -135,7 +129,7 @@ func HandleNGSetupResponse(sctpAddr string, message *ngapType.NGAPPDU) {
 
 }
 
-func HandleNGSetupFailure(sctpAddr string, message *ngapType.NGAPPDU) {
+func HandleNGSetupFailure(sctpAddr string, conn *sctp.SCTPConn, message *ngapType.NGAPPDU) {
 	ngapLog.Infoln("[N3IWF] Handle NG Setup Failure")
 
 	var cause *ngapType.Cause
@@ -191,7 +185,7 @@ func HandleNGSetupFailure(sctpAddr string, message *ngapType.NGAPPDU) {
 
 		criticalityDiagnostics := buildCriticalityDiagnostics(&procedureCode, &triggeringMessage, &procedureCriticality, &iesCriticalityDiagnostics)
 
-		ngap_message.SendErrorIndicationWithSctpAddr(sctpAddr, nil, nil, cause, &criticalityDiagnostics)
+		ngap_message.SendErrorIndicationWithSctpConn(conn, nil, nil, cause, &criticalityDiagnostics)
 
 		return
 	}
@@ -228,20 +222,12 @@ func HandleNGSetupFailure(sctpAddr string, message *ngapType.NGAPPDU) {
 	if waitingTime != 0 {
 		ngapLog.Infof("Wait at lease  %ds to reinitialize with same AMF[%s]", waitingTime, sctpAddr)
 		context.N3IWFSelf().AMFReInitAvailableList[sctpAddr] = false
-		msg := n3iwf_message.HandlerMessage{
-			Event:    n3iwf_message.EventSCTPConnectMessage,
-			SCTPAddr: sctpAddr,
-		}
-		timer.StartTimer(waitingTime, func(msg interface{}) {
-			handlerMessage := msg.(n3iwf_message.HandlerMessage)
-			context.N3IWFSelf().AMFReInitAvailableList[handlerMessage.SCTPAddr] = true
-			n3iwf_message.SendMessage(handlerMessage)
-		}, msg)
+		time.AfterFunc(time.Duration(waitingTime)*time.Second, func() {
+			context.N3IWFSelf().AMFReInitAvailableList[sctpAddr] = true
+			ngap_message.SendNGSetupRequest(conn)
+		})
 		return
 	}
-
-	// TODO: Limited retry mechanism
-	ngap_message.SendNGSetupRequest(sctpAddr)
 }
 
 func HandleNGReset(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
@@ -2439,13 +2425,11 @@ func HandleRANConfigurationUpdateFailure(amf *context.N3IWFAMF, message *ngapTyp
 	if waitingTime != 0 {
 		ngapLog.Infof("Wait at lease  %ds to resend RAN Configuration Update to same AMF[%s]", waitingTime, amf.SCTPAddr)
 		context.N3IWFSelf().AMFReInitAvailableList[amf.SCTPAddr] = false
-		handlerMessage := n3iwf_message.HandlerMessage{
-			Event:    n3iwf_message.EventTimerSendRanConfigUpdateMessage,
-			SCTPAddr: amf.SCTPAddr,
-		}
-		timer.StartTimer(waitingTime, func(msg interface{}) {
-			n3iwf_message.SendMessage(msg.(n3iwf_message.HandlerMessage))
-		}, handlerMessage)
+		time.AfterFunc(time.Duration(waitingTime)*time.Second, func() {
+			ngapLog.Infof("Re-send Ran Configuration Update Message when waiting time expired")
+			context.N3IWFSelf().AMFReInitAvailableList[amf.SCTPAddr] = true
+			ngap_message.SendRANConfigurationUpdate(amf)
+		})
 		return
 	}
 	ngap_message.SendRANConfigurationUpdate(amf)

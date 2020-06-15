@@ -12,10 +12,9 @@ import (
 	"free5gc/lib/path_util"
 	"free5gc/src/app"
 	"free5gc/src/n3iwf/factory"
-	"free5gc/src/n3iwf/handler"
 	"free5gc/src/n3iwf/ike/udp_server"
 	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/ngap/sctp"
+	"free5gc/src/n3iwf/ngap/service"
 	"free5gc/src/n3iwf/relay"
 	"free5gc/src/n3iwf/util"
 	//"free5gc/src/n3iwf/n3iwf_context"
@@ -107,12 +106,14 @@ func (n3iwf *N3IWF) Start() {
 
 	wg := sync.WaitGroup{}
 
-	// N3IWF handler
-	go handler.Handle()
-	wg.Add(1)
-
 	// NGAP
-	sctp.InitiateSCTP(&wg)
+	if err := service.Run(); err != nil {
+		initLog.Errorf("Start NGAP service failed: %+v", err)
+		return
+	} else {
+		initLog.Info("NGAP service running.")
+		wg.Add(1)
+	}
 
 	// Relay listeners
 	// Control plane
@@ -120,6 +121,7 @@ func (n3iwf *N3IWF) Start() {
 		initLog.Errorf("Listen N1 control plane traffic failed: %+v", err)
 	} else {
 		initLog.Info("NAS TCP server successfully started.")
+		wg.Add(1)
 	}
 	// User plane
 	if err := relay.ListenN1UPTraffic(); err != nil {
@@ -127,12 +129,17 @@ func (n3iwf *N3IWF) Start() {
 		return
 	} else {
 		initLog.Info("Listening N1 user plane traffic")
+		wg.Add(1)
 	}
-	wg.Add(2)
 
 	// IKE
-	udp_server.Run()
-	wg.Add(1)
+	if err := udp_server.Run(); err != nil {
+		initLog.Errorf("Start IKE service failed: %+v", err)
+		return
+	} else {
+		initLog.Info("IKE service running.")
+		wg.Add(1)
+	}
 
 	initLog.Info("N3IWF running...")
 

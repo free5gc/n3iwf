@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net"
 
+	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
 	"golang.org/x/net/ipv4"
@@ -23,7 +24,10 @@ var ranUeNgapIdGenerator int64 = 0
 var teidGenerator uint32 = 1
 
 type N3IWFContext struct {
-	NFInfo                 N3IWFNFInfo
+	NFInfo           N3IWFNFInfo
+	AMFSCTPAddresses []*sctp.SCTPAddr
+
+	// Pools
 	UePool                 map[int64]*N3IWFUe                   // RanUeNgapID as key
 	AMFPool                map[string]*N3IWFAMF                 // SCTPAddr as key
 	AMFReInitAvailableList map[string]bool                      // SCTPAddr as key
@@ -36,7 +40,7 @@ type N3IWFContext struct {
 	// N3IWF FQDN
 	FQDN string
 
-	// security data
+	// Security data
 	CertificateAuthority []byte
 	N3IWFCertificate     []byte
 	N3IWFPrivateKey      *rsa.PrivateKey
@@ -97,13 +101,14 @@ func (context *N3IWFContext) NewN3iwfUe() *N3IWFUe {
 	return n3iwfUe
 }
 
-func (context *N3IWFContext) NewN3iwfAmf(sctpAddr string) *N3IWFAMF {
+func (context *N3IWFContext) NewN3iwfAmf(sctpAddr string, conn *sctp.SCTPConn) *N3IWFAMF {
 	if amf, ok := context.AMFPool[sctpAddr]; ok {
 		contextLog.Warn("[Context] NewN3iwfAmf(): AMF entry already exists.")
 		return amf
 	} else {
 		amf = &N3IWFAMF{
 			SCTPAddr:              sctpAddr,
+			SCTPConn:              conn,
 			N3iwfUeList:           make(map[int64]*N3IWFUe),
 			AMFTNLAssociationList: make(map[string]*AMFTNLAssociationItem),
 		}

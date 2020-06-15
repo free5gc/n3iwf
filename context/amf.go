@@ -5,10 +5,13 @@ import (
 	"free5gc/lib/aper"
 	"free5gc/lib/ngap/ngapConvert"
 	"free5gc/lib/ngap/ngapType"
+
+	"git.cs.nctu.edu.tw/calee/sctp"
 )
 
 type N3IWFAMF struct {
 	SCTPAddr              string
+	SCTPConn              *sctp.SCTPConn
 	AMFName               *ngapType.AMFName
 	ServedGUAMIList       *ngapType.ServedGUAMIList
 	RelativeAMFCapacity   *ngapType.RelativeAMFCapacity

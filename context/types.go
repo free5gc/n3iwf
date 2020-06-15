@@ -34,3 +34,8 @@ type SNSSAIItem struct {
 	SST string `yaml:"SST"`
 	SD  string `yaml:"SD,omitempty"`
 }
+
+type AMFSCTPAddresses struct {
+	IPAddresses []string `yaml:"IP"`
+	Port        int      `yaml:"Port,omitempty"`
+}

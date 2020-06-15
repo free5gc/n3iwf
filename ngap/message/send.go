@@ -1,12 +1,12 @@
 package message
 
 import (
+	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 
 	"free5gc/lib/ngap/ngapType"
 	"free5gc/src/n3iwf/context"
 	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/ngap/sctp"
 )
 
 var ngaplog *logrus.Entry
@@ -15,17 +15,22 @@ func init() {
 	ngaplog = logger.NgapLog
 }
 
-func SendToAmf(amf *context.N3IWFAMF, packet []byte) {
+func SendToAmf(amf *context.N3IWFAMF, pkt []byte) {
 	if amf == nil {
 		ngaplog.Errorf("[N3IWF] AMF Context is nil ")
 	}
-	if ok := sctp.Send(amf.SCTPAddr, packet); !ok {
-		// TODO: Feature: retry sending
+	if n, err := amf.SCTPConn.Write(pkt); err != nil {
+		ngaplog.Errorf("Write to SCTP socket failed: %+v", err)
+	} else {
+		ngaplog.Tracef("Wrote %d bytes", n)
 	}
 }
 
-func SendNGSetupRequest(sctpAddr string) {
+func SendNGSetupRequest(conn *sctp.SCTPConn) {
 	ngaplog.Infoln("[N3IWF] Send NG Setup Request")
+
+	sctpAddr := conn.RemoteAddr().String()
+
 	if !context.N3IWFSelf().CheckAMFReInit(sctpAddr) {
 		ngaplog.Warnf("[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]", sctpAddr)
 		return
@@ -36,8 +41,10 @@ func SendNGSetupRequest(sctpAddr string) {
 		return
 	}
 
-	if ok := sctp.Send(sctpAddr, pkt); !ok {
-		// TODO: Feature: retry sending
+	if n, err := conn.Write(pkt); err != nil {
+		ngaplog.Errorf("Write to SCTP socket failed: %+v", err)
+	} else {
+		ngaplog.Tracef("Wrote %d bytes", n)
 	}
 }
 
@@ -398,8 +405,8 @@ func SendErrorIndication(
 	SendToAmf(amf, pkt)
 }
 
-func SendErrorIndicationWithSctpAddr(
-	sctpAddr string,
+func SendErrorIndicationWithSctpConn(
+	sctpConn *sctp.SCTPConn,
 	amfUENGAPID *int64,
 	ranUENGAPID *int64,
 	cause *ngapType.Cause,
@@ -418,8 +425,10 @@ func SendErrorIndicationWithSctpAddr(
 		return
 	}
 
-	if ok := sctp.Send(sctpAddr, pkt); !ok {
-		// TODO: Feature: retry sending
+	if n, err := sctpConn.Write(pkt); err != nil {
+		ngaplog.Errorf("Write to SCTP socket failed: %+v", err)
+	} else {
+		ngaplog.Tracef("Wrote %d bytes", n)
 	}
 }
 
