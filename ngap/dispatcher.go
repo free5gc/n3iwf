@@ -21,7 +21,7 @@ func Dispatch(conn *sctp.SCTPConn, msg []byte) {
 	// AMF SCTP address
 	sctpAddr := conn.RemoteAddr().String()
 	// AMF context
-	amf := context.N3IWFSelf().AMFPool[sctpAddr]
+	amf, _ := context.N3IWFSelf().AMFPoolLoad(sctpAddr)
 	// Decode
 	pdu, err := ngap.Decoder(msg)
 	if err != nil {

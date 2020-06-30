@@ -135,7 +135,10 @@ func HandleNGSetupFailure(sctpAddr string, conn *sctp.SCTPConn, message *ngapTyp
 	var cause *ngapType.Cause
 	var timeToWait *ngapType.TimeToWait
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
+
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
+
+	n3iwfSelf := context.N3IWFSelf()
 
 	if message == nil {
 		ngapLog.Error("NGAP Message is nil")
@@ -221,9 +224,9 @@ func HandleNGSetupFailure(sctpAddr string, conn *sctp.SCTPConn, message *ngapTyp
 
 	if waitingTime != 0 {
 		ngapLog.Infof("Wait at lease  %ds to reinitialize with same AMF[%s]", waitingTime, sctpAddr)
-		context.N3IWFSelf().AMFReInitAvailableList[sctpAddr] = false
+		n3iwfSelf.AMFReInitAvailableListStore(sctpAddr, false)
 		time.AfterFunc(time.Duration(waitingTime)*time.Second, func() {
-			context.N3IWFSelf().AMFReInitAvailableList[sctpAddr] = true
+			n3iwfSelf.AMFReInitAvailableListStore(sctpAddr, true)
 			ngap_message.SendNGSetupRequest(conn)
 		})
 		return
@@ -238,6 +241,8 @@ func HandleNGReset(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
 	var resetType *ngapType.ResetType
 
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
+
+	n3iwfSelf := context.N3IWFSelf()
 
 	if amf == nil {
 		ngapLog.Error("AMF Context is nil")
@@ -309,7 +314,7 @@ func HandleNGReset(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
 		for _, ueAssociatedLogicalNGConnectionItem := range partOfNGInterface.List {
 			if ueAssociatedLogicalNGConnectionItem.RANUENGAPID != nil {
 				ngapLog.Tracef("RanUeNgapID[%d]", ueAssociatedLogicalNGConnectionItem.RANUENGAPID.Value)
-				ue = context.N3IWFSelf().FindUeByRanUeNgapID(ueAssociatedLogicalNGConnectionItem.RANUENGAPID.Value)
+				ue, _ = n3iwfSelf.UePoolLoad(ueAssociatedLogicalNGConnectionItem.RANUENGAPID.Value)
 			} else if ueAssociatedLogicalNGConnectionItem.AMFUENGAPID != nil {
 				ngapLog.Tracef("AmfUeNgapID[%d]", ueAssociatedLogicalNGConnectionItem.AMFUENGAPID.Value)
 				ue = amf.FindUeByAmfUeNgapID(ueAssociatedLogicalNGConnectionItem.AMFUENGAPID.Value)
@@ -546,8 +551,9 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 
 	if (amfUeNgapID != nil) && (ranUeNgapID != nil) {
 		// Find UE context
-		n3iwfUe = n3iwfSelf.FindUeByRanUeNgapID(ranUeNgapID.Value)
-		if n3iwfUe == nil {
+		var ok bool
+		n3iwfUe, ok = n3iwfSelf.UePoolLoad(ranUeNgapID.Value)
+		if !ok {
 			ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", ranUeNgapID.Value)
 			// TODO: build cause and handle error
 			// Cause: Unknown local UE NGAP ID
@@ -925,8 +931,9 @@ func HandleUEContextModificationRequest(amf *context.N3IWFAMF, message *ngapType
 
 	if (amfUeNgapID != nil) && (ranUeNgapID != nil) {
 		// Find UE context
-		n3iwfUe = n3iwfSelf.FindUeByRanUeNgapID(ranUeNgapID.Value)
-		if n3iwfUe == nil {
+		var ok bool
+		n3iwfUe, ok = n3iwfSelf.UePoolLoad(ranUeNgapID.Value)
+		if !ok {
 			ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", ranUeNgapID.Value)
 			// TODO: build cause and handle error
 			// Cause: Unknown local UE NGAP ID
@@ -1022,8 +1029,9 @@ func HandleUEContextReleaseCommand(amf *context.N3IWFAMF, message *ngapType.NGAP
 
 	switch ueNgapIDs.Present {
 	case ngapType.UENGAPIDsPresentUENGAPIDPair:
-		n3iwfUe = n3iwfSelf.FindUeByRanUeNgapID(ueNgapIDs.UENGAPIDPair.RANUENGAPID.Value)
-		if n3iwfUe == nil {
+		var ok bool
+		n3iwfUe, ok = n3iwfSelf.UePoolLoad(ueNgapIDs.UENGAPIDPair.RANUENGAPID.Value)
+		if !ok {
 			n3iwfUe = amf.FindUeByAmfUeNgapID(ueNgapIDs.UENGAPIDPair.AMFUENGAPID.Value)
 		}
 	case ngapType.UENGAPIDsPresentAMFUENGAPID:
@@ -1132,8 +1140,9 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 	}
 
 	if ranUeNgapID != nil {
-		n3iwfUe = n3iwfSelf.FindUeByRanUeNgapID(ranUeNgapID.Value)
-		if n3iwfUe == nil {
+		var ok bool
+		n3iwfUe, ok = n3iwfSelf.UePoolLoad(ranUeNgapID.Value)
+		if !ok {
 			ngapLog.Warnf("No UE Context[RanUeNgapID:%d]\n", ranUeNgapID.Value)
 			return
 		}
@@ -1303,8 +1312,9 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 
 	if (amfUeNgapID != nil) && (ranUeNgapID != nil) {
 		// Find UE context
-		n3iwfUe = n3iwfSelf.FindUeByRanUeNgapID(ranUeNgapID.Value)
-		if n3iwfUe == nil {
+		var ok bool
+		n3iwfUe, ok = n3iwfSelf.UePoolLoad(ranUeNgapID.Value)
+		if !ok {
 			ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", ranUeNgapID.Value)
 			// TODO: build cause and handle error
 			// Cause: Unknown local UE NGAP ID
@@ -1405,7 +1415,7 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 				spiByte := make([]byte, 4)
 				for {
 					randomUint64 := handler.GenerateRandomNumber().Uint64()
-					if _, ok := n3iwfSelf.ChildSA[uint32(randomUint64)]; !ok {
+					if _, ok := n3iwfSelf.ChildSA.Load(uint32(randomUint64)); !ok {
 						spi = uint32(randomUint64)
 						break
 					}
@@ -1598,8 +1608,9 @@ func HandlePDUSessionResourceModifyRequest(amf *context.N3IWFAMF, message *ngapT
 
 	if (amfUeNgapID != nil) && (ranUeNgapID != nil) {
 		// Find UE context
-		n3iwfUe = n3iwfSelf.FindUeByRanUeNgapID(ranUeNgapID.Value)
-		if n3iwfUe == nil {
+		var ok bool
+		n3iwfUe, ok = n3iwfSelf.UePoolLoad(ranUeNgapID.Value)
+		if !ok {
 			ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", ranUeNgapID.Value)
 			// TODO: build cause and send error indication
 			// Cause: Unknown local UE NGAP ID
@@ -1853,8 +1864,9 @@ func HandlePDUSessionResourceModifyConfirm(amf *context.N3IWFAMF, message *ngapT
 	var n3iwfSelf = context.N3IWFSelf()
 
 	if rANUENGAPID != nil {
-		ue = n3iwfSelf.FindUeByRanUeNgapID(rANUENGAPID.Value)
-		if ue == nil {
+		var ok bool
+		ue, ok = n3iwfSelf.UePoolLoad(rANUENGAPID.Value)
+		if !ok {
 			ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", rANUENGAPID.Value)
 			return
 		}
@@ -1996,8 +2008,8 @@ func HandlePDUSessionResourceReleaseCommand(amf *context.N3IWFAMF, message *ngap
 	}
 
 	n3iwfSelf := context.N3IWFSelf()
-	ue := n3iwfSelf.FindUeByRanUeNgapID(rANUENGAPID.Value)
-	if ue == nil {
+	ue, ok := n3iwfSelf.UePoolLoad(rANUENGAPID.Value)
+	if !ok {
 		ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", rANUENGAPID.Value)
 		cause := buildCause(ngapType.CausePresentRadioNetwork, ngapType.CauseRadioNetworkPresentUnknownLocalUENGAPID)
 		ngap_message.SendErrorIndication(amf, nil, nil, cause, nil)
@@ -2178,8 +2190,8 @@ func HandleUERadioCapabilityCheckRequest(amf *context.N3IWFAMF, message *ngapTyp
 	}
 
 	n3iwfSelf := context.N3IWFSelf()
-	ue := n3iwfSelf.FindUeByRanUeNgapID(rANUENGAPID.Value)
-	if ue == nil {
+	ue, ok := n3iwfSelf.UePoolLoad(rANUENGAPID.Value)
+	if !ok {
 		ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", rANUENGAPID.Value)
 		cause := buildCause(ngapType.CausePresentRadioNetwork, ngapType.CauseRadioNetworkPresentUnknownLocalUENGAPID)
 		ngap_message.SendErrorIndication(amf, nil, nil, cause, nil)
@@ -2359,6 +2371,8 @@ func HandleRANConfigurationUpdateFailure(amf *context.N3IWFAMF, message *ngapTyp
 	var timeToWait *ngapType.TimeToWait
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
 
+	n3iwfSelf := context.N3IWFSelf()
+
 	if amf == nil {
 		ngapLog.Error("AMF Context is nil")
 		return
@@ -2424,10 +2438,10 @@ func HandleRANConfigurationUpdateFailure(amf *context.N3IWFAMF, message *ngapTyp
 
 	if waitingTime != 0 {
 		ngapLog.Infof("Wait at lease  %ds to resend RAN Configuration Update to same AMF[%s]", waitingTime, amf.SCTPAddr)
-		context.N3IWFSelf().AMFReInitAvailableList[amf.SCTPAddr] = false
+		n3iwfSelf.AMFReInitAvailableListStore(amf.SCTPAddr, false)
 		time.AfterFunc(time.Duration(waitingTime)*time.Second, func() {
 			ngapLog.Infof("Re-send Ran Configuration Update Message when waiting time expired")
-			context.N3IWFSelf().AMFReInitAvailableList[amf.SCTPAddr] = true
+			n3iwfSelf.AMFReInitAvailableListStore(amf.SCTPAddr, true)
 			ngap_message.SendRANConfigurationUpdate(amf)
 		})
 		return

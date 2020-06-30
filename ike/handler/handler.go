@@ -322,8 +322,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 	// Find corresponding IKE security association
 	localSPI := message.ResponderSPI
-	ikeSecurityAssociation := n3iwfSelf.FindIKESecurityAssociationBySPI(localSPI)
-	if ikeSecurityAssociation == nil {
+	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(localSPI)
+	if !ok {
 		ikeLog.Warn("[IKE] Unrecognized SPI")
 		// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
 
@@ -463,7 +463,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 				// check SPI
 				spi := binary.BigEndian.Uint32(proposal.SPI)
-				if _, ok := n3iwfSelf.ChildSA[spi]; ok {
+				if _, ok := n3iwfSelf.ChildSA.Load(spi); ok {
 					continue
 				}
 
@@ -879,24 +879,11 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		// Prepare configuration payload and traffic selector payload for initiator and responder
 		if addrRequest {
 			var attributes []*ike_message.IndividualConfigurationAttribute
-			var ueIPAddr net.IP
 
+			// IP addresses (IPSec)
+			ueIPAddr := n3iwfSelf.NewInternalUEIPAddr(thisUE)
 			n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
 
-			// UE internal IP address
-			for {
-				ueIPAddr = GenerateRandomIPinRange(n3iwfSelf.Subnet)
-				if ueIPAddr != nil {
-					if ueIPAddr.String() == n3iwfSelf.IPSecGatewayAddress {
-						continue
-					}
-					if _, ok := n3iwfSelf.AllocatedUEIPAddress[ueIPAddr.String()]; !ok {
-						// Should be release if there is any error occur
-						n3iwfSelf.AllocatedUEIPAddress[ueIPAddr.String()] = thisUE
-						break
-					}
-				}
-			}
 			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_ADDRESS, ueIPAddr))
 			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_NETMASK, n3iwfSelf.Subnet.Mask))
 
@@ -1032,7 +1019,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					spiByte := make([]byte, 4)
 					for {
 						randomUint64 := GenerateRandomNumber().Uint64()
-						if _, ok := n3iwfSelf.ChildSA[uint32(randomUint64)]; !ok {
+						if _, ok := n3iwfSelf.ChildSA.Load(uint32(randomUint64)); !ok {
 							spi = uint32(randomUint64)
 							break
 						}
@@ -1213,8 +1200,8 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 
 	// Find corresponding IKE security association
 	localSPI := message.InitiatorSPI
-	ikeSecurityAssociation := n3iwfSelf.FindIKESecurityAssociationBySPI(localSPI)
-	if ikeSecurityAssociation == nil {
+	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(localSPI)
+	if !ok {
 		ikeLog.Warn("[IKE] Unrecognized SPI")
 		// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
 
@@ -1341,7 +1328,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 
 	// Setup GTP tunnel for UE
 	ueAssociatedGTPConnection := pduSession.GTPConnection
-	if userPlaneConnection, ok := n3iwfSelf.GTPConnectionWithUPF[ueAssociatedGTPConnection.UPFIPAddr]; ok {
+	if userPlaneConnection, ok := n3iwfSelf.GTPConnectionWithUPFLoad(ueAssociatedGTPConnection.UPFIPAddr); ok {
 		// UPF UDP address
 		upfUDPAddr, err := net.ResolveUDPAddr("udp", ueAssociatedGTPConnection.UPFIPAddr+":2152")
 		if err != nil {
@@ -1351,6 +1338,10 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 
 		// UE TEID
 		ueTEID := n3iwfSelf.NewTEID(thisUE)
+		if ueTEID == 0 {
+			ikeLog.Error("Invalid TEID (0).")
+			return
+		}
 
 		// Set UE associated GTP connection
 		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
@@ -1379,6 +1370,10 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 
 		// UE TEID
 		ueTEID := n3iwfSelf.NewTEID(thisUE)
+		if ueTEID == 0 {
+			ikeLog.Error("Invalid TEID (0).")
+			return
+		}
 
 		// Setup GTP connection with UPF
 		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
@@ -1386,7 +1381,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		ueAssociatedGTPConnection.UserPlaneConnection = userPlaneConnection
 
 		// Store GTP connection with UPF into N3IWF context
-		n3iwfSelf.GTPConnectionWithUPF[ueAssociatedGTPConnection.UPFIPAddr] = userPlaneConnection
+		n3iwfSelf.GTPConnectionWithUPFStore(ueAssociatedGTPConnection.UPFIPAddr, userPlaneConnection)
 
 		// Append NGAP PDU session resource setup response transfer
 		transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
@@ -1424,7 +1419,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			spiByte := make([]byte, 4)
 			for {
 				randomUint64 := GenerateRandomNumber().Uint64()
-				if _, ok := n3iwfSelf.ChildSA[uint32(randomUint64)]; !ok {
+				if _, ok := n3iwfSelf.ChildSA.Load(uint32(randomUint64)); !ok {
 					spi = uint32(randomUint64)
 					break
 				}
@@ -1806,23 +1801,6 @@ func is_Kernel_Supported(transformType uint8, transformID uint16, attributePrese
 	default:
 		return false
 	}
-}
-
-func GenerateRandomIPinRange(subnet *net.IPNet) net.IP {
-	ipAddr := make([]byte, 4)
-
-	// TODO: elimenate network name, gateway, and broadcast
-	for i := 0; i < 4; i++ {
-		randomNumber, err := GenerateRandomUint8()
-		if err != nil {
-			ikeLog.Errorf("[IKE] Generate random number for IP address failed: %+v", err)
-			return nil
-		}
-		alter := byte(randomNumber) & (subnet.Mask[i] ^ 255)
-		ipAddr[i] = subnet.IP[i] + alter
-	}
-
-	return net.IPv4(ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
 }
 
 func parseIPAddressInformationToChildSecurityAssociation(

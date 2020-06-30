@@ -31,7 +31,7 @@ func SendNGSetupRequest(conn *sctp.SCTPConn) {
 
 	sctpAddr := conn.RemoteAddr().String()
 
-	if !context.N3IWFSelf().CheckAMFReInit(sctpAddr) {
+	if available, _ := context.N3IWFSelf().AMFReInitAvailableListLoad(sctpAddr); !available {
 		ngaplog.Warnf("[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]", sctpAddr)
 		return
 	}
@@ -488,7 +488,7 @@ func SendRANConfigurationUpdate(amf *context.N3IWFAMF) {
 
 	ngaplog.Infoln("[N3IWF] Send RAN Configuration Update")
 
-	if !context.N3IWFSelf().CheckAMFReInit(amf.SCTPAddr) {
+	if available, _ := context.N3IWFSelf().AMFReInitAvailableListLoad(amf.SCTPAddr); !available {
 		ngaplog.Warnf("[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]", amf.SCTPAddr)
 		return
 	}

@@ -41,6 +41,13 @@ type SliceOverloadItem struct {
 	TrafficInd *int64
 }
 
+func (amf *N3IWFAMF) init(sctpAddr string, conn *sctp.SCTPConn) {
+	amf.SCTPAddr = sctpAddr
+	amf.SCTPConn = conn
+	amf.AMFTNLAssociationList = make(map[string]*AMFTNLAssociationItem)
+	amf.N3iwfUeList = make(map[int64]*N3IWFUe)
+}
+
 func (amf *N3IWFAMF) FindUeByAmfUeNgapID(id int64) *N3IWFUe {
 	for _, n3iwfUe := range amf.N3iwfUeList {
 		if n3iwfUe.AmfUeNgapId == id {

@@ -73,7 +73,7 @@ func listenRawSocket(rawSocket *ipv4.RawConn) {
 func ForwardUPTrafficFromN1(ueInnerIP string, packet []byte) {
 	// Find UE information
 	self := n3iwf_context.N3IWFSelf()
-	ue, ok := self.AllocatedUEIPAddress[ueInnerIP]
+	ue, ok := self.AllocatedUEIPAddressLoad(ueInnerIP)
 	if !ok {
 		relayLog.Error("UE context not found")
 		return
@@ -178,7 +178,7 @@ func ForwardUPTrafficFromN3(ueTEID uint32, packet []byte) {
 
 	// Find UE information
 	self := n3iwf_context.N3IWFSelf()
-	ue, ok := self.AllocatedUETEID[ueTEID]
+	ue, ok := self.AllocatedUETEIDLoad(ueTEID)
 	if !ok {
 		relayLog.Error("UE context not found")
 		return
@@ -256,7 +256,7 @@ func tcpConnectionHandler(connection net.Conn) {
 	n3iwfSelf := n3iwf_context.N3IWFSelf()
 
 	ueIP := strings.Split(connection.RemoteAddr().String(), ":")[0]
-	ue, ok := n3iwfSelf.AllocatedUEIPAddress[ueIP]
+	ue, ok := n3iwfSelf.AllocatedUEIPAddressLoad(ueIP)
 	if !ok {
 		relayLog.Error("UE context not found")
 		return
