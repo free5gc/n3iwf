@@ -1,12 +1,11 @@
 package handler
 
 import (
-	n3iwf_message "free5gc/src/n3iwf/handler/message"
 	ike_message "free5gc/src/n3iwf/ike/message"
-	"free5gc/src/n3iwf/ike/udp_server"
+	"net"
 )
 
-func SendIKEMessageToUE(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {
+func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, message *ike_message.IKEMessage) {
 	ikeLog.Trace("[IKE] Send IKE message to UE")
 	ikeLog.Trace("[IKE] Encoding...")
 	pkt, err := ike_message.Encode(message)
@@ -16,10 +15,19 @@ func SendIKEMessageToUE(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike
 	}
 	// As specified in RFC 7296 section 3.1, the IKE message send from/to UDP port 4500
 	// should prepend a 4 bytes zero
-	if ueSendInfo.ChannelID == udp_server.ChannelIDForPort4500 {
+	if srcAddr.Port == 4500 {
 		prependZero := make([]byte, 4)
 		pkt = append(prependZero, pkt...)
 	}
+
 	ikeLog.Trace("[IKE] Sending...")
-	udp_server.Send(ueSendInfo, pkt)
+	n, err := udpConn.WriteToUDP(pkt, dstAddr)
+	if err != nil {
+		ikeLog.Error(err)
+		return
+	}
+	if n != len(pkt) {
+		ikeLog.Errorf("Not all of the data is sent. Total length: %d. Sent: %d.", len(pkt), n)
+		return
+	}
 }

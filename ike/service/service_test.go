@@ -1,4 +1,4 @@
-package udp_server
+package service
 
 import (
 	"sync"

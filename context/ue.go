@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"free5gc/lib/ngap/ngapType"
-	n3iwf_message "free5gc/src/n3iwf/handler/message"
 	ike_message "free5gc/src/n3iwf/ike/message"
 	"net"
 
@@ -46,7 +45,7 @@ type N3IWFUe struct {
 	N3IWFChildSecurityAssociation *ChildSecurityAssociation
 
 	/* NAS IKE Connection */
-	UDPSendInfoGroup *n3iwf_message.UDPSendInfoGroup
+	IKEConnection *UDPSocketInfo
 	/* NAS TCP Connection */
 	TCPConnection net.Conn
 
@@ -174,14 +173,29 @@ type ChildSecurityAssociation struct {
 	ThisUE *N3IWFUe
 }
 
-func (ue *N3IWFUe) init() {
+type UDPSocketInfo struct {
+	Conn      *net.UDPConn
+	N3IWFAddr *net.UDPAddr
+	UEAddr    *net.UDPAddr
+}
+
+func (ue *N3IWFUe) init(ranUeNgapId int64) {
+	ue.RanUeNgapId = ranUeNgapId
+	ue.AmfUeNgapId = AmfUeNgapIdUnspecified
 	ue.PduSessionList = make(map[int64]*PDUSession)
 }
 
 func (ue *N3IWFUe) Remove() {
-	n3iwfSelf := N3IWFSelf()
+	// remove from AMF context
 	ue.DetachAMF()
-	delete(n3iwfSelf.UePool, ue.RanUeNgapId)
+	// remove from N3IWF context
+	n3iwfSelf := N3IWFSelf()
+	n3iwfSelf.DeleteN3iwfUe(ue.RanUeNgapId)
+	n3iwfSelf.DeleteIKESecurityAssociation(ue.N3IWFIKESecurityAssociation.LocalSPI)
+	n3iwfSelf.DeleteInternalUEIPAddr(ue.IPSecInnerIP)
+	for _, pduSession := range ue.PduSessionList {
+		n3iwfSelf.DeleteTEID(pduSession.GTPConnection.IncomingTEID)
+	}
 }
 
 func (ue *N3IWFUe) FindPDUSession(pduSessionID int64) *PDUSession {
@@ -235,26 +249,25 @@ func (ue *N3IWFUe) CreateIKEChildSecurityAssociation(chosenSecurityAssociation *
 	// Link UE context
 	childSecurityAssociation.ThisUE = ue
 	// Record to N3IWF context
-	n3iwfContext.ChildSA[childSecurityAssociation.SPI] = childSecurityAssociation
+	n3iwfContext.ChildSA.Store(childSecurityAssociation.SPI, childSecurityAssociation)
 
 	ue.N3IWFChildSecurityAssociation = childSecurityAssociation
 
 	return childSecurityAssociation, nil
 }
 
-func (ue *N3IWFUe) AttachAMF(sctpAddr string) error {
-	amf, err := N3IWFSelf().FindAMFBySCTPAddr(sctpAddr)
-	if err != nil {
-		return err
+func (ue *N3IWFUe) AttachAMF(sctpAddr string) bool {
+	if amf, ok := n3iwfContext.AMFPoolLoad(sctpAddr); ok {
+		amf.N3iwfUeList[ue.RanUeNgapId] = ue
+		ue.AMF = amf
+		return true
+	} else {
+		return false
 	}
-	amf.N3iwfUeList[ue.RanUeNgapId] = ue
-	ue.AMF = amf
-	return nil
 }
 func (ue *N3IWFUe) DetachAMF() {
-	amf := ue.AMF
-	if amf == nil {
+	if ue.AMF == nil {
 		return
 	}
-	delete(amf.N3iwfUeList, ue.RanUeNgapId)
+	delete(ue.AMF.N3iwfUeList, ue.RanUeNgapId)
 }
