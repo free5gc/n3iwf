@@ -7,6 +7,7 @@ import (
 	"free5gc/src/n3iwf/logger"
 	"free5gc/src/n3iwf/ngap/handler"
 
+	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 )
 
@@ -16,13 +17,17 @@ func init() {
 	Ngaplog = logger.NgapLog
 }
 
-func Dispatch(sctpAddr string, msg []byte) {
+func Dispatch(conn *sctp.SCTPConn, msg []byte) {
+	// AMF SCTP address
+	sctpAddr := conn.RemoteAddr().String()
+	// AMF context
+	amf, _ := context.N3IWFSelf().AMFPoolLoad(sctpAddr)
+	// Decode
 	pdu, err := ngap.Decoder(msg)
 	if err != nil {
 		Ngaplog.Errorf("NGAP decode error: %+v\n", err)
 		return
 	}
-	amf := context.N3IWFSelf().AMFPool[sctpAddr]
 
 	switch pdu.Present {
 	case ngapType.NGAPPDUPresentInitiatingMessage:
@@ -81,7 +86,7 @@ func Dispatch(sctpAddr string, msg []byte) {
 
 		switch successfulOutcome.ProcedureCode.Value {
 		case ngapType.ProcedureCodeNGSetup:
-			handler.HandleNGSetupResponse(sctpAddr, pdu)
+			handler.HandleNGSetupResponse(sctpAddr, conn, pdu)
 		case ngapType.ProcedureCodeNGReset:
 			handler.HandleNGResetAcknowledge(amf, pdu)
 		case ngapType.ProcedureCodePDUSessionResourceModifyIndication:
@@ -100,7 +105,7 @@ func Dispatch(sctpAddr string, msg []byte) {
 
 		switch unsuccessfulOutcome.ProcedureCode.Value {
 		case ngapType.ProcedureCodeNGSetup:
-			handler.HandleNGSetupFailure(sctpAddr, pdu)
+			handler.HandleNGSetupFailure(sctpAddr, conn, pdu)
 		case ngapType.ProcedureCodeRANConfigurationUpdate:
 			handler.HandleRANConfigurationUpdateFailure(amf, pdu)
 		default:

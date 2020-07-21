@@ -12,13 +12,11 @@ import (
 	"free5gc/lib/path_util"
 	"free5gc/src/app"
 	"free5gc/src/n3iwf/factory"
-	"free5gc/src/n3iwf/handler"
-	"free5gc/src/n3iwf/ike/udp_server"
+	ike_service "free5gc/src/n3iwf/ike/service"
 	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/ngap/sctp"
+	ngap_service "free5gc/src/n3iwf/ngap/service"
 	"free5gc/src/n3iwf/relay"
 	"free5gc/src/n3iwf/util"
-	//"free5gc/src/n3iwf/n3iwf_context"
 )
 
 type N3IWF struct{}
@@ -62,17 +60,22 @@ func (*N3IWF) Initialize(c *cli.Context) {
 	if config.n3iwfcfg != "" {
 		factory.InitConfigFactory(config.n3iwfcfg)
 	} else {
-		DefaultSmfConfigPath := path_util.Gofree5gcPath("free5gc/config/n3iwfcfg.conf")
-		factory.InitConfigFactory(DefaultSmfConfigPath)
+		DefaultN3iwfConfigPath := path_util.Gofree5gcPath("free5gc/config/n3iwfcfg.conf")
+		factory.InitConfigFactory(DefaultN3iwfConfigPath)
 	}
 
-	initLog.Traceln("N3IWF debug level(string):", app.ContextSelf().Logger.N3IWF.DebugLevel)
 	if app.ContextSelf().Logger.N3IWF.DebugLevel != "" {
-		initLog.Infoln("W3IWF debug level(string):", app.ContextSelf().Logger.N3IWF.DebugLevel)
 		level, err := logrus.ParseLevel(app.ContextSelf().Logger.N3IWF.DebugLevel)
-		if err == nil {
+		if err != nil {
+			initLog.Warnf("Log level [%s] is not valid, set to [info] level", app.ContextSelf().Logger.N3IWF.DebugLevel)
+			logger.SetLogLevel(logrus.InfoLevel)
+		} else {
 			logger.SetLogLevel(level)
+			initLog.Infof("Log level is set to [%s] level", level)
 		}
+	} else {
+		initLog.Infoln("Log level is default set to [info] level")
+		logger.SetLogLevel(logrus.InfoLevel)
 	}
 
 	logger.SetReportCaller(app.ContextSelf().Logger.N3IWF.ReportCaller)
@@ -102,12 +105,14 @@ func (n3iwf *N3IWF) Start() {
 
 	wg := sync.WaitGroup{}
 
-	// N3IWF handler
-	go handler.Handle()
-	wg.Add(1)
-
 	// NGAP
-	sctp.InitiateSCTP(&wg)
+	if err := ngap_service.Run(); err != nil {
+		initLog.Errorf("Start NGAP service failed: %+v", err)
+		return
+	} else {
+		initLog.Info("NGAP service running.")
+		wg.Add(1)
+	}
 
 	// Relay listeners
 	// Control plane
@@ -115,6 +120,7 @@ func (n3iwf *N3IWF) Start() {
 		initLog.Errorf("Listen N1 control plane traffic failed: %+v", err)
 	} else {
 		initLog.Info("NAS TCP server successfully started.")
+		wg.Add(1)
 	}
 	// User plane
 	if err := relay.ListenN1UPTraffic(); err != nil {
@@ -122,12 +128,17 @@ func (n3iwf *N3IWF) Start() {
 		return
 	} else {
 		initLog.Info("Listening N1 user plane traffic")
+		wg.Add(1)
 	}
-	wg.Add(2)
 
 	// IKE
-	udp_server.Run()
-	wg.Add(1)
+	if err := ike_service.Run(); err != nil {
+		initLog.Errorf("Start IKE service failed: %+v", err)
+		return
+	} else {
+		initLog.Info("IKE service running.")
+		wg.Add(1)
+	}
 
 	initLog.Info("N3IWF running...")
 

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	n3iwf_context "free5gc/src/n3iwf/context"
-	n3iwf_message "free5gc/src/n3iwf/handler/message"
 	"free5gc/src/n3iwf/logger"
 	ngap_message "free5gc/src/n3iwf/ngap/message"
 	"net"
@@ -22,30 +21,6 @@ var relayLog *logrus.Entry
 
 func init() {
 	relayLog = logger.RelayLog
-}
-
-func listenRawSocket(rawSocket *ipv4.RawConn) {
-	defer rawSocket.Close()
-
-	buffer := make([]byte, 1500)
-
-	for {
-		ipHeader, ipPayload, _, err := rawSocket.ReadFrom(buffer)
-		relayLog.Tracef("Read %d bytes", len(ipPayload))
-		if err != nil {
-			relayLog.Errorf("Error read from raw socket: %+v", err)
-			return
-		}
-
-		msg := n3iwf_message.HandlerMessage{
-			Event:     n3iwf_message.EventN1TunnelUPMessage,
-			UEInnerIP: ipHeader.Src.String(),
-			Value:     ipPayload[4:],
-		}
-
-		n3iwf_message.SendMessage(msg)
-	}
-
 }
 
 // ListenN1UPTraffic bind and listen raw socket on N3IWF N1 interface
@@ -75,10 +50,35 @@ func ListenN1UPTraffic() error {
 	return nil
 }
 
+func listenRawSocket(rawSocket *ipv4.RawConn) {
+	defer rawSocket.Close()
+
+	buffer := make([]byte, 1500)
+
+	for {
+		ipHeader, ipPayload, _, err := rawSocket.ReadFrom(buffer)
+		relayLog.Tracef("Read %d bytes", len(ipPayload))
+		if err != nil {
+			relayLog.Errorf("Error read from raw socket: %+v", err)
+			return
+		}
+
+		go ForwardUPTrafficFromN1(ipHeader.Src.String(), ipPayload[4:])
+	}
+
+}
+
 // ForwardUPTrafficFromN1 forward user plane packets from N1 to UPF,
 // with GTP header encapsulated
-func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
-	relayLog.Info("Forward N1 -> N3")
+func ForwardUPTrafficFromN1(ueInnerIP string, packet []byte) {
+	// Find UE information
+	self := n3iwf_context.N3IWFSelf()
+	ue, ok := self.AllocatedUEIPAddressLoad(ueInnerIP)
+	if !ok {
+		relayLog.Error("UE context not found")
+		return
+	}
+
 	var pduSession *n3iwf_context.PDUSession
 
 	for _, pduSession = range ue.PduSessionList {
@@ -103,6 +103,7 @@ func ForwardUPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
 		}
 		return
 	} else {
+		relayLog.Trace("Forward N1 -> N3")
 		relayLog.Tracef("Wrote %d bytes", n)
 		return
 	}
@@ -143,6 +144,13 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtpv1.UPlaneConn, net.Addr, error
 
 }
 
+// ListenGTP binds and listens raw socket on N3IWF N3 interface,
+// catching GTP packets and send it to N3IWF handler
+func ListenGTP(userPlaneConnection *gtpv1.UPlaneConn) error {
+	go listenGTP(userPlaneConnection)
+	return nil
+}
+
 func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 	defer userPlaneConnection.Close()
 
@@ -156,31 +164,26 @@ func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 			return
 		}
 
-		msg := n3iwf_message.HandlerMessage{
-			Event: n3iwf_message.EventGTPMessage,
-			TEID:  teid,
-			Value: payload[:n],
-		}
-
-		n3iwf_message.SendMessage(msg)
+		go ForwardUPTrafficFromN3(teid, payload[:n])
 	}
 
 }
 
-// ListenGTP binds and listens raw socket on N3IWF N3 interface,
-// catching GTP packets and send it to N3IWF handler
-func ListenGTP(userPlaneConnection *gtpv1.UPlaneConn) error {
-	go listenGTP(userPlaneConnection)
-	return nil
-}
-
 // ForwardUPTrafficFromN3 forward user plane packets from N3 to UE,
 // with GRE header and new IP header encapsulated
-func ForwardUPTrafficFromN3(ue *n3iwf_context.N3IWFUe, packet []byte) {
+func ForwardUPTrafficFromN3(ueTEID uint32, packet []byte) {
 	// This is the IP header template for packets with GRE header encapsulated.
 	// The remaining mandatory fields are Dst and TotalLen, which specified
 	// the destination IP address and the packet total length.
-	relayLog.Info("Forward N1 <- N3")
+
+	// Find UE information
+	self := n3iwf_context.N3IWFSelf()
+	ue, ok := self.AllocatedUETEIDLoad(ueTEID)
+	if !ok {
+		relayLog.Error("UE context not found")
+		return
+	}
+
 	ipHeader := &ipv4.Header{
 		Version:  4,
 		Len:      20,
@@ -211,60 +214,8 @@ func ForwardUPTrafficFromN3(ue *n3iwf_context.N3IWFUe, packet []byte) {
 		relayLog.Errorf("Write to raw socket failed: %+v", err)
 		return
 	} else {
+		relayLog.Trace("Forward N1 <- N3")
 		relayLog.Tracef("Wrote %d bytes", packetTotalLength)
-	}
-}
-
-func tcpConnectionHandler(connection net.Conn) {
-	defer connection.Close()
-
-	// N3IWF context
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-
-	ueIP := strings.Split(connection.RemoteAddr().String(), ":")[0]
-	ue, ok := n3iwfSelf.AllocatedUEIPAddress[ueIP]
-	if !ok {
-		relayLog.Error("UE context not found")
-		return
-	}
-	ue.TCPConnection = connection
-
-	buffer := make([]byte, 65535)
-	for {
-		readBytes, err := connection.Read(buffer)
-		if err != nil {
-			if err.Error() == "EOF" {
-				relayLog.Warn("Connection close by peer")
-				ue.TCPConnection = nil
-				return
-			} else {
-				relayLog.Errorf("Read TCP connection failed: %+v", err)
-			}
-		}
-
-		relayLog.Tracef("Get NAS PDU from UE:\nNAS length: %d\nNAS content:\n%s", readBytes, hex.Dump(buffer[:readBytes]))
-
-		msg := n3iwf_message.HandlerMessage{
-			Event:     n3iwf_message.EventN1TunnelCPMessage,
-			UEInnerIP: ueIP,
-			Value:     buffer[:readBytes],
-		}
-
-		n3iwf_message.SendMessage(msg)
-	}
-}
-
-func tcpServerListen(tcpListener net.Listener) {
-	defer tcpListener.Close()
-
-	for {
-		connection, err := tcpListener.Accept()
-		if err != nil {
-			relayLog.Error("TCP server accept failed. Close the listener...")
-			return
-		}
-
-		go tcpConnectionHandler(connection)
 	}
 }
 
@@ -284,23 +235,54 @@ func SetupNASTCPServer() error {
 	return nil
 }
 
-func ForwardCPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
-	relayLog.Info("Forward N1 -> N2")
-	ngap_message.SendUplinkNASTransport(ue.AMF, ue, packet)
+func tcpServerListen(tcpListener net.Listener) {
+	defer tcpListener.Close()
+
+	for {
+		connection, err := tcpListener.Accept()
+		if err != nil {
+			relayLog.Error("TCP server accept failed. Close the listener...")
+			return
+		}
+
+		go tcpConnectionHandler(connection)
+	}
 }
 
-func ForwardCPTrafficFromN2(ue *n3iwf_context.N3IWFUe, nasPDU []byte) {
-	relayLog.Info("Forward N1 <- N2")
-	tcpConnection := ue.TCPConnection
+func tcpConnectionHandler(connection net.Conn) {
+	defer connection.Close()
 
-	if tcpConnection == nil {
-		relayLog.Error("This UE has no NAS TCP connection with N3IWF")
+	// N3IWF context
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+
+	ueIP := strings.Split(connection.RemoteAddr().String(), ":")[0]
+	ue, ok := n3iwfSelf.AllocatedUEIPAddressLoad(ueIP)
+	if !ok {
+		relayLog.Error("UE context not found")
 		return
 	}
+	ue.TCPConnection = connection
 
-	if n, err := tcpConnection.Write(nasPDU); err != nil {
-		relayLog.Errorf("Write to TCP connection failed: %+v", err)
-	} else {
-		relayLog.Tracef("Wrote %d bytes", n)
+	data := make([]byte, 65535)
+	for {
+		n, err := connection.Read(data)
+		if err != nil {
+			if err.Error() == "EOF" {
+				relayLog.Warn("Connection close by peer")
+				ue.TCPConnection = nil
+				return
+			} else {
+				relayLog.Errorf("Read TCP connection failed: %+v", err)
+			}
+		}
+
+		relayLog.Tracef("Get NAS PDU from UE:\nNAS length: %d\nNAS content:\n%s", n, hex.Dump(data[:n]))
+
+		go ForwardCPTrafficFromN1(ue, data[:n])
 	}
+}
+
+func ForwardCPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
+	relayLog.Trace("Forward N1 -> N2")
+	ngap_message.SendUplinkNASTransport(ue.AMF, ue, packet)
 }

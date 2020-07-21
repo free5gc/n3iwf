@@ -5,10 +5,13 @@ import (
 	"free5gc/lib/aper"
 	"free5gc/lib/ngap/ngapConvert"
 	"free5gc/lib/ngap/ngapType"
+
+	"git.cs.nctu.edu.tw/calee/sctp"
 )
 
 type N3IWFAMF struct {
 	SCTPAddr              string
+	SCTPConn              *sctp.SCTPConn
 	AMFName               *ngapType.AMFName
 	ServedGUAMIList       *ngapType.ServedGUAMIList
 	RelativeAMFCapacity   *ngapType.RelativeAMFCapacity
@@ -36,6 +39,13 @@ type SliceOverloadItem struct {
 	SNssaiList []ngapType.SNSSAI
 	Action     *ngapType.OverloadAction
 	TrafficInd *int64
+}
+
+func (amf *N3IWFAMF) init(sctpAddr string, conn *sctp.SCTPConn) {
+	amf.SCTPAddr = sctpAddr
+	amf.SCTPConn = conn
+	amf.AMFTNLAssociationList = make(map[string]*AMFTNLAssociationItem)
+	amf.N3iwfUeList = make(map[int64]*N3IWFUe)
 }
 
 func (amf *N3IWFAMF) FindUeByAmfUeNgapID(id int64) *N3IWFUe {

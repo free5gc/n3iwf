@@ -9,11 +9,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"net"
-	"strings"
 
 	"free5gc/lib/ngap/ngapType"
 	"free5gc/src/n3iwf/context"
-	n3iwf_message "free5gc/src/n3iwf/handler/message"
 	ike_message "free5gc/src/n3iwf/ike/message"
 	"free5gc/src/n3iwf/logger"
 	ngap_message "free5gc/src/n3iwf/ngap/message"
@@ -30,7 +28,7 @@ func init() {
 	ikeLog = logger.IKELog
 }
 
-func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {
+func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage) {
 	ikeLog.Infoln("[IKE] Handle IKE_SA_INIT")
 
 	var securityAssociation *ike_message.SecurityAssociation
@@ -62,7 +60,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
 
-		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 		return
 	}
@@ -160,7 +158,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 
 			responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
 
-			SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+			SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 			return
 		}
@@ -184,7 +182,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 
 			responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
 
-			SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+			SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 			return
 		}
@@ -279,7 +277,7 @@ func HandleIKESAINIT(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_me
 
 	ikeLog.Tracef("Local unsigned authentication data:\n%s", hex.Dump(ikeSecurityAssociation.LocalUnsignedAuthentication))
 
-	SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+	SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 }
 
 // IKE_AUTH state
@@ -289,7 +287,7 @@ const (
 	PostSignalling
 )
 
-func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {
+func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage) {
 	ikeLog.Infoln("[IKE] Handle IKE_AUTH")
 
 	var encryptedPayload *ike_message.Encrypted
@@ -317,15 +315,15 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
-		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 		return
 	}
 
 	// Find corresponding IKE security association
 	localSPI := message.ResponderSPI
-	ikeSecurityAssociation := n3iwfSelf.FindIKESecurityAssociationBySPI(localSPI)
-	if ikeSecurityAssociation == nil {
+	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(localSPI)
+	if !ok {
 		ikeLog.Warn("[IKE] Unrecognized SPI")
 		// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
 
@@ -335,7 +333,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, 0, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
-		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 		return
 	}
@@ -465,7 +463,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 
 				// check SPI
 				spi := binary.BigEndian.Uint32(proposal.SPI)
-				if _, ok := n3iwfSelf.ChildSA[spi]; ok {
+				if _, ok := n3iwfSelf.ChildSA.Load(spi); ok {
 					continue
 				}
 
@@ -553,7 +551,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				}
 
 				// Send IKE message to UE
-				SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+				SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 				return
 			}
@@ -637,7 +635,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		}
 
 		// Send IKE message to UE
-		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 		// Shift state
 		ikeSecurityAssociation.State++
@@ -710,7 +708,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				}
 
 				// Send IKE message to UE
-				SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+				SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 				return
 			}
 
@@ -734,10 +732,13 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				// Store some information in conext
 				ikeSecurityAssociation.MessageID = message.MessageID
 
-				ue.UDPSendInfoGroup = ueSendInfo
-				networkAddrStringSlice := strings.Split(ueSendInfo.Addr.String(), ":")
-				ue.IPAddrv4 = networkAddrStringSlice[0]
-				ue.PortNumber = int32(ueSendInfo.Addr.Port)
+				ue.IKEConnection = &context.UDPSocketInfo{
+					Conn:      udpConn,
+					N3IWFAddr: n3iwfAddr,
+					UEAddr:    ueAddr,
+				}
+				ue.IPAddrv4 = ueAddr.IP.To4().String()
+				ue.PortNumber = int32(ueAddr.Port)
 				ue.RRCEstablishmentCause = int16(anParameters.EstablishmentCause.Value)
 
 				// Send Initial UE Message
@@ -749,7 +750,11 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 				// Store some information in context
 				ikeSecurityAssociation.MessageID = message.MessageID
 
-				ue.UDPSendInfoGroup = ueSendInfo
+				ue.IKEConnection = &context.UDPSocketInfo{
+					Conn:      udpConn,
+					N3IWFAddr: n3iwfAddr,
+					UEAddr:    ueAddr,
+				}
 
 				// Send Uplink NAS Transport
 				ngap_message.SendUplinkNASTransport(amf, ue, nasPDU)
@@ -844,7 +849,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			}
 
 			// Send IKE message to UE
-			SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+			SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 			return
 		}
 
@@ -874,24 +879,11 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		// Prepare configuration payload and traffic selector payload for initiator and responder
 		if addrRequest {
 			var attributes []*ike_message.IndividualConfigurationAttribute
-			var ueIPAddr net.IP
 
+			// IP addresses (IPSec)
+			ueIPAddr := n3iwfSelf.NewInternalUEIPAddr(thisUE)
 			n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
 
-			// UE internal IP address
-			for {
-				ueIPAddr = GenerateRandomIPinRange(n3iwfSelf.Subnet)
-				if ueIPAddr != nil {
-					if ueIPAddr.String() == n3iwfSelf.IPSecGatewayAddress {
-						continue
-					}
-					if _, ok := n3iwfSelf.AllocatedUEIPAddress[ueIPAddr.String()]; !ok {
-						// Should be release if there is any error occur
-						n3iwfSelf.AllocatedUEIPAddress[ueIPAddr.String()] = thisUE
-						break
-					}
-				}
-			}
 			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_ADDRESS, ueIPAddr))
 			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_NETMASK, n3iwfSelf.Subnet.Mask))
 
@@ -945,7 +937,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 			ikeLog.Errorf("[IKE] Create child security association context failed: %+v", err)
 			return
 		}
-		err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueSendInfo.Addr.IP, ikeSecurityAssociation.TrafficSelectorResponder.TrafficSelectors[0], ikeSecurityAssociation.TrafficSelectorInitiator.TrafficSelectors[0])
+		err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueAddr.IP, ikeSecurityAssociation.TrafficSelectorResponder.TrafficSelectors[0], ikeSecurityAssociation.TrafficSelectorInitiator.TrafficSelectors[0])
 		if err != nil {
 			ikeLog.Errorf("[IKE] Parse IP address to child security association failed: %+v", err)
 			return
@@ -993,7 +985,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 		}
 
 		// Send IKE message to UE
-		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 		// Aplly XFRM rules
 		if err = ApplyXFRMRule(false, childSecurityAssociationContext); err != nil {
@@ -1027,7 +1019,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 					spiByte := make([]byte, 4)
 					for {
 						randomUint64 := GenerateRandomNumber().Uint64()
-						if _, ok := n3iwfSelf.ChildSA[uint32(randomUint64)]; !ok {
+						if _, ok := n3iwfSelf.ChildSA.Load(uint32(randomUint64)); !ok {
 							spi = uint32(randomUint64)
 							break
 						}
@@ -1158,7 +1150,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 						continue
 					}
 
-					SendIKEMessageToUE(ueSendInfo, ikeMessage)
+					SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, ikeMessage)
 					break
 				} else {
 					// Send Initial Context Setup Response to AMF
@@ -1173,7 +1165,7 @@ func HandleIKEAUTH(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_mess
 	}
 }
 
-func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ike_message.IKEMessage) {
+func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage) {
 	ikeLog.Infoln("[IKE] Handle CREATE_CHILD_SA")
 
 	var encryptedPayload *ike_message.Encrypted
@@ -1201,15 +1193,15 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
-		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 		return
 	}
 
 	// Find corresponding IKE security association
 	localSPI := message.InitiatorSPI
-	ikeSecurityAssociation := n3iwfSelf.FindIKESecurityAssociationBySPI(localSPI)
-	if ikeSecurityAssociation == nil {
+	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(localSPI)
+	if !ok {
 		ikeLog.Warn("[IKE] Unrecognized SPI")
 		// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
 
@@ -1219,7 +1211,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, 0, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
-		SendIKEMessageToUE(ueSendInfo, responseIKEMessage)
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 		return
 	}
@@ -1315,7 +1307,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 		ikeLog.Errorf("[IKE] Create child security association context failed: %+v", err)
 		return
 	}
-	err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueSendInfo.Addr.IP, trafficSelectorInitiator.TrafficSelectors[0], trafficSelectorResponder.TrafficSelectors[0])
+	err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueAddr.IP, trafficSelectorInitiator.TrafficSelectors[0], trafficSelectorResponder.TrafficSelectors[0])
 	if err != nil {
 		ikeLog.Errorf("[IKE] Parse IP address to child security association failed: %+v", err)
 		return
@@ -1336,7 +1328,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 
 	// Setup GTP tunnel for UE
 	ueAssociatedGTPConnection := pduSession.GTPConnection
-	if userPlaneConnection, ok := n3iwfSelf.GTPConnectionWithUPF[ueAssociatedGTPConnection.UPFIPAddr]; ok {
+	if userPlaneConnection, ok := n3iwfSelf.GTPConnectionWithUPFLoad(ueAssociatedGTPConnection.UPFIPAddr); ok {
 		// UPF UDP address
 		upfUDPAddr, err := net.ResolveUDPAddr("udp", ueAssociatedGTPConnection.UPFIPAddr+":2152")
 		if err != nil {
@@ -1346,6 +1338,10 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 
 		// UE TEID
 		ueTEID := n3iwfSelf.NewTEID(thisUE)
+		if ueTEID == 0 {
+			ikeLog.Error("Invalid TEID (0).")
+			return
+		}
 
 		// Set UE associated GTP connection
 		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
@@ -1374,6 +1370,10 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 
 		// UE TEID
 		ueTEID := n3iwfSelf.NewTEID(thisUE)
+		if ueTEID == 0 {
+			ikeLog.Error("Invalid TEID (0).")
+			return
+		}
 
 		// Setup GTP connection with UPF
 		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
@@ -1381,7 +1381,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 		ueAssociatedGTPConnection.UserPlaneConnection = userPlaneConnection
 
 		// Store GTP connection with UPF into N3IWF context
-		n3iwfSelf.GTPConnectionWithUPF[ueAssociatedGTPConnection.UPFIPAddr] = userPlaneConnection
+		n3iwfSelf.GTPConnectionWithUPFStore(ueAssociatedGTPConnection.UPFIPAddr, userPlaneConnection)
 
 		// Append NGAP PDU session resource setup response transfer
 		transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
@@ -1419,7 +1419,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 			spiByte := make([]byte, 4)
 			for {
 				randomUint64 := GenerateRandomNumber().Uint64()
-				if _, ok := n3iwfSelf.ChildSA[uint32(randomUint64)]; !ok {
+				if _, ok := n3iwfSelf.ChildSA.Load(uint32(randomUint64)); !ok {
 					spi = uint32(randomUint64)
 					break
 				}
@@ -1566,7 +1566,7 @@ func HandleCREATECHILDSA(ueSendInfo *n3iwf_message.UDPSendInfoGroup, message *ik
 				continue
 			}
 
-			SendIKEMessageToUE(ueSendInfo, ikeMessage)
+			SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, ikeMessage)
 			break
 		} else {
 			// Send Response to AMF
@@ -1801,23 +1801,6 @@ func is_Kernel_Supported(transformType uint8, transformID uint16, attributePrese
 	default:
 		return false
 	}
-}
-
-func GenerateRandomIPinRange(subnet *net.IPNet) net.IP {
-	ipAddr := make([]byte, 4)
-
-	// TODO: elimenate network name, gateway, and broadcast
-	for i := 0; i < 4; i++ {
-		randomNumber, err := GenerateRandomUint8()
-		if err != nil {
-			ikeLog.Errorf("[IKE] Generate random number for IP address failed: %+v", err)
-			return nil
-		}
-		alter := byte(randomNumber) & (subnet.Mask[i] ^ 255)
-		ipAddr[i] = subnet.IP[i] + alter
-	}
-
-	return net.IPv4(ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
 }
 
 func parseIPAddressInformationToChildSecurityAssociation(
