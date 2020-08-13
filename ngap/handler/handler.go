@@ -10,6 +10,7 @@ import (
 	ike_message "free5gc/src/n3iwf/ike/message"
 	"free5gc/src/n3iwf/logger"
 	ngap_message "free5gc/src/n3iwf/ngap/message"
+	"free5gc/src/n3iwf/relay"
 	"math/rand"
 	"net"
 	"time"
@@ -709,17 +710,21 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 		return
 	}
 
+	n3iwfUe.N3IWFIKESecurityAssociation.State++
+
 	// Send IKE message to UE
 	handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr, n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
-
-	n3iwfUe.N3IWFIKESecurityAssociation.State++
 }
 
-// handlePDUSessionResourceSetupRequestTransfer parse and store needed information
-// for setup user plane connection for UE
-// When success, it will return a status "success" set to "true" for indication and set
-// unsuccessfulTransfer to nil, otherwise, return false and corresponding transfer
-func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSession *context.PDUSession, transfer ngapType.PDUSessionResourceSetupRequestTransfer) (success bool, unsuccessfulTransfer []byte) {
+// handlePDUSessionResourceSetupRequestTransfer parse and store needed information from NGAP
+// and setup user plane connection for UE
+// Parameters:
+// UE context :: a pointer to the UE's pdusession data structure ::
+// SMF PDU session resource setup request transfer
+// Return value:
+// a status value indicate whether the handlling is "success" ::
+// if failed, an unsuccessfulTransfer is set, otherwise, set to nil
+func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSession *context.PDUSession, transfer ngapType.PDUSessionResourceSetupRequestTransfer) (bool, []byte) {
 
 	var pduSessionAMBR *ngapType.PDUSessionAggregateMaximumBitRate
 	var ulNGUUPTNLInformation *ngapType.UPTransportLayerInformation
@@ -759,15 +764,13 @@ func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSessio
 	}
 
 	if len(iesCriticalityDiagnostics.List) > 0 {
-		success = false
 		cause := buildCause(ngapType.CausePresentProtocol, ngapType.CauseProtocolPresentAbstractSyntaxErrorFalselyConstructedMessage)
 		criticalityDiagnostics := buildCriticalityDiagnostics(nil, nil, nil, &iesCriticalityDiagnostics)
 		responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, &criticalityDiagnostics)
 		if err != nil {
 			ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
 		}
-		unsuccessfulTransfer = responseTransfer
-		return
+		return false, responseTransfer
 	}
 
 	pduSession.Ambr = pduSessionAMBR
@@ -785,14 +788,12 @@ func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSessio
 			pduSession.SecurityIntegrity = true
 		default:
 			ngapLog.Error("Unknown security integrity indication")
-			success = false
 			cause := buildCause(ngapType.CausePresentProtocol, ngapType.CauseProtocolPresentSemanticError)
 			responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
 			if err != nil {
 				ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
 			}
-			unsuccessfulTransfer = responseTransfer
-			return
+			return false, responseTransfer
 		}
 
 		switch securityIndication.ConfidentialityProtectionIndication.Value {
@@ -804,14 +805,12 @@ func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSessio
 			pduSession.SecurityCipher = true
 		default:
 			ngapLog.Error("Unknown security confidentiality indication")
-			success = false
 			cause := buildCause(ngapType.CausePresentProtocol, ngapType.CauseProtocolPresentSemanticError)
 			responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
 			if err != nil {
 				ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
 			}
-			unsuccessfulTransfer = responseTransfer
-			return
+			return false, responseTransfer
 		}
 	} else {
 		pduSession.SecurityIntegrity = false
@@ -833,16 +832,98 @@ func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSessio
 	// TODO: Support IPv6
 	upfIPv4, _ := ngapConvert.IPAddressToString(ulNGUUPTNLInformation.GTPTunnel.TransportLayerAddress)
 	if upfIPv4 != "" {
+		n3iwfSelf := context.N3IWFSelf()
+
 		gtpConnection := &context.GTPConnectionInfo{
 			UPFIPAddr:    upfIPv4,
 			OutgoingTEID: binary.BigEndian.Uint32(ulNGUUPTNLInformation.GTPTunnel.GTPTEID.Value),
 		}
+
+		if userPlaneConnection, ok := n3iwfSelf.GTPConnectionWithUPFLoad(upfIPv4); ok {
+			// UPF UDP address
+			upfUDPAddr, err := net.ResolveUDPAddr("udp", upfIPv4+":2152")
+			if err != nil {
+				ngapLog.Errorf("Resolve UDP address failed: %+v", err)
+				cause := buildCause(ngapType.CausePresentTransport, ngapType.CauseTransportPresentTransportResourceUnavailable)
+				responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+				if err != nil {
+					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
+				}
+				return false, responseTransfer
+			}
+
+			// UE TEID
+			ueTEID := n3iwfSelf.NewTEID(ue)
+			if ueTEID == 0 {
+				ngapLog.Error("Invalid TEID (0).")
+				cause := buildCause(ngapType.CausePresentProtocol, ngapType.CauseProtocolPresentUnspecified)
+				responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+				if err != nil {
+					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
+				}
+				return false, responseTransfer
+			}
+
+			// Set UE associated GTP connection
+			gtpConnection.UPFUDPAddr = upfUDPAddr
+			gtpConnection.IncomingTEID = ueTEID
+			gtpConnection.UserPlaneConnection = userPlaneConnection
+		} else {
+			// Setup GTP connection with UPF
+			userPlaneConnection, upfUDPAddr, err := relay.SetupGTPTunnelWithUPF(upfIPv4)
+			if err != nil {
+				ngapLog.Errorf("Setup GTP connection with UPF failed: %+v", err)
+				cause := buildCause(ngapType.CausePresentTransport, ngapType.CauseTransportPresentTransportResourceUnavailable)
+				responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+				if err != nil {
+					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
+				}
+				return false, responseTransfer
+			}
+			// Listen GTP tunnel
+			if err := relay.ListenGTP(userPlaneConnection); err != nil {
+				ngapLog.Errorf("Listening GTP tunnel failed: %+v", err)
+				cause := buildCause(ngapType.CausePresentTransport, ngapType.CauseTransportPresentTransportResourceUnavailable)
+				responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+				if err != nil {
+					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
+				}
+				return false, responseTransfer
+			}
+
+			// UE TEID
+			ueTEID := n3iwfSelf.NewTEID(ue)
+			if ueTEID == 0 {
+				ngapLog.Error("Invalid TEID (0).")
+				cause := buildCause(ngapType.CausePresentProtocol, ngapType.CauseProtocolPresentUnspecified)
+				responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+				if err != nil {
+					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
+				}
+				return false, responseTransfer
+			}
+
+			// Setup GTP connection with UPF
+			gtpConnection.UPFUDPAddr = upfUDPAddr
+			gtpConnection.IncomingTEID = ueTEID
+			gtpConnection.UserPlaneConnection = userPlaneConnection
+
+			// Store GTP connection with UPF into N3IWF context
+			n3iwfSelf.GTPConnectionWithUPFStore(upfIPv4, userPlaneConnection)
+		}
+
 		pduSession.GTPConnection = gtpConnection
+	} else {
+		ngapLog.Error("Cannot parse \"PDU session resource setup request transfer\" message \"UL NG-U UP TNL Information\"")
+		cause := buildCause(ngapType.CausePresentProtocol, ngapType.CauseProtocolPresentAbstractSyntaxErrorReject)
+		responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+		if err != nil {
+			ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
+		}
+		return false, responseTransfer
 	}
 
-	success = true
-	unsuccessfulTransfer = nil
-	return
+	return true, nil
 }
 
 func HandleUEContextModificationRequest(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
@@ -1075,7 +1156,7 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
 
 	var n3iwfUe *context.N3IWFUe
-	var n3iwfSelf = context.N3IWFSelf()
+	var n3iwfSelf *context.N3IWFContext = context.N3IWFSelf()
 
 	if message == nil {
 		ngapLog.Error("NGAP Message is nil")
@@ -1152,7 +1233,6 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 		if n3iwfUe.AmfUeNgapId == context.AmfUeNgapIdUnspecified {
 			ngapLog.Tracef("Create new logical UE-associated NG-connection")
 			n3iwfUe.AmfUeNgapId = amfUeNgapID.Value
-			// n3iwfUe.SCTPAddr = amf.SCTPAddr
 		} else {
 			if n3iwfUe.AmfUeNgapId != amfUeNgapID.Value {
 				ngapLog.Warn("AMFUENGAPID unmatched")
@@ -1213,10 +1293,12 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 			handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr, n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
 		} else {
 			// Check ue.TCPConnection. If failed, retry 2 times.
-			for i := 0; i < 3; i++ {
+			maxRetryTimes := 3
+			for i := 0; i < maxRetryTimes; i++ {
 				if n3iwfUe.TCPConnection == nil {
-					if i == 2 {
-						ngapLog.Warn("No connection found for UE to send NAS message.")
+					if i == (maxRetryTimes - 1) {
+						ngapLog.Warn("No connection found for UE to send NAS message. This message will be cached in N3IWF")
+						n3iwfUe.TemporaryCachedNASMessage = nasPDU.Value
 						return
 					} else {
 						ngapLog.Warn("No NAS signalling session found, retry...")

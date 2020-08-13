@@ -15,7 +15,6 @@ import (
 	ike_message "free5gc/src/n3iwf/ike/message"
 	"free5gc/src/n3iwf/logger"
 	ngap_message "free5gc/src/n3iwf/ngap/message"
-	"free5gc/src/n3iwf/relay"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -211,6 +210,7 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 	// Create new IKE security association
 	ikeSecurityAssociation := n3iwfSelf.NewIKESecurityAssociation()
 	ikeSecurityAssociation.RemoteSPI = message.InitiatorSPI
+	ikeSecurityAssociation.MessageID = message.MessageID
 
 	// Record algorithm in context
 	ikeSecurityAssociation.EncryptionAlgorithm = responseSecurityAssociation.Proposals[0].EncryptionAlgorithm[0]
@@ -391,6 +391,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 	// NOTE: tune it
 	transformPseudorandomFunction := ikeSecurityAssociation.PseudorandomFunction
+	ikeSecurityAssociation.MessageID = message.MessageID
 
 	switch ikeSecurityAssociation.State {
 	case PreSignalling:
@@ -634,11 +635,11 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 			return
 		}
 
-		// Send IKE message to UE
-		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
-
 		// Shift state
 		ikeSecurityAssociation.State++
+
+		// Send IKE message to UE
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 	case EAPSignalling:
 		// If success, N3IWF will send an UPLinkNASTransport to AMF
@@ -1252,6 +1253,9 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		}
 	}
 
+	// Record message ID
+	ikeSecurityAssociation.MessageID = message.MessageID
+
 	// UE context
 	thisUE := ikeSecurityAssociation.ThisUE
 	if thisUE == nil {
@@ -1326,72 +1330,15 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		return
 	}
 
-	// Setup GTP tunnel for UE
-	ueAssociatedGTPConnection := pduSession.GTPConnection
-	if userPlaneConnection, ok := n3iwfSelf.GTPConnectionWithUPFLoad(ueAssociatedGTPConnection.UPFIPAddr); ok {
-		// UPF UDP address
-		upfUDPAddr, err := net.ResolveUDPAddr("udp", ueAssociatedGTPConnection.UPFIPAddr+":2152")
-		if err != nil {
-			ikeLog.Errorf("Resolve UDP address failed: %+v", err)
-			return
-		}
-
-		// UE TEID
-		ueTEID := n3iwfSelf.NewTEID(thisUE)
-		if ueTEID == 0 {
-			ikeLog.Error("Invalid TEID (0).")
-			return
-		}
-
-		// Set UE associated GTP connection
-		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
-		ueAssociatedGTPConnection.IncomingTEID = ueTEID
-		ueAssociatedGTPConnection.UserPlaneConnection = userPlaneConnection
-
-		// Append NGAP PDU session resource setup response transfer
-		transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
-		if err != nil {
-			ikeLog.Errorf("Build PDU session resource setup response transfer failed: %+v", err)
-			return
-		}
-		ngap_message.AppendPDUSessionResourceSetupListSURes(temporaryPDUSessionSetupData.SetupListSURes, pduSessionID, transfer)
-	} else {
-		// Setup GTP connection with UPF
-		userPlaneConnection, upfUDPAddr, err := relay.SetupGTPTunnelWithUPF(ueAssociatedGTPConnection.UPFIPAddr)
-		if err != nil {
-			ikeLog.Errorf("Setup GTP connection with UPF failed: %+v", err)
-			return
-		}
-		// Listen GTP tunnel
-		if err := relay.ListenGTP(userPlaneConnection); err != nil {
-			ikeLog.Errorf("Listening GTP tunnel failed: %+v", err)
-			return
-		}
-
-		// UE TEID
-		ueTEID := n3iwfSelf.NewTEID(thisUE)
-		if ueTEID == 0 {
-			ikeLog.Error("Invalid TEID (0).")
-			return
-		}
-
-		// Setup GTP connection with UPF
-		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
-		ueAssociatedGTPConnection.IncomingTEID = ueTEID
-		ueAssociatedGTPConnection.UserPlaneConnection = userPlaneConnection
-
-		// Store GTP connection with UPF into N3IWF context
-		n3iwfSelf.GTPConnectionWithUPFStore(ueAssociatedGTPConnection.UPFIPAddr, userPlaneConnection)
-
-		// Append NGAP PDU session resource setup response transfer
-		transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
-		if err != nil {
-			ikeLog.Errorf("Build PDU session resource setup response transfer failed: %+v", err)
-			return
-		}
-		ngap_message.AppendPDUSessionResourceSetupListSURes(temporaryPDUSessionSetupData.SetupListSURes, pduSessionID, transfer)
+	// Append NGAP PDU session resource setup response transfer
+	transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
+	if err != nil {
+		ikeLog.Errorf("Build PDU session resource setup response transfer failed: %+v", err)
+		return
 	}
+	ngap_message.AppendPDUSessionResourceSetupListSURes(temporaryPDUSessionSetupData.SetupListSURes, pduSessionID, transfer)
 
+	// Remove handled PDU session setup request from queue
 	temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 
 	for {
