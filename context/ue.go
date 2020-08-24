@@ -35,6 +35,10 @@ type N3IWFUe struct {
 
 	/* PDU Session Setup Temporary Data */
 	TemporaryPDUSessionSetupData *PDUSessionSetupTemporaryData
+	/* Temporary cached NAS message */
+	// Used when NAS registration accept arrived before
+	// UE setup NAS TCP connection with N3IWF
+	TemporaryCachedNASMessage []byte
 
 	/* Security */
 	Kn3iwf               []uint8                          // 32 bytes (256 bits), value is from NGAP IE "Security Key"

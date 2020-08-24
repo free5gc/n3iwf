@@ -118,7 +118,10 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 				continue
 			}
 
-			go ngap.Dispatch(conn, data[:n])
+			forwardData := make([]byte, n)
+			copy(forwardData, data[:n])
+
+			go ngap.Dispatch(conn, forwardData)
 		}
 	}
 }

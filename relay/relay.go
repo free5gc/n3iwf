@@ -53,7 +53,7 @@ func ListenN1UPTraffic() error {
 func listenRawSocket(rawSocket *ipv4.RawConn) {
 	defer rawSocket.Close()
 
-	buffer := make([]byte, 1500)
+	buffer := make([]byte, 65535)
 
 	for {
 		ipHeader, ipPayload, _, err := rawSocket.ReadFrom(buffer)
@@ -63,7 +63,10 @@ func listenRawSocket(rawSocket *ipv4.RawConn) {
 			return
 		}
 
-		go ForwardUPTrafficFromN1(ipHeader.Src.String(), ipPayload[4:])
+		forwardData := make([]byte, len(ipPayload[4:]))
+		copy(forwardData, ipPayload[4:])
+
+		go ForwardUPTrafficFromN1(ipHeader.Src.String(), forwardData)
 	}
 
 }
@@ -154,7 +157,7 @@ func ListenGTP(userPlaneConnection *gtpv1.UPlaneConn) error {
 func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 	defer userPlaneConnection.Close()
 
-	payload := make([]byte, 1500)
+	payload := make([]byte, 65535)
 
 	for {
 		n, _, teid, err := userPlaneConnection.ReadFromGTP(payload)
@@ -164,7 +167,10 @@ func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 			return
 		}
 
-		go ForwardUPTrafficFromN3(teid, payload[:n])
+		forwardData := make([]byte, n)
+		copy(forwardData, payload[:n])
+
+		go ForwardUPTrafficFromN3(teid, forwardData)
 	}
 
 }
@@ -219,6 +225,8 @@ func ForwardUPTrafficFromN3(ueTEID uint32, packet []byte) {
 	}
 }
 
+// SetupNASTCPServer setup N3IWF NAS for UE to forward NAS message
+// to AMF
 func SetupNASTCPServer() error {
 	// N3IWF context
 	n3iwfSelf := n3iwf_context.N3IWFSelf()
@@ -229,6 +237,8 @@ func SetupNASTCPServer() error {
 		relayLog.Errorf("Listen TCP address failed: %+v", err)
 		return errors.New("Listen failed")
 	}
+
+	relayLog.Tracef("Successfully listen %+v", tcpAddr)
 
 	go tcpServerListen(tcpListener)
 
@@ -245,23 +255,40 @@ func tcpServerListen(tcpListener net.Listener) {
 			return
 		}
 
-		go tcpConnectionHandler(connection)
+		relayLog.Tracef("Accepted one UE from %+v", connection.RemoteAddr())
+
+		// Find UE context and store this connection in to it, then check if
+		// there is any cached NAS message for this UE. If yes, send to it.
+		n3iwfSelf := n3iwf_context.N3IWFSelf()
+
+		ueIP := strings.Split(connection.RemoteAddr().String(), ":")[0]
+		ue, ok := n3iwfSelf.AllocatedUEIPAddressLoad(ueIP)
+		if !ok {
+			relayLog.Errorf("UE context not found for peer %+v", ueIP)
+			continue
+		}
+
+		// Store connection
+		ue.TCPConnection = connection
+
+		if ue.TemporaryCachedNASMessage != nil {
+			// Send to UE
+			if n, err := connection.Write(ue.TemporaryCachedNASMessage); err != nil {
+				relayLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
+			} else {
+				relayLog.Trace("Forward N1 <- N2")
+				relayLog.Tracef("Wrote %d bytes", n)
+			}
+			// Clean the cached message
+			ue.TemporaryCachedNASMessage = nil
+		}
+
+		go tcpConnectionHandler(ue, connection)
 	}
 }
 
-func tcpConnectionHandler(connection net.Conn) {
+func tcpConnectionHandler(ue *n3iwf_context.N3IWFUe, connection net.Conn) {
 	defer connection.Close()
-
-	// N3IWF context
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-
-	ueIP := strings.Split(connection.RemoteAddr().String(), ":")[0]
-	ue, ok := n3iwfSelf.AllocatedUEIPAddressLoad(ueIP)
-	if !ok {
-		relayLog.Error("UE context not found")
-		return
-	}
-	ue.TCPConnection = connection
 
 	data := make([]byte, 65535)
 	for {
@@ -275,13 +302,17 @@ func tcpConnectionHandler(connection net.Conn) {
 				relayLog.Errorf("Read TCP connection failed: %+v", err)
 			}
 		}
-
 		relayLog.Tracef("Get NAS PDU from UE:\nNAS length: %d\nNAS content:\n%s", n, hex.Dump(data[:n]))
 
-		go ForwardCPTrafficFromN1(ue, data[:n])
+		forwardData := make([]byte, n)
+		copy(forwardData, data[:n])
+
+		go ForwardCPTrafficFromN1(ue, forwardData)
 	}
 }
 
+// ForwardCPTrafficFromN1 forward NAS message sent from UE to the
+// associated AMF
 func ForwardCPTrafficFromN1(ue *n3iwf_context.N3IWFUe, packet []byte) {
 	relayLog.Trace("Forward N1 -> N2")
 	ngap_message.SendUplinkNASTransport(ue.AMF, ue, packet)
