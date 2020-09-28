@@ -75,7 +75,8 @@ func Dispatch(conn *sctp.SCTPConn, msg []byte) {
 		case ngapType.ProcedureCodeOverloadStop:
 			handler.HandleOverloadStop(amf, pdu)
 		default:
-			Ngaplog.Warnf("Not implemented NGAP message(initiatingMessage), procedureCode:%d]\n", initiatingMessage.ProcedureCode.Value)
+			Ngaplog.Warnf("Not implemented NGAP message(initiatingMessage), procedureCode:%d]\n",
+				initiatingMessage.ProcedureCode.Value)
 		}
 	case ngapType.NGAPPDUPresentSuccessfulOutcome:
 		successfulOutcome := pdu.SuccessfulOutcome
@@ -94,7 +95,8 @@ func Dispatch(conn *sctp.SCTPConn, msg []byte) {
 		case ngapType.ProcedureCodeRANConfigurationUpdate:
 			handler.HandleRANConfigurationUpdateAcknowledge(amf, pdu)
 		default:
-			Ngaplog.Warnf("Not implemented NGAP message(successfulOutcome), procedureCode:%d]\n", successfulOutcome.ProcedureCode.Value)
+			Ngaplog.Warnf("Not implemented NGAP message(successfulOutcome), procedureCode:%d]\n",
+				successfulOutcome.ProcedureCode.Value)
 		}
 	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
 		unsuccessfulOutcome := pdu.UnsuccessfulOutcome
@@ -109,7 +111,8 @@ func Dispatch(conn *sctp.SCTPConn, msg []byte) {
 		case ngapType.ProcedureCodeRANConfigurationUpdate:
 			handler.HandleRANConfigurationUpdateFailure(amf, pdu)
 		default:
-			Ngaplog.Warnf("Not implemented NGAP message(unsuccessfulOutcome), procedureCode:%d]\n", unsuccessfulOutcome.ProcedureCode.Value)
+			Ngaplog.Warnf("Not implemented NGAP message(unsuccessfulOutcome), procedureCode:%d]\n",
+				unsuccessfulOutcome.ProcedureCode.Value)
 		}
 	}
 }
