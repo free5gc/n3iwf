@@ -84,17 +84,12 @@ func forward(ueInnerIP string, packet []byte) {
 		return
 	}
 
-	var pduSession *context.PDUSession
-
-	for _, pduSession = range ue.PduSessionList {
-		break
-	}
-
-	if pduSession == nil {
+	if len(ue.PduSessionList) == 0 {
 		nwuupLog.Error("This UE doesn't have any available PDU session")
 		return
 	}
 
+	pduSession := ue.PduSessionList[0]
 	gtpConnection := pduSession.GTPConnection
 
 	userPlaneConnection := gtpConnection.UserPlaneConnection
