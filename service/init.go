@@ -110,41 +110,38 @@ func (n3iwf *N3IWF) Start() {
 	if err := ngap_service.Run(); err != nil {
 		initLog.Errorf("Start NGAP service failed: %+v", err)
 		return
-	} else {
-		initLog.Info("NGAP service running.")
-		wg.Add(1)
 	}
+	initLog.Info("NGAP service running.")
+	wg.Add(1)
 
 	// Relay listeners
 	// Control plane
 	if err := nwucp_service.Run(); err != nil {
 		initLog.Errorf("Listen NWu control plane traffic failed: %+v", err)
-	} else {
-		initLog.Info("NAS TCP server successfully started.")
-		wg.Add(1)
+		return
 	}
+	initLog.Info("NAS TCP server successfully started.")
+	wg.Add(1)
+
 	// User plane
 	if err := nwuup_service.Run(); err != nil {
 		initLog.Errorf("Listen NWu user plane traffic failed: %+v", err)
 		return
-	} else {
-		initLog.Info("Listening NWu user plane traffic")
-		wg.Add(1)
 	}
+	initLog.Info("Listening NWu user plane traffic")
+	wg.Add(1)
 
 	// IKE
 	if err := ike_service.Run(); err != nil {
 		initLog.Errorf("Start IKE service failed: %+v", err)
 		return
-	} else {
-		initLog.Info("IKE service running.")
-		wg.Add(1)
 	}
+	initLog.Info("IKE service running.")
+	wg.Add(1)
 
 	initLog.Info("N3IWF running...")
 
 	wg.Wait()
-
 }
 
 func (n3iwf *N3IWF) Exec(c *cli.Context) error {
