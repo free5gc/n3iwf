@@ -15,7 +15,6 @@ import (
 	ike_message "free5gc/src/n3iwf/ike/message"
 	"free5gc/src/n3iwf/logger"
 	ngap_message "free5gc/src/n3iwf/ngap/message"
-	"free5gc/src/n3iwf/relay"
 
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -55,8 +54,10 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 	if majorVersion > 2 {
 		ikeLog.Warn("[IKE] Received an IKE message with higher major version")
 		// send INFORMATIONAL type message with INVALID_MAJOR_VERSION Notify payload
-		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
-		notificationPayload := ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_MAJOR_VERSION, nil, nil)
+		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+			ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
+		notificationPayload := ike_message.BuildNotification(ike_message.TypeNone,
+			ike_message.INVALID_MAJOR_VERSION, nil, nil)
 
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
 
@@ -74,7 +75,9 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 		case ike_message.TypeNiNr:
 			nonce = ikePayload.(*ike_message.Nonce)
 		default:
-			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler", ikePayload.Type())
+			ikeLog.Warnf(
+				"[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
 		}
 	}
 
@@ -84,7 +87,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 
 			if len(proposal.EncryptionAlgorithm) > 0 {
 				for _, transform := range proposal.EncryptionAlgorithm {
-					if is_supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+					if is_supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID,
+						transform.AttributePresent, transform.AttributeValue) {
 						chosenProposal.EncryptionAlgorithm = append(chosenProposal.EncryptionAlgorithm, transform)
 						break
 					}
@@ -97,7 +101,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 			}
 			if len(proposal.PseudorandomFunction) > 0 {
 				for _, transform := range proposal.PseudorandomFunction {
-					if is_supported(ike_message.TypePseudorandomFunction, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+					if is_supported(ike_message.TypePseudorandomFunction, transform.TransformID,
+						transform.AttributePresent, transform.AttributeValue) {
 						chosenProposal.PseudorandomFunction = append(chosenProposal.PseudorandomFunction, transform)
 						break
 					}
@@ -110,7 +115,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 			}
 			if len(proposal.IntegrityAlgorithm) > 0 {
 				for _, transform := range proposal.IntegrityAlgorithm {
-					if is_supported(ike_message.TypeIntegrityAlgorithm, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+					if is_supported(ike_message.TypeIntegrityAlgorithm, transform.TransformID,
+						transform.AttributePresent, transform.AttributeValue) {
 						chosenProposal.IntegrityAlgorithm = append(chosenProposal.IntegrityAlgorithm, transform)
 						break
 					}
@@ -123,7 +129,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 			}
 			if len(proposal.DiffieHellmanGroup) > 0 {
 				for _, transform := range proposal.DiffieHellmanGroup {
-					if is_supported(ike_message.TypeDiffieHellmanGroup, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+					if is_supported(ike_message.TypeDiffieHellmanGroup, transform.TransformID,
+						transform.AttributePresent, transform.AttributeValue) {
 						chosenProposal.DiffieHellmanGroup = append(chosenProposal.DiffieHellmanGroup, transform)
 						break
 					}
@@ -153,7 +160,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 		if responseSecurityAssociation == nil {
 			ikeLog.Warn("[IKE] No proposal chosen")
 			// Respond NO_PROPOSAL_CHOSEN to UE
-			responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_SA_INIT, ike_message.ResponseBitCheck, message.MessageID)
+			responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+				ike_message.IKE_SA_INIT, ike_message.ResponseBitCheck, message.MessageID)
 			notificationPayload := ike_message.BuildNotification(ike_message.TypeNone, ike_message.NO_PROPOSAL_CHOSEN, nil, nil)
 
 			responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
@@ -173,12 +181,14 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 		if chosenDiffieHellmanGroup != keyExcahge.DiffieHellmanGroup {
 			ikeLog.Warn("[IKE] The Diffie-Hellman group defined in key exchange payload not matches the one in chosen proposal")
 			// send INVALID_KE_PAYLOAD to UE
-			responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_SA_INIT, ike_message.ResponseBitCheck, message.MessageID)
+			responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+				ike_message.IKE_SA_INIT, ike_message.ResponseBitCheck, message.MessageID)
 
 			notificationData := make([]byte, 2)
 			binary.BigEndian.PutUint16(notificationData, chosenDiffieHellmanGroup)
 
-			notificationPayload := ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_KE_PAYLOAD, nil, notificationData)
+			notificationPayload :=
+				ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_KE_PAYLOAD, nil, notificationData)
 
 			responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, notificationPayload)
 
@@ -189,7 +199,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 
 		var localPublicValue []byte
 
-		localPublicValue, sharedKeyData = CalculateDiffieHellmanMaterials(GenerateRandomNumber(), keyExcahge.KeyExchangeData, chosenDiffieHellmanGroup)
+		localPublicValue, sharedKeyData = CalculateDiffieHellmanMaterials(GenerateRandomNumber(),
+			keyExcahge.KeyExchangeData, chosenDiffieHellmanGroup)
 		responseKeyExchange = ike_message.BUildKeyExchange(chosenDiffieHellmanGroup, localPublicValue)
 	} else {
 		ikeLog.Error("[IKE] The key exchange field is nil")
@@ -211,6 +222,7 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 	// Create new IKE security association
 	ikeSecurityAssociation := n3iwfSelf.NewIKESecurityAssociation()
 	ikeSecurityAssociation.RemoteSPI = message.InitiatorSPI
+	ikeSecurityAssociation.MessageID = message.MessageID
 
 	// Record algorithm in context
 	ikeSecurityAssociation.EncryptionAlgorithm = responseSecurityAssociation.Proposals[0].EncryptionAlgorithm[0]
@@ -229,7 +241,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 	}
 
 	// Send response to UE
-	responseIKEMessage = ike_message.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI, ikeSecurityAssociation.LocalSPI, ike_message.IKE_SA_INIT, ike_message.ResponseBitCheck, message.MessageID)
+	responseIKEMessage = ike_message.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI, ikeSecurityAssociation.LocalSPI,
+		ike_message.IKE_SA_INIT, ike_message.ResponseBitCheck, message.MessageID)
 	responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseSecurityAssociation)
 	responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseKeyExchange)
 	responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNonce)
@@ -264,7 +277,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 		ikeLog.Error("[IKE] Encode IKE payload failed.")
 		return
 	}
-	pseudorandomFunction, ok := NewPseudorandomFunction(ikeSecurityAssociation.SK_pr, ikeSecurityAssociation.PseudorandomFunction.TransformID)
+	pseudorandomFunction, ok := NewPseudorandomFunction(ikeSecurityAssociation.SK_pr,
+		ikeSecurityAssociation.PseudorandomFunction.TransformID)
 	if !ok {
 		ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 		return
@@ -273,7 +287,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 		ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
 		return
 	}
-	ikeSecurityAssociation.LocalUnsignedAuthentication = append(ikeSecurityAssociation.LocalUnsignedAuthentication, pseudorandomFunction.Sum(nil)...)
+	ikeSecurityAssociation.LocalUnsignedAuthentication = append(ikeSecurityAssociation.LocalUnsignedAuthentication,
+		pseudorandomFunction.Sum(nil)...)
 
 	ikeLog.Tracef("Local unsigned authentication data:\n%s", hex.Dump(ikeSecurityAssociation.LocalUnsignedAuthentication))
 
@@ -310,9 +325,11 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		// send INFORMATIONAL type message with INVALID_MAJOR_VERSION Notify payload ( OUTSIDE IKE SA )
 
 		// IKEHDR-{response}
-		responseNotification := ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_MAJOR_VERSION, nil, nil)
+		responseNotification :=
+			ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_MAJOR_VERSION, nil, nil)
 
-		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
+		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+			ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
 		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
@@ -330,7 +347,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		// IKEHDR-{response}
 		responseNotification := ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
 
-		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, 0, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
+		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, 0, ike_message.INFORMATIONAL,
+			ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
 		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
@@ -343,7 +361,9 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		case ike_message.TypeSK:
 			encryptedPayload = ikePayload.(*ike_message.Encrypted)
 		default:
-			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler", ikePayload.Type())
+			ikeLog.Warnf(
+				"[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
 		}
 	}
 
@@ -385,12 +405,15 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		case ike_message.TypeCP:
 			configuration = ikePayload.(*ike_message.Configuration)
 		default:
-			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_AUTH message, this payload will not be handled by IKE handler", ikePayload.Type())
+			ikeLog.Warnf(
+				"[IKE] Get IKE payload (type %d) in IKE_AUTH message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
 		}
 	}
 
 	// NOTE: tune it
 	transformPseudorandomFunction := ikeSecurityAssociation.PseudorandomFunction
+	ikeSecurityAssociation.MessageID = message.MessageID
 
 	switch ikeSecurityAssociation.State {
 	case PreSignalling:
@@ -414,7 +437,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				ikeLog.Error("[IKE] Encoding ID payload message failed.")
 				return
 			}
-			pseudorandomFunction, ok := NewPseudorandomFunction(ikeSecurityAssociation.SK_pr, transformPseudorandomFunction.TransformID)
+			pseudorandomFunction, ok := NewPseudorandomFunction(ikeSecurityAssociation.SK_pr,
+				transformPseudorandomFunction.TransformID)
 			if !ok {
 				ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 				return
@@ -423,7 +447,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
 				return
 			}
-			ikeSecurityAssociation.RemoteUnsignedAuthentication = append(ikeSecurityAssociation.RemoteUnsignedAuthentication, pseudorandomFunction.Sum(nil)...)
+			ikeSecurityAssociation.RemoteUnsignedAuthentication =
+				append(ikeSecurityAssociation.RemoteUnsignedAuthentication, pseudorandomFunction.Sum(nil)...)
 		} else {
 			ikeLog.Error("[IKE] The initiator identification field is nil")
 			// TODO: send error message to UE
@@ -441,7 +466,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		if certificateRequest != nil {
 			ikeLog.Info("UE request N3IWF certificate")
 			if CompareRootCertificate(certificateRequest.CertificateEncoding, certificateRequest.CertificationAuthority) {
-				responseCertificate = ike_message.BuildCertificate(ike_message.X509CertificateSignature, n3iwfSelf.N3IWFCertificate)
+				responseCertificate =
+					ike_message.BuildCertificate(ike_message.X509CertificateSignature, n3iwfSelf.N3IWFCertificate)
 			}
 		}
 
@@ -469,7 +495,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 				if len(proposal.EncryptionAlgorithm) > 0 {
 					for _, transform := range proposal.EncryptionAlgorithm {
-						if is_Kernel_Supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+						if is_Kernel_Supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID,
+							transform.AttributePresent, transform.AttributeValue) {
 							chosenProposal.EncryptionAlgorithm = append(chosenProposal.EncryptionAlgorithm, transform)
 							break
 						}
@@ -485,7 +512,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				}
 				if len(proposal.IntegrityAlgorithm) > 0 {
 					for _, transform := range proposal.IntegrityAlgorithm {
-						if is_Kernel_Supported(ike_message.TypeIntegrityAlgorithm, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+						if is_Kernel_Supported(ike_message.TypeIntegrityAlgorithm, transform.TransformID,
+							transform.AttributePresent, transform.AttributeValue) {
 							chosenProposal.IntegrityAlgorithm = append(chosenProposal.IntegrityAlgorithm, transform)
 							break
 						}
@@ -496,7 +524,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				} // Optional
 				if len(proposal.DiffieHellmanGroup) > 0 {
 					for _, transform := range proposal.DiffieHellmanGroup {
-						if is_Kernel_Supported(ike_message.TypeDiffieHellmanGroup, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+						if is_Kernel_Supported(ike_message.TypeDiffieHellmanGroup, transform.TransformID,
+							transform.AttributePresent, transform.AttributeValue) {
 							chosenProposal.DiffieHellmanGroup = append(chosenProposal.DiffieHellmanGroup, transform)
 							break
 						}
@@ -507,7 +536,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				} // Optional
 				if len(proposal.ExtendedSequenceNumbers) > 0 {
 					for _, transform := range proposal.ExtendedSequenceNumbers {
-						if is_Kernel_Supported(ike_message.TypeExtendedSequenceNumbers, transform.TransformID, transform.AttributePresent, transform.AttributeValue) {
+						if is_Kernel_Supported(ike_message.TypeExtendedSequenceNumbers, transform.TransformID,
+							transform.AttributePresent, transform.AttributeValue) {
 							chosenProposal.ExtendedSequenceNumbers = append(chosenProposal.ExtendedSequenceNumbers, transform)
 							break
 						}
@@ -536,7 +566,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				ikeLog.Warn("[IKE] No proposal chosen")
 				// Respond NO_PROPOSAL_CHOSEN to UE
 				// Build IKE message
-				responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+				responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+					ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
 
 				// Build response
 				var ikePayload []ike_message.IKEPayloadType
@@ -582,7 +613,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		}
 
 		// Build IKE message
-		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+			ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
 
 		// Build response
 		var ikePayload []ike_message.IKEPayloadType
@@ -634,11 +666,11 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 			return
 		}
 
-		// Send IKE message to UE
-		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
-
 		// Shift state
 		ikeSecurityAssociation.State++
+
+		// Send IKE message to UE
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
 	case EAPSignalling:
 		// If success, N3IWF will send an UPLinkNASTransport to AMF
@@ -688,7 +720,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 				// Send EAP failure
 				// Build IKE message
-				responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+				responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+					ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
 
 				// Build response
 				var ikePayload []ike_message.IKEPayloadType
@@ -808,13 +841,15 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					var notification *ike_message.Notification
 
 					// Build IKE message
-					responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+					responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+						 ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
 
 					// Build response
 					var ikePayload []ike_message.IKEPayloadType
 
 					// Notification
-					notification = ike_message.BuildNotification(ike_message.TypeNone, ike_message.AUTHENTICATION_FAILED, nil, nil)
+					notification =
+						ike_message.BuildNotification(ike_message.TypeNone, ike_message.AUTHENTICATION_FAILED, nil, nil)
 					ikePayload = append(ikePayload, notification)
 
 					if err := EncryptProcedure(ikeSecurityAssociation, ikePayload, responseIKEMessage); err != nil {
@@ -831,16 +866,18 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 			ikeLog.Warn("[IKE] Peer authentication failed.")
 			// Inform UE the authentication has failed
 			// IKEHDR-SK-{response}
-			var responseNotification *ike_message.Notification
+			// var responseNotification *ike_message.Notification
 
 			// Build IKE message
-			responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+			responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+				ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
 
 			// Build response
 			var ikePayload []ike_message.IKEPayloadType
 
 			// Notification
-			responseNotification = ike_message.BuildNotification(ike_message.TypeNone, ike_message.AUTHENTICATION_FAILED, nil, nil)
+			responseNotification =
+				ike_message.BuildNotification(ike_message.TypeNone, ike_message.AUTHENTICATION_FAILED, nil, nil)
 			ikePayload = append(ikePayload, responseNotification)
 
 			if err := EncryptProcedure(ikeSecurityAssociation, ikePayload, responseIKEMessage); err != nil {
@@ -866,7 +903,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				case ike_message.INTERNAL_IP4_ADDRESS:
 					addrRequest = true
 					if len(attribute.Value) != 0 {
-						ikeLog.Tracef("[IKE] Got client requested address: %d.%d.%d.%d", attribute.Value[0], attribute.Value[1], attribute.Value[2], attribute.Value[3])
+						ikeLog.Tracef("[IKE] Got client requested address: %d.%d.%d.%d",
+							attribute.Value[0], attribute.Value[1], attribute.Value[2], attribute.Value[3])
 					}
 				default:
 					ikeLog.Warnf("[IKE] Receive other type of configuration request: %d", attribute.Type)
@@ -885,19 +923,24 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 			n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
 
 			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_ADDRESS, ueIPAddr))
-			attributes = append(attributes, ike_message.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_NETMASK, n3iwfSelf.Subnet.Mask))
+			attributes = append(attributes, ike_message.BuildConfigurationAttribute(
+				ike_message.INTERNAL_IP4_NETMASK, n3iwfSelf.Subnet.Mask))
 
 			thisUE.IPSecInnerIP = ueIPAddr.String()
 			ikeLog.Tracef("ueIPAddr: %+v", ueIPAddr)
 
 			// Prepare individual traffic selectors
-			individualTrafficSelectorInitiator := ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-				0, 65535, ueIPAddr.To4(), ueIPAddr.To4())
-			individualTrafficSelectorResponder := ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-				0, 65535, n3iwfIPAddr.To4(), n3iwfIPAddr.To4())
+			individualTrafficSelectorInitiator :=
+				ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
+					0, 65535, ueIPAddr.To4(), ueIPAddr.To4())
+			individualTrafficSelectorResponder :=
+				ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
+					0, 65535, n3iwfIPAddr.To4(), n3iwfIPAddr.To4())
 
-			responseTrafficSelectorInitiator = ike_message.BuildTrafficSelectorInitiator([]*ike_message.IndividualTrafficSelector{individualTrafficSelectorInitiator})
-			responseTrafficSelectorResponder = ike_message.BuildTrafficSelectorResponder([]*ike_message.IndividualTrafficSelector{individualTrafficSelectorResponder})
+			responseTrafficSelectorInitiator = ike_message.BuildTrafficSelectorInitiator(
+				[]*ike_message.IndividualTrafficSelector{individualTrafficSelectorInitiator})
+			responseTrafficSelectorResponder = ike_message.BuildTrafficSelectorResponder(
+				[]*ike_message.IndividualTrafficSelector{individualTrafficSelectorResponder})
 
 			// Record traffic selector to IKE security association
 			ikeSecurityAssociation.TrafficSelectorInitiator = responseTrafficSelectorInitiator
@@ -932,12 +975,15 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 		// Get xfrm needed data
 		// As specified in RFC 7296, ESP negotiate two child security association (pair) in one IKE_AUTH
-		childSecurityAssociationContext, err := thisUE.CreateIKEChildSecurityAssociation(ikeSecurityAssociation.IKEAuthResponseSA)
+		childSecurityAssociationContext, err :=
+			thisUE.CreateIKEChildSecurityAssociation(ikeSecurityAssociation.IKEAuthResponseSA)
 		if err != nil {
 			ikeLog.Errorf("[IKE] Create child security association context failed: %+v", err)
 			return
 		}
-		err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueAddr.IP, ikeSecurityAssociation.TrafficSelectorResponder.TrafficSelectors[0], ikeSecurityAssociation.TrafficSelectorInitiator.TrafficSelectors[0])
+		err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueAddr.IP,
+			ikeSecurityAssociation.TrafficSelectorResponder.TrafficSelectors[0],
+			ikeSecurityAssociation.TrafficSelectorInitiator.TrafficSelectors[0])
 		if err != nil {
 			ikeLog.Errorf("[IKE] Parse IP address to child security association failed: %+v", err)
 			return
@@ -945,13 +991,14 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		// Select TCP traffic
 		childSecurityAssociationContext.SelectedIPProtocol = unix.IPPROTO_TCP
 
-		if err := GenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContext); err != nil {
-			ikeLog.Errorf("[IKE] Generate key for child SA failed: %+v", err)
+		if errGen := GenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContext); errGen != nil {
+			ikeLog.Errorf("[IKE] Generate key for child SA failed: %+v", errGen)
 			return
 		}
 
 		// Build IKE message
-		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+			ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
 
 		// Build response
 		var ikePayload []ike_message.IKEPayloadType
@@ -960,7 +1007,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		ikePayload = append(ikePayload, responseConfiguration)
 
 		// Authentication
-		responseAuthentication = ike_message.BuildAuthentication(ike_message.SharedKeyMesageIntegrityCode, pseudorandomFunction.Sum(nil))
+		responseAuthentication = ike_message.BuildAuthentication(
+			ike_message.SharedKeyMesageIntegrityCode, pseudorandomFunction.Sum(nil))
 		ikePayload = append(ikePayload, responseAuthentication)
 
 		// Security Association
@@ -979,8 +1027,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		responseNotification = ike_message.BuildNotifyNAS_TCP_PORT(n3iwfSelf.TCPPort)
 		ikePayload = append(ikePayload, responseNotification)
 
-		if err := EncryptProcedure(ikeSecurityAssociation, ikePayload, responseIKEMessage); err != nil {
-			ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
+		if errEncrypt := EncryptProcedure(ikeSecurityAssociation, ikePayload, responseIKEMessage); errEncrypt != nil {
+			ikeLog.Errorf("Encrypting IKE message failed: %+v", errEncrypt)
 			return
 		}
 
@@ -1005,7 +1053,9 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					// Send CREATE_CHILD_SA to UE
 					// Add MessageID for IKE security association
 					ikeSecurityAssociation.MessageID++
-					ikeMessage := ike_message.BuildIKEHeader(ikeSecurityAssociation.LocalSPI, ikeSecurityAssociation.RemoteSPI, ike_message.CREATE_CHILD_SA, ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
+					ikeMessage := ike_message.BuildIKEHeader(ikeSecurityAssociation.LocalSPI,
+						ikeSecurityAssociation.RemoteSPI, ike_message.CREATE_CHILD_SA,
+						ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
 
 					// IKE payload
 					var ikePayload []ike_message.IKEPayloadType
@@ -1032,10 +1082,12 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					// Encryption transform
 					var attributeType uint16 = ike_message.AttributeTypeKeyLength
 					var attributeValue uint16 = 256
-					encryptionTransform := ike_message.BuildTransform(ike_message.TypeEncryptionAlgorithm, ike_message.ENCR_AES_CBC, &attributeType, &attributeValue, nil)
+					encryptionTransform := ike_message.BuildTransform(ike_message.TypeEncryptionAlgorithm,
+						ike_message.ENCR_AES_CBC, &attributeType, &attributeValue, nil)
 					if ok := ike_message.AppendTransformToProposal(proposal, encryptionTransform); !ok {
 						ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
-						thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+						thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
+							thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 						cause := ngapType.Cause{
 							Present: ngapType.CausePresentTransport,
 							Transport: &ngapType.CauseTransport{
@@ -1047,15 +1099,18 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 							ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 							continue
 						}
-						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(
+							thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 						continue
 					}
 					// Integrity transform
 					if pduSession.SecurityIntegrity {
-						integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_SHA1_96, nil, nil, nil)
+						integrityTransform := ike_message.BuildTransform(
+							ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_SHA1_96, nil, nil, nil)
 						if ok := ike_message.AppendTransformToProposal(proposal, integrityTransform); !ok {
 							ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
-							thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+							thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
+								thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 							cause := ngapType.Cause{
 								Present: ngapType.CausePresentTransport,
 								Transport: &ngapType.CauseTransport{
@@ -1067,15 +1122,18 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 								ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 								continue
 							}
-							ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+							ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(
+								thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 							continue
 						}
 					}
 					// ESN transform
-					esnTransform := ike_message.BuildTransform(ike_message.TypeExtendedSequenceNumbers, ike_message.ESN_NO, nil, nil, nil)
+					esnTransform :=
+						ike_message.BuildTransform(ike_message.TypeExtendedSequenceNumbers, ike_message.ESN_NO, nil, nil, nil)
 					if ok := ike_message.AppendTransformToProposal(proposal, esnTransform); !ok {
 						ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
-						thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+						thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
+							thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 						cause := ngapType.Cause{
 							Present: ngapType.CausePresentTransport,
 							Transport: &ngapType.CauseTransport{
@@ -1087,7 +1145,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 							ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 							continue
 						}
-						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(
+							thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 						continue
 					}
 
@@ -1108,17 +1167,21 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 					// TSi
 					ueIPAddr := net.ParseIP(thisUE.IPSecInnerIP)
-					individualTrafficSelector := ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-						0, 65535, ueIPAddr, ueIPAddr)
-					trafficSelectorInitiator := ike_message.BuildTrafficSelectorInitiator([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
+					individualTrafficSelector :=
+						ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
+							0, 65535, ueIPAddr, ueIPAddr)
+					trafficSelectorInitiator :=
+						ike_message.BuildTrafficSelectorInitiator([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
 
 					ikePayload = append(ikePayload, trafficSelectorInitiator)
 
 					// TSr
 					n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
-					individualTrafficSelector = ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-						0, 65535, n3iwfIPAddr, n3iwfIPAddr)
-					trafficSelectorResponder := ike_message.BuildTrafficSelectorResponder([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
+					individualTrafficSelector =
+						ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
+							0, 65535, n3iwfIPAddr, n3iwfIPAddr)
+					trafficSelectorResponder :=
+						ike_message.BuildTrafficSelectorResponder([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
 
 					ikePayload = append(ikePayload, trafficSelectorResponder)
 
@@ -1134,7 +1197,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 					if err := EncryptProcedure(thisUE.N3IWFIKESecurityAssociation, ikePayload, ikeMessage); err != nil {
 						ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
-						thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+						thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
+							thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 						cause := ngapType.Cause{
 							Present: ngapType.CausePresentTransport,
 							Transport: &ngapType.CauseTransport{
@@ -1146,7 +1210,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 							ikeLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 							continue
 						}
-						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(
+							thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 						continue
 					}
 
@@ -1154,7 +1219,9 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					break
 				} else {
 					// Send Initial Context Setup Response to AMF
-					ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE, thisUE.TemporaryPDUSessionSetupData.SetupListCxtRes, thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, nil)
+					ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE,
+						thisUE.TemporaryPDUSessionSetupData.SetupListCxtRes,
+						thisUE.TemporaryPDUSessionSetupData.FailedListCxtRes, nil)
 					break
 				}
 			}
@@ -1188,9 +1255,11 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		// send INFORMATIONAL type message with INVALID_MAJOR_VERSION Notify payload ( OUTSIDE IKE SA )
 
 		// IKEHDR-{response}
-		responseNotification := ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_MAJOR_VERSION, nil, nil)
+		responseNotification :=
+			ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_MAJOR_VERSION, nil, nil)
 
-		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
+		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+			ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
 		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
@@ -1208,7 +1277,8 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		// IKEHDR-{response}
 		responseNotification := ike_message.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
 
-		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, 0, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, message.MessageID)
+		responseIKEMessage = ike_message.BuildIKEHeader(message.InitiatorSPI, 0, ike_message.INFORMATIONAL,
+			ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseNotification)
 
 		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
@@ -1221,7 +1291,9 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		case ike_message.TypeSK:
 			encryptedPayload = ikePayload.(*ike_message.Encrypted)
 		default:
-			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler", ikePayload.Type())
+			ikeLog.Warnf(
+				"[IKE] Get IKE payload (type %d) in IKE_SA_INIT message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
 		}
 	}
 
@@ -1248,9 +1320,14 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		case ike_message.TypeTSr:
 			trafficSelectorResponder = ikePayload.(*ike_message.TrafficSelectorResponder)
 		default:
-			ikeLog.Warnf("[IKE] Get IKE payload (type %d) in IKE_AUTH message, this payload will not be handled by IKE handler", ikePayload.Type())
+			ikeLog.Warnf(
+				"[IKE] Get IKE payload (type %d) in IKE_AUTH message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
 		}
 	}
+
+	// Record message ID
+	ikeSecurityAssociation.MessageID = message.MessageID
 
 	// UE context
 	thisUE := ikeSecurityAssociation.ThisUE
@@ -1307,7 +1384,8 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		ikeLog.Errorf("[IKE] Create child security association context failed: %+v", err)
 		return
 	}
-	err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueAddr.IP, trafficSelectorInitiator.TrafficSelectors[0], trafficSelectorResponder.TrafficSelectors[0])
+	err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueAddr.IP,
+		trafficSelectorInitiator.TrafficSelectors[0], trafficSelectorResponder.TrafficSelectors[0])
 	if err != nil {
 		ikeLog.Errorf("[IKE] Parse IP address to child security association failed: %+v", err)
 		return
@@ -1315,8 +1393,8 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	// Select GRE traffic
 	childSecurityAssociationContext.SelectedIPProtocol = unix.IPPROTO_GRE
 
-	if err := GenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContext); err != nil {
-		ikeLog.Errorf("[IKE] Generate key for child SA failed: %+v", err)
+	if errGen := GenerateKeyForChildSA(ikeSecurityAssociation, childSecurityAssociationContext); errGen != nil {
+		ikeLog.Errorf("[IKE] Generate key for child SA failed: %+v", errGen)
 		return
 	}
 
@@ -1326,72 +1404,16 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		return
 	}
 
-	// Setup GTP tunnel for UE
-	ueAssociatedGTPConnection := pduSession.GTPConnection
-	if userPlaneConnection, ok := n3iwfSelf.GTPConnectionWithUPFLoad(ueAssociatedGTPConnection.UPFIPAddr); ok {
-		// UPF UDP address
-		upfUDPAddr, err := net.ResolveUDPAddr("udp", ueAssociatedGTPConnection.UPFIPAddr+":2152")
-		if err != nil {
-			ikeLog.Errorf("Resolve UDP address failed: %+v", err)
-			return
-		}
-
-		// UE TEID
-		ueTEID := n3iwfSelf.NewTEID(thisUE)
-		if ueTEID == 0 {
-			ikeLog.Error("Invalid TEID (0).")
-			return
-		}
-
-		// Set UE associated GTP connection
-		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
-		ueAssociatedGTPConnection.IncomingTEID = ueTEID
-		ueAssociatedGTPConnection.UserPlaneConnection = userPlaneConnection
-
-		// Append NGAP PDU session resource setup response transfer
-		transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
-		if err != nil {
-			ikeLog.Errorf("Build PDU session resource setup response transfer failed: %+v", err)
-			return
-		}
-		ngap_message.AppendPDUSessionResourceSetupListSURes(temporaryPDUSessionSetupData.SetupListSURes, pduSessionID, transfer)
-	} else {
-		// Setup GTP connection with UPF
-		userPlaneConnection, upfUDPAddr, err := relay.SetupGTPTunnelWithUPF(ueAssociatedGTPConnection.UPFIPAddr)
-		if err != nil {
-			ikeLog.Errorf("Setup GTP connection with UPF failed: %+v", err)
-			return
-		}
-		// Listen GTP tunnel
-		if err := relay.ListenGTP(userPlaneConnection); err != nil {
-			ikeLog.Errorf("Listening GTP tunnel failed: %+v", err)
-			return
-		}
-
-		// UE TEID
-		ueTEID := n3iwfSelf.NewTEID(thisUE)
-		if ueTEID == 0 {
-			ikeLog.Error("Invalid TEID (0).")
-			return
-		}
-
-		// Setup GTP connection with UPF
-		ueAssociatedGTPConnection.UPFUDPAddr = upfUDPAddr
-		ueAssociatedGTPConnection.IncomingTEID = ueTEID
-		ueAssociatedGTPConnection.UserPlaneConnection = userPlaneConnection
-
-		// Store GTP connection with UPF into N3IWF context
-		n3iwfSelf.GTPConnectionWithUPFStore(ueAssociatedGTPConnection.UPFIPAddr, userPlaneConnection)
-
-		// Append NGAP PDU session resource setup response transfer
-		transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
-		if err != nil {
-			ikeLog.Errorf("Build PDU session resource setup response transfer failed: %+v", err)
-			return
-		}
-		ngap_message.AppendPDUSessionResourceSetupListSURes(temporaryPDUSessionSetupData.SetupListSURes, pduSessionID, transfer)
+	// Append NGAP PDU session resource setup response transfer
+	transfer, err := ngap_message.BuildPDUSessionResourceSetupResponseTransfer(pduSession)
+	if err != nil {
+		ikeLog.Errorf("Build PDU session resource setup response transfer failed: %+v", err)
+		return
 	}
+	ngap_message.AppendPDUSessionResourceSetupListSURes(
+		temporaryPDUSessionSetupData.SetupListSURes, pduSessionID, transfer)
 
+	// Remove handled PDU session setup request from queue
 	temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 
 	for {
@@ -1405,7 +1427,9 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			// Send CREATE_CHILD_SA to UE
 			// Add MessageID for IKE security association
 			ikeSecurityAssociation.MessageID++
-			ikeMessage := ike_message.BuildIKEHeader(ikeSecurityAssociation.LocalSPI, ikeSecurityAssociation.RemoteSPI, ike_message.CREATE_CHILD_SA, ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
+			ikeMessage := ike_message.BuildIKEHeader(ikeSecurityAssociation.LocalSPI,
+				ikeSecurityAssociation.RemoteSPI, ike_message.CREATE_CHILD_SA,
+				ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
 
 			// IKE payload
 			var ikePayload []ike_message.IKEPayloadType
@@ -1432,10 +1456,12 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			// Encryption transform
 			var attributeType uint16 = ike_message.AttributeTypeKeyLength
 			var attributeValue uint16 = 256
-			encryptionTransform := ike_message.BuildTransform(ike_message.TypeEncryptionAlgorithm, ike_message.ENCR_AES_CBC, &attributeType, &attributeValue, nil)
+			encryptionTransform := ike_message.BuildTransform(ike_message.TypeEncryptionAlgorithm,
+				ike_message.ENCR_AES_CBC, &attributeType, &attributeValue, nil)
 			if ok := ike_message.AppendTransformToProposal(proposal, encryptionTransform); !ok {
 				ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
-				temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+				temporaryPDUSessionSetupData.UnactivatedPDUSession =
+					temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 				cause := ngapType.Cause{
 					Present: ngapType.CausePresentTransport,
 					Transport: &ngapType.CauseTransport{
@@ -1448,15 +1474,18 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 					continue
 				}
 				if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
-					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(
+						temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 				} else {
-					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(
+						temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
 				}
 				continue
 			}
 			// Integrity transform
 			if pduSession.SecurityIntegrity {
-				integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_MD5_96, nil, nil, nil)
+				integrityTransform := ike_message.BuildTransform(ike_message.TypeIntegrityAlgorithm,
+					ike_message.AUTH_HMAC_MD5_96, nil, nil, nil)
 				if ok := ike_message.AppendTransformToProposal(proposal, integrityTransform); !ok {
 					ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
 					temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
@@ -1472,15 +1501,18 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 						continue
 					}
 					if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
-						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+						ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(
+							temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 					} else {
-						ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+						ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(
+							temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
 					}
 					continue
 				}
 			}
 			// ESN transform
-			esnTransform := ike_message.BuildTransform(ike_message.TypeExtendedSequenceNumbers, ike_message.ESN_NO, nil, nil, nil)
+			esnTransform := ike_message.BuildTransform(ike_message.TypeExtendedSequenceNumbers,
+				ike_message.ESN_NO, nil, nil, nil)
 			if ok := ike_message.AppendTransformToProposal(proposal, esnTransform); !ok {
 				ikeLog.Error("Generate IKE message failed: Cannot append to proposal")
 				temporaryPDUSessionSetupData.UnactivatedPDUSession = temporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
@@ -1496,9 +1528,11 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 					continue
 				}
 				if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
-					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(
+						temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 				} else {
-					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(
+						temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
 				}
 				continue
 			}
@@ -1520,17 +1554,21 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 
 			// TSi
 			ueIPAddr := net.ParseIP(thisUE.IPSecInnerIP)
-			individualTrafficSelector := ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-				0, 65535, ueIPAddr, ueIPAddr)
-			trafficSelectorInitiator := ike_message.BuildTrafficSelectorInitiator([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
+			individualTrafficSelector :=
+				ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
+					0, 65535, ueIPAddr, ueIPAddr)
+			trafficSelectorInitiator :=
+				ike_message.BuildTrafficSelectorInitiator([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
 
 			ikePayload = append(ikePayload, trafficSelectorInitiator)
 
 			// TSr
 			n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
-			individualTrafficSelector = ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
-				0, 65535, n3iwfIPAddr, n3iwfIPAddr)
-			trafficSelectorResponder := ike_message.BuildTrafficSelectorResponder([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
+			individualTrafficSelector =
+				ike_message.BuildIndividualTrafficSelector(ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
+					0, 65535, n3iwfIPAddr, n3iwfIPAddr)
+			trafficSelectorResponder :=
+				ike_message.BuildTrafficSelectorResponder([]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
 
 			ikePayload = append(ikePayload, trafficSelectorResponder)
 
@@ -1559,9 +1597,11 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 					continue
 				}
 				if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
-					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
+					ngap_message.AppendPDUSessionResourceFailedToSetupListCxtRes(
+						temporaryPDUSessionSetupData.FailedListCxtRes, pduSessionID, transfer)
 				} else {
-					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
+					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(
+						temporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
 				}
 				continue
 			}
@@ -1572,9 +1612,13 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			// Send Response to AMF
 			ngapProcedure := temporaryPDUSessionSetupData.NGAPProcedureCode.Value
 			if ngapProcedure == ngapType.ProcedureCodeInitialContextSetup {
-				ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE, temporaryPDUSessionSetupData.SetupListCxtRes, temporaryPDUSessionSetupData.FailedListCxtRes, nil)
+				ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE,
+					temporaryPDUSessionSetupData.SetupListCxtRes,
+					temporaryPDUSessionSetupData.FailedListCxtRes, nil)
 			} else {
-				ngap_message.SendPDUSessionResourceSetupResponse(thisUE.AMF, thisUE, temporaryPDUSessionSetupData.SetupListSURes, temporaryPDUSessionSetupData.FailedListSURes, nil)
+				ngap_message.SendPDUSessionResourceSetupResponse(thisUE.AMF, thisUE,
+					temporaryPDUSessionSetupData.SetupListSURes,
+					temporaryPDUSessionSetupData.FailedListSURes, nil)
 			}
 			break
 		}
@@ -1681,7 +1725,8 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 	}
 }
 
-func is_Kernel_Supported(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) bool {
+func is_Kernel_Supported(
+	transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) bool {
 	switch transformType {
 	case ike_message.TypeEncryptionAlgorithm:
 		switch transformID {

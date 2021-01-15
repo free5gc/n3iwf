@@ -3,8 +3,6 @@ package service
 import (
 	"sync"
 	"testing"
-
-	"free5gc/src/n3iwf/n3iwf_handler"
 )
 
 func TestServer(t *testing.T) {
@@ -13,8 +11,9 @@ func TestServer(t *testing.T) {
 
 	wg.Add(2)
 
-	go Run()
-	go n3iwf_handler.Handle()
+	if err := Run(); err != nil {
+		t.Fatalf("Run IKE service failed: %+v", err)
+	}
 
 	wg.Wait()
 

@@ -15,7 +15,8 @@ import (
 	ike_service "free5gc/src/n3iwf/ike/service"
 	"free5gc/src/n3iwf/logger"
 	ngap_service "free5gc/src/n3iwf/ngap/service"
-	"free5gc/src/n3iwf/relay"
+	nwucp_service "free5gc/src/n3iwf/nwucp/service"
+	nwuup_service "free5gc/src/n3iwf/nwuup/service"
 	"free5gc/src/n3iwf/util"
 )
 
@@ -116,18 +117,18 @@ func (n3iwf *N3IWF) Start() {
 
 	// Relay listeners
 	// Control plane
-	if err := relay.SetupNASTCPServer(); err != nil {
-		initLog.Errorf("Listen N1 control plane traffic failed: %+v", err)
+	if err := nwucp_service.Run(); err != nil {
+		initLog.Errorf("Listen NWu control plane traffic failed: %+v", err)
 	} else {
 		initLog.Info("NAS TCP server successfully started.")
 		wg.Add(1)
 	}
 	// User plane
-	if err := relay.ListenN1UPTraffic(); err != nil {
-		initLog.Errorf("Listen N1 user plane traffic failed: %+v", err)
+	if err := nwuup_service.Run(); err != nil {
+		initLog.Errorf("Listen NWu user plane traffic failed: %+v", err)
 		return
 	} else {
-		initLog.Info("Listening N1 user plane traffic")
+		initLog.Info("Listening NWu user plane traffic")
 		wg.Add(1)
 	}
 
@@ -183,8 +184,8 @@ func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 	}()
 
 	go func() {
-		if err := command.Start(); err != nil {
-			initLog.Errorf("N3IWF start error: %v", err)
+		if errCom := command.Start(); errCom != nil {
+			initLog.Errorf("N3IWF start error: %v", errCom)
 		}
 		wg.Done()
 	}()

@@ -9,6 +9,7 @@ import (
 	"free5gc/lib/ngap/ngapConvert"
 	"free5gc/lib/ngap/ngapType"
 	"free5gc/src/n3iwf/context"
+	"free5gc/src/n3iwf/logger"
 	"free5gc/src/n3iwf/util"
 )
 
@@ -68,7 +69,11 @@ func BuildNGSetupRequest() ([]byte, error) {
 	for _, supportedTAItemLocal := range n3iwfSelf.NFInfo.SupportedTAList {
 		// SupportedTAItem in SupportedTAList
 		supportedTAItem := ngapType.SupportedTAItem{}
-		supportedTAItem.TAC.Value, _ = hex.DecodeString(supportedTAItemLocal.TAC)
+		var err error
+		supportedTAItem.TAC.Value, err = hex.DecodeString(supportedTAItemLocal.TAC)
+		if err != nil {
+			logger.NgapLog.Errorf("DecodeString error: %+v", err)
+		}
 
 		broadcastPLMNList := &supportedTAItem.BroadcastPLMNList
 
@@ -82,11 +87,17 @@ func BuildNGSetupRequest() ([]byte, error) {
 			for _, sliceSupportItemLocal := range broadcastPLMNListLocal.TAISliceSupportList {
 				// SliceSupportItem in SliceSupportList
 				sliceSupportItem := ngapType.SliceSupportItem{}
-				sliceSupportItem.SNSSAI.SST.Value, _ = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SST)
+				sliceSupportItem.SNSSAI.SST.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SST)
+				if err != nil {
+					logger.NgapLog.Errorf("DecodeString error: %+v", err)
+				}
 
 				if sliceSupportItemLocal.SNSSAI.SD != "" {
 					sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
-					sliceSupportItem.SNSSAI.SD.Value, _ = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SD)
+					sliceSupportItem.SNSSAI.SD.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SD)
+					if err != nil {
+						logger.NgapLog.Errorf("DecodeString error: %+v", err)
+					}
 				}
 
 				sliceSupportList.List = append(sliceSupportList.List, sliceSupportItem)
@@ -373,7 +384,8 @@ func BuildInitialContextSetupFailure(
 	return ngap.Encoder(pdu)
 }
 
-func BuildUEContextModificationResponse(ue *context.N3IWFUe, criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
+func BuildUEContextModificationResponse(
+	ue *context.N3IWFUe, criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -422,7 +434,8 @@ func BuildUEContextModificationResponse(ue *context.N3IWFUe, criticalityDiagnost
 	return ngap.Encoder(pdu)
 }
 
-func BuildUEContextModificationFailure(ue *context.N3IWFUe, cause ngapType.Cause, criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
+func BuildUEContextModificationFailure(ue *context.N3IWFUe, cause ngapType.Cause,
+	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentUnsuccessfulOutcome
 	pdu.UnsuccessfulOutcome = new(ngapType.UnsuccessfulOutcome)
@@ -479,7 +492,8 @@ func BuildUEContextModificationFailure(ue *context.N3IWFUe, cause ngapType.Cause
 	return ngap.Encoder(pdu)
 }
 
-func BuildUEContextReleaseComplete(ue *context.N3IWFUe, criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
+func BuildUEContextReleaseComplete(ue *context.N3IWFUe,
+	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -548,7 +562,8 @@ func BuildUEContextReleaseComplete(ue *context.N3IWFUe, criticalityDiagnostics *
 	for _, pduSession := range ue.PduSessionList {
 		pDUSessionResourceItemCxtRelCpl := ngapType.PDUSessionResourceItemCxtRelCpl{}
 		pDUSessionResourceItemCxtRelCpl.PDUSessionID.Value = pduSession.Id
-		pDUSessionResourceListCxtRelCpl.List = append(pDUSessionResourceListCxtRelCpl.List, pDUSessionResourceItemCxtRelCpl)
+		pDUSessionResourceListCxtRelCpl.List =
+			append(pDUSessionResourceListCxtRelCpl.List, pDUSessionResourceItemCxtRelCpl)
 	}
 
 	uEContextReleaseCompleteIEs.List = append(uEContextReleaseCompleteIEs.List, ie)
@@ -617,7 +632,8 @@ func BuildUEContextReleaseRequest(ue *context.N3IWFUe, cause ngapType.Cause) ([]
 	for _, pduSession := range ue.PduSessionList {
 		pDUSessionResourceItem := ngapType.PDUSessionResourceItemCxtRelReq{}
 		pDUSessionResourceItem.PDUSessionID.Value = pduSession.Id
-		pDUSessionResourceListCxtRelReq.List = append(pDUSessionResourceListCxtRelReq.List, pDUSessionResourceItem)
+		pDUSessionResourceListCxtRelReq.List =
+			append(pDUSessionResourceListCxtRelReq.List, pDUSessionResourceItem)
 	}
 	uEContextReleaseRequestIEs.List = append(uEContextReleaseRequestIEs.List, ie)
 
@@ -632,7 +648,8 @@ func BuildUEContextReleaseRequest(ue *context.N3IWFUe, cause ngapType.Cause) ([]
 	return ngap.Encoder(pdu)
 }
 
-func BuildInitialUEMessage(ue *context.N3IWFUe, nasPdu []byte, allowedNSSAI *ngapType.AllowedNSSAI) ([]byte, error) {
+func BuildInitialUEMessage(ue *context.N3IWFUe, nasPdu []byte,
+	allowedNSSAI *ngapType.AllowedNSSAI) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -724,7 +741,11 @@ func BuildInitialUEMessage(ue *context.N3IWFUe, nasPdu []byte, allowedNSSAI *nga
 
 		fiveGSTMSI.AMFSetID.Value = amfSetID
 		fiveGSTMSI.AMFPointer.Value = amfPointer
-		fiveGSTMSI.FiveGTMSI.Value, _ = hex.DecodeString(tmsi)
+		var err error
+		fiveGSTMSI.FiveGTMSI.Value, err = hex.DecodeString(tmsi)
+		if err != nil {
+			logger.NgapLog.Errorf("DecodeString error: %+v", err)
+		}
 		initialUEMessageIEs.List = append(initialUEMessageIEs.List, ie)
 	}
 	// AMFSetID
@@ -1635,7 +1656,11 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 		for _, supportedTAItemLocal := range n3iwfSelf.NFInfo.SupportedTAList {
 			// SupportedTAItem in SupportedTAList
 			supportedTAItem := ngapType.SupportedTAItem{}
-			supportedTAItem.TAC.Value, _ = hex.DecodeString(supportedTAItemLocal.TAC)
+			var err error
+			supportedTAItem.TAC.Value, err = hex.DecodeString(supportedTAItemLocal.TAC)
+			if err != nil {
+				logger.NgapLog.Errorf("DecodeString error: %+v", err)
+			}
 
 			broadcastPLMNList := &supportedTAItem.BroadcastPLMNList
 
@@ -1649,11 +1674,17 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 				for _, sliceSupportItemLocal := range broadcastPLMNListLocal.TAISliceSupportList {
 					// SliceSupportItem in SliceSupportList
 					sliceSupportItem := ngapType.SliceSupportItem{}
-					sliceSupportItem.SNSSAI.SST.Value, _ = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SST)
+					sliceSupportItem.SNSSAI.SST.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SST)
+					if err != nil {
+						logger.NgapLog.Errorf("DecodeString error: %+v", err)
+					}
 
 					if sliceSupportItemLocal.SNSSAI.SD != "" {
 						sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
-						sliceSupportItem.SNSSAI.SD.Value, _ = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SD)
+						sliceSupportItem.SNSSAI.SD.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SD)
+						if err != nil {
+							logger.NgapLog.Errorf("DecodeString error: %+v", err)
+						}
 					}
 
 					sliceSupportList.List = append(sliceSupportList.List, sliceSupportItem)
@@ -1720,7 +1751,8 @@ func BuildPDUSessionResourceSetupResponseTransfer(pduSession *context.PDUSession
 	qosFlowPerTNLInformation := &transfer.QosFlowPerTNLInformation
 
 	// UP transport layer information - UE(RAN) side
-	qosFlowPerTNLInformation.UPTransportLayerInformation.Present = ngapType.UPTransportLayerInformationPresentGTPTunnel
+	qosFlowPerTNLInformation.UPTransportLayerInformation.Present =
+		ngapType.UPTransportLayerInformationPresentGTPTunnel
 	qosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel = new(ngapType.GTPTunnel)
 
 	gtpTunnel := qosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel
@@ -1736,13 +1768,15 @@ func BuildPDUSessionResourceSetupResponseTransfer(pduSession *context.PDUSession
 				Value: int64(qfi),
 			},
 		}
-		qosFlowPerTNLInformation.AssociatedQosFlowList.List = append(qosFlowPerTNLInformation.AssociatedQosFlowList.List, associatedQosFlowItem)
+		qosFlowPerTNLInformation.AssociatedQosFlowList.List =
+			append(qosFlowPerTNLInformation.AssociatedQosFlowList.List, associatedQosFlowItem)
 	}
 
 	return aper.MarshalWithParams(transfer, "valueExt")
 }
 
-func BuildPDUSessionResourceSetupUnsuccessfulTransfer(cause ngapType.Cause, criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
+func BuildPDUSessionResourceSetupUnsuccessfulTransfer(
+	cause ngapType.Cause, criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
 
 	transfer := ngapType.PDUSessionResourceSetupUnsuccessfulTransfer{}
 
@@ -1791,7 +1825,8 @@ func BuildPDUSessionResourceModifyResponseTransfer(
 	return aper.MarshalWithParams(transfer, "valueExt")
 }
 
-func BuildPDUSessionResourceModifyUnsuccessfulTransfer(cause ngapType.Cause, criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
+func BuildPDUSessionResourceModifyUnsuccessfulTransfer(cause ngapType.Cause,
+	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
 
 	transfer := ngapType.PDUSessionResourceModifyUnsuccessfulTransfer{}
 

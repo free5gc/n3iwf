@@ -21,7 +21,9 @@ func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []by
 	if localAddr.Port == 4500 {
 		for i := 0; i < 4; i++ {
 			if msg[i] != 0 {
-				ikeLog.Warn("[IKE] Received an IKE packet that does not prepend 4 bytes zero from UDP port 4500, this packet may be the UDP encapsulated ESP. The packet will not be handled.")
+				ikeLog.Warn(
+					"[IKE] Received an IKE packet that does not prepend 4 bytes zero from UDP port 4500," +
+						" this packet may be the UDP encapsulated ESP. The packet will not be handled.")
 				return
 			}
 		}

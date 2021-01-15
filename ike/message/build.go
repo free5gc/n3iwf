@@ -107,7 +107,8 @@ func BuildTrafficSelectorResponder(trafficSelectors []*IndividualTrafficSelector
 	return trafficSelectorResponder
 }
 
-func BuildIndividualTrafficSelector(tsType uint8, ipProtocolID uint8, startPort uint16, endPort uint16, startAddr []byte, endAddr []byte) *IndividualTrafficSelector {
+func BuildIndividualTrafficSelector(tsType uint8, ipProtocolID uint8, startPort uint16, endPort uint16,
+	startAddr []byte, endAddr []byte) *IndividualTrafficSelector {
 	trafficSelector := new(IndividualTrafficSelector)
 	trafficSelector.TSType = tsType
 	trafficSelector.IPProtocolID = ipProtocolID
@@ -118,7 +119,8 @@ func BuildIndividualTrafficSelector(tsType uint8, ipProtocolID uint8, startPort 
 	return trafficSelector
 }
 
-func BuildTransform(transformType uint8, transformID uint16, attributeType *uint16, attributeValue *uint16, variableLengthAttributeValue []byte) *Transform {
+func BuildTransform(transformType uint8, transformID uint16, attributeType *uint16, attributeValue *uint16,
+	variableLengthAttributeValue []byte) *Transform {
 	transform := new(Transform)
 	transform.TransformType = transformType
 	transform.TransformID = transformID
@@ -130,7 +132,8 @@ func BuildTransform(transformType uint8, transformID uint16, attributeType *uint
 			transform.AttributeValue = *attributeValue
 		} else if len(variableLengthAttributeValue) != 0 {
 			transform.AttributeFormat = AttributeFormatUseTLV
-			transform.VariableLengthAttributeValue = append(transform.VariableLengthAttributeValue, variableLengthAttributeValue...)
+			transform.VariableLengthAttributeValue =
+				append(transform.VariableLengthAttributeValue, variableLengthAttributeValue...)
 		} else {
 			return nil
 		}

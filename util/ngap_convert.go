@@ -6,6 +6,7 @@ import (
 	"free5gc/lib/aper"
 	"free5gc/lib/ngap/ngapType"
 	"free5gc/src/n3iwf/context"
+	"free5gc/src/n3iwf/logger"
 	"strings"
 )
 
@@ -18,7 +19,11 @@ func PlmnIdToNgap(plmnId context.PLMNID) (ngapPlmnId ngapType.PLMNIdentity) {
 	} else {
 		hexString = mcc[1] + mcc[0] + mnc[0] + mcc[2] + mnc[2] + mnc[1]
 	}
-	ngapPlmnId.Value, _ = hex.DecodeString(hexString)
+	var err error
+	ngapPlmnId.Value, err = hex.DecodeString(hexString)
+	if err != nil {
+		logger.UtilLog.Errorf("DecodeString error: %+v", err)
+	}
 	return
 }
 

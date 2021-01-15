@@ -80,7 +80,9 @@ func (amf *N3IWFAMF) DeleteAMFTNLAssociationItem(info ngapType.CPTransportLayerI
 	delete(amf.AMFTNLAssociationList, v4+v6)
 }
 
-func (amf *N3IWFAMF) StartOverload(resp *ngapType.OverloadResponse, trafloadInd *ngapType.TrafficLoadReductionIndication, nssai *ngapType.OverloadStartNSSAIList) *AMFOverloadContent {
+func (amf *N3IWFAMF) StartOverload(
+	resp *ngapType.OverloadResponse, trafloadInd *ngapType.TrafficLoadReductionIndication,
+	nssai *ngapType.OverloadStartNSSAIList) *AMFOverloadContent {
 	if resp == nil && trafloadInd == nil && nssai == nil {
 		return nil
 	}

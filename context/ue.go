@@ -35,6 +35,10 @@ type N3IWFUe struct {
 
 	/* PDU Session Setup Temporary Data */
 	TemporaryPDUSessionSetupData *PDUSessionSetupTemporaryData
+	/* Temporary cached NAS message */
+	// Used when NAS registration accept arrived before
+	// UE setup NAS TCP connection with N3IWF
+	TemporaryCachedNASMessage []byte
 
 	/* Security */
 	Kn3iwf               []uint8                          // 32 bytes (256 bits), value is from NGAP IE "Security Key"
@@ -219,7 +223,8 @@ func (ue *N3IWFUe) CreatePDUSession(pduSessionID int64, snssai ngapType.SNSSAI) 
 	return pduSession, nil
 }
 
-func (ue *N3IWFUe) CreateIKEChildSecurityAssociation(chosenSecurityAssociation *ike_message.SecurityAssociation) (*ChildSecurityAssociation, error) {
+func (ue *N3IWFUe) CreateIKEChildSecurityAssociation(
+	chosenSecurityAssociation *ike_message.SecurityAssociation) (*ChildSecurityAssociation, error) {
 	childSecurityAssociation := new(ChildSecurityAssociation)
 
 	if chosenSecurityAssociation == nil {
@@ -233,10 +238,12 @@ func (ue *N3IWFUe) CreateIKEChildSecurityAssociation(chosenSecurityAssociation *
 	childSecurityAssociation.SPI = binary.BigEndian.Uint32(chosenSecurityAssociation.Proposals[0].SPI)
 
 	if len(chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm) != 0 {
-		childSecurityAssociation.EncryptionAlgorithm = chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm[0].TransformID
+		childSecurityAssociation.EncryptionAlgorithm =
+			chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm[0].TransformID
 	}
 	if len(chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm) != 0 {
-		childSecurityAssociation.IntegrityAlgorithm = chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm[0].TransformID
+		childSecurityAssociation.IntegrityAlgorithm =
+			chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm[0].TransformID
 	}
 	if len(chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers) != 0 {
 		if chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers[0].TransformID == 0 {

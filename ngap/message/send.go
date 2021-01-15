@@ -18,11 +18,12 @@ func init() {
 func SendToAmf(amf *context.N3IWFAMF, pkt []byte) {
 	if amf == nil {
 		ngaplog.Errorf("[N3IWF] AMF Context is nil ")
-	}
-	if n, err := amf.SCTPConn.Write(pkt); err != nil {
-		ngaplog.Errorf("Write to SCTP socket failed: %+v", err)
 	} else {
-		ngaplog.Tracef("Wrote %d bytes", n)
+		if n, err := amf.SCTPConn.Write(pkt); err != nil {
+			ngaplog.Errorf("Write to SCTP socket failed: %+v", err)
+		} else {
+			ngaplog.Tracef("Wrote %d bytes", n)
+		}
 	}
 }
 
@@ -489,7 +490,8 @@ func SendRANConfigurationUpdate(amf *context.N3IWFAMF) {
 	ngaplog.Infoln("[N3IWF] Send RAN Configuration Update")
 
 	if available, _ := context.N3IWFSelf().AMFReInitAvailableListLoad(amf.SCTPAddr); !available {
-		ngaplog.Warnf("[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]", amf.SCTPAddr)
+		ngaplog.Warnf(
+			"[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]", amf.SCTPAddr)
 		return
 	}
 

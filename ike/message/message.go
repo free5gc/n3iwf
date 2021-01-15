@@ -420,7 +420,8 @@ func (securityAssociation *SecurityAssociation) unmarshal(rawData []byte) error 
 					attributeLength := binary.BigEndian.Uint16(transformData[10:12])
 					// bounds checking
 					if (12 + attributeLength) != transformLength {
-						return fmt.Errorf("Illegal attribute length %d not satisfies the transform length %d", attributeLength, transformLength)
+						return fmt.Errorf("Illegal attribute length %d not satisfies the transform length %d",
+							attributeLength, transformLength)
 					}
 					copy(transform.VariableLengthAttributeValue, transformData[12:12+attributeLength])
 				} else {
@@ -962,7 +963,8 @@ func (trafficSelector *TrafficSelectorInitiator) unmarshal(rawData []byte) error
 		for ; numberOfSPI > 0; numberOfSPI-- {
 			// bounds checking
 			if len(rawData) < 4 {
-				return errors.New("TrafficSelector: No sufficient bytes to decode next individual traffic selector length in header")
+				return errors.New(
+					"TrafficSelector: No sufficient bytes to decode next individual traffic selector length in header")
 			}
 			trafficSelectorType := rawData[0]
 			if trafficSelectorType == TS_IPV4_ADDR_RANGE {
@@ -1109,7 +1111,8 @@ func (trafficSelector *TrafficSelectorResponder) unmarshal(rawData []byte) error
 		for ; numberOfSPI > 0; numberOfSPI-- {
 			// bounds checking
 			if len(rawData) < 4 {
-				return errors.New("TrafficSelector: No sufficient bytes to decode next individual traffic selector length in header")
+				return errors.New(
+					"TrafficSelector: No sufficient bytes to decode next individual traffic selector length in header")
 			}
 			trafficSelectorType := rawData[0]
 			if trafficSelectorType == TS_IPV4_ADDR_RANGE {
@@ -1259,7 +1262,8 @@ func (configuration *Configuration) unmarshal(rawData []byte) error {
 
 			individualConfigurationAttribute.Type = binary.BigEndian.Uint16(configurationAttributeData[0:2])
 			configurationAttributeData = configurationAttributeData[4:]
-			individualConfigurationAttribute.Value = append(individualConfigurationAttribute.Value, configurationAttributeData[:length]...)
+			individualConfigurationAttribute.Value =
+				append(individualConfigurationAttribute.Value, configurationAttributeData[:length]...)
 			configurationAttributeData = configurationAttributeData[length:]
 
 			configuration.ConfigurationAttribute = append(configuration.ConfigurationAttribute, individualConfigurationAttribute)

@@ -70,7 +70,10 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 	info, err := conn.GetDefaultSentParam()
 	if err != nil {
 		ngapLog.Errorf("[SCTP] GetDefaultSentParam(): %+v", err)
-		conn.Close()
+		errConn := conn.Close()
+		if errConn != nil {
+			ngapLog.Errorf("conn close error in GetDefaultSentParam(): %+v", errConn)
+		}
 		errChan <- errors.New("Get socket infomation failed.")
 		return
 	}
@@ -78,7 +81,10 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 	err = conn.SetDefaultSentParam(info)
 	if err != nil {
 		ngapLog.Errorf("[SCTP] SetDefaultSentParam(): %+v", err)
-		conn.Close()
+		errConn := conn.Close()
+		if errConn != nil {
+			ngapLog.Errorf("conn close error in SetDefaultSentParam(): %+v", errConn)
+		}
 		errChan <- errors.New("Set socket parameter failed.")
 		return
 	}
@@ -87,7 +93,10 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 	err = conn.SubscribeEvents(sctp.SCTP_EVENT_DATA_IO)
 	if err != nil {
 		ngapLog.Errorf("[SCTP] SubscribeEvents(): %+v", err)
-		conn.Close()
+		errConn := conn.Close()
+		if errConn != nil {
+			ngapLog.Errorf("conn close error in SubscribeEvents(): %+v", errConn)
+		}
 		errChan <- errors.New("Subscribe SCTP event failed.")
 		return
 	}
@@ -106,7 +115,10 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 			ngapLog.Debugf("[SCTP] AMF SCTP address: %+v", conn.RemoteAddr().String())
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				ngapLog.Warn("[SCTP] Close connection.")
-				conn.Close()
+				errConn := conn.Close()
+				if errConn != nil {
+					ngapLog.Errorf("conn close error: %+v", errConn)
+				}
 				return
 			}
 			ngapLog.Errorf("[SCTP] Read from SCTP connection failed: %+v", err)
@@ -118,7 +130,10 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 				continue
 			}
 
-			go ngap.Dispatch(conn, data[:n])
+			forwardData := make([]byte, n)
+			copy(forwardData, data[:n])
+
+			go ngap.Dispatch(conn, forwardData)
 		}
 	}
 }

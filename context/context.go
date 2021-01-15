@@ -60,8 +60,8 @@ type N3IWFContext struct {
 	GTPBindAddress      string
 	TCPPort             uint16
 
-	// N3IWF N1 interface raw socket
-	N1RawSocket *ipv4.RawConn
+	// N3IWF NWu interface raw socket
+	NWuRawSocket *ipv4.RawConn
 }
 
 func init() {

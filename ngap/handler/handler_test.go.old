@@ -9,14 +9,12 @@ import (
 	"free5gc/lib/ngap/ngapSctp"
 	"free5gc/lib/ngap/ngapType"
 	"free5gc/lib/path_util"
+	"free5gc/src/n3iwf/context"
 	"free5gc/src/n3iwf/factory"
-	"free5gc/src/n3iwf/n3iwf_context"
-	"free5gc/src/n3iwf/n3iwf_handler"
-	"free5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
-	"free5gc/src/n3iwf/n3iwf_util"
+	"free5gc/src/n3iwf/ngap/service"
+	"free5gc/src/n3iwf/util"
 	"free5gc/src/test/ngapTestpacket"
 	"log"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,8 +26,8 @@ var listenConn *sctp.SCTPListener
 var testConfig *factory.Configuration
 var testAddrAndPort string
 var testConns *sctp.SCTPConn
-var n3iwfSelf *n3iwf_context.N3IWFContext
-var testAmf *n3iwf_context.N3IWFAMF
+var n3iwfSelf *context.N3IWFContext
+var testAmf *context.N3IWFAMF
 
 func init() {
 
@@ -39,8 +37,8 @@ func init() {
 	testConfig = factory.N3iwfConfig.Configuration
 
 	// setup sctp server(AMF Side)
-	testAddrAndPort = fmt.Sprintf("%s:38412", testConfig.AMFAddress[0].NetworkAddress)
-	listenConn = ngapSctp.Server(testConfig.AMFAddress[0].NetworkAddress)
+	testAddrAndPort = fmt.Sprintf("%s:38412", testConfig.AMFSCTPAddresses[0].IPAddresses[0])
+	listenConn = ngapSctp.Server(testConfig.AMFSCTPAddresses[0].IPAddresses[0])
 	go func() {
 		for {
 			readChan := make(chan ngapSctp.ConnData, 1024)
@@ -55,15 +53,14 @@ func init() {
 	}()
 
 	// init n3iwf context
-	n3iwf_util.InitN3IWFContext()
+	util.InitN3IWFContext()
 
-	go n3iwf_handler.Handle()
+	if err := service.Run(); err != nil {
+		return
+	}
 
-	n3iwfSelf = n3iwf_context.N3IWFSelf()
-
-	wg := sync.WaitGroup{}
-	n3iwf_sctp.SetupSCTPConnection(testConfig.AMFAddress, &wg)
-	testAmf = n3iwfSelf.NewN3iwfAmf(testAddrAndPort)
+	n3iwfSelf = context.N3IWFSelf()
+	testAmf = n3iwfSelf.NewN3iwfAmf(testAddrAndPort, nil)
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -114,7 +111,7 @@ func TestHandlePDUSessionResourceModifyConfirm(t *testing.T) {
 	{
 		sess, err := ue.CreatePDUSession(10, snssai)
 		assert.True(t, err == nil)
-		sess.QosFlows[1] = &n3iwf_context.QosFlow{
+		sess.QosFlows[1] = &context.QosFlow{
 			Identifier: 1,
 		}
 	}
@@ -223,9 +220,9 @@ func TestHandleNGReset(t *testing.T) {
 
 		time.Sleep(100 * time.Millisecond)
 
-		_, exist := n3iwfSelf.UePool[ue.RanUeNgapId]
+		_, exist := n3iwfSelf.UePoolLoad(ue.RanUeNgapId)
 		assert.True(t, exist)
-		_, exist = n3iwfSelf.UePool[ue2.RanUeNgapId]
+		_, exist = n3iwfSelf.UePoolLoad(ue2.RanUeNgapId)
 		assert.True(t, !exist)
 	}
 	{
@@ -238,7 +235,7 @@ func TestHandleNGReset(t *testing.T) {
 
 		time.Sleep(100 * time.Millisecond)
 
-		_, exist := n3iwfSelf.UePool[ue.RanUeNgapId]
+		_, exist := n3iwfSelf.UePoolLoad(ue.RanUeNgapId)
 		assert.True(t, !exist)
 	}
 
@@ -426,10 +423,10 @@ func newGuami(plmnId aper.OctetString, amfId string) ngapType.GUAMI {
 	}
 }
 
-func initUe(t *testing.T, v4, v6 string, port int32, amfUeNgapId int64) *n3iwf_context.N3IWFUe {
+func initUe(t *testing.T, v4, v6 string, port int32, amfUeNgapId int64) *context.N3IWFUe {
 	ue := n3iwfSelf.NewN3iwfUe()
 	err := ue.AttachAMF(testAddrAndPort)
-	assert.True(t, err == nil)
+	assert.True(t, err == false)
 	ue.IPAddrv4, ue.IPAddrv6, ue.PortNumber = v4, v6, port
 	ue.AmfUeNgapId = amfUeNgapId
 	return ue

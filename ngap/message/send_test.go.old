@@ -10,14 +10,13 @@ import (
 	"free5gc/lib/ngap/ngapSctp"
 	"free5gc/lib/ngap/ngapType"
 	"free5gc/lib/path_util"
+	"free5gc/src/n3iwf/context"
 	"free5gc/src/n3iwf/factory"
-	"free5gc/src/n3iwf/n3iwf_context"
-	"free5gc/src/n3iwf/n3iwf_ngap/n3iwf_sctp"
-	"free5gc/src/n3iwf/n3iwf_ngap/ngap_message"
-	"free5gc/src/n3iwf/n3iwf_util"
+	"free5gc/src/n3iwf/ike/service"
+	"free5gc/src/n3iwf/ngap/message"
+	"free5gc/src/n3iwf/util"
 	"free5gc/src/test/ngapTestpacket"
 	"log"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,8 +27,8 @@ import (
 var listenConn *sctp.SCTPListener
 var testConfig *factory.Configuration
 var testAddrAndPort string
-var testAmf *n3iwf_context.N3IWFAMF
-var n3iwfSelf *n3iwf_context.N3IWFContext
+var testAmf *context.N3IWFAMF
+var n3iwfSelf *context.N3IWFContext
 
 func init() {
 
@@ -38,8 +37,8 @@ func init() {
 	factory.InitConfigFactory(configFile)
 	testConfig = factory.N3iwfConfig.Configuration
 
-	testAddrAndPort = fmt.Sprintf("%s:38412", testConfig.AMFAddress[0].NetworkAddress)
-	listenConn = ngapSctp.Server(testConfig.AMFAddress[0].NetworkAddress)
+	testAddrAndPort = fmt.Sprintf("%s:38412", testConfig.AMFSCTPAddresses[0].IPAddresses[0])
+	listenConn = ngapSctp.Server(testConfig.AMFSCTPAddresses[0].IPAddresses[0])
 	go func() {
 		for {
 			readChan := make(chan ngapSctp.ConnData, 1024)
@@ -54,14 +53,15 @@ func init() {
 	time.Sleep(100 * time.Millisecond)
 
 	// init n3iwf context
-	n3iwf_util.InitN3IWFContext()
+	util.InitN3IWFContext()
 
 	// set up sctp conntection by n3iwf
-	wg := sync.WaitGroup{}
-	n3iwf_sctp.SetupSCTPConnection(testConfig.AMFAddress, &wg)
+	if err := service.Run(); err != nil {
+		panic("Run SCTP service failed.")
+	}
 
-	n3iwfSelf = n3iwf_context.N3IWFSelf()
-	testAmf = n3iwfSelf.NewN3iwfAmf(testAddrAndPort)
+	n3iwfSelf = context.N3IWFSelf()
+	testAmf = n3iwfSelf.NewN3iwfAmf(testAddrAndPort, nil)
 
 }
 
@@ -77,7 +77,7 @@ func TestSendErrorIndication(t *testing.T) {
 	iesCriticalityDiagnostics.List = append(iesCriticalityDiagnostics.List, item)
 	criticalityDiagnostics := buildCriticalityDiagnostics(&procedureCode, &triggeringMessage, &procedureCriticality, &iesCriticalityDiagnostics)
 
-	ngap_message.SendErrorIndication(testAmf, nil, nil, cause, &criticalityDiagnostics)
+	message.SendErrorIndication(testAmf, nil, nil, cause, &criticalityDiagnostics)
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -95,7 +95,7 @@ func TestSendPDUSessionResourceModifyIndication(t *testing.T) {
 		},
 	}
 
-	ngap_message.SendPDUSessionResourceModifyIndication(testAmf, ue, modifyList)
+	message.SendPDUSessionResourceModifyIndication(testAmf, ue, modifyList)
 
 	time.Sleep(100 * time.Millisecond)
 	ue.Remove()
@@ -116,7 +116,7 @@ func TestSendPDUSessionResourceReleaseResponse(t *testing.T) {
 		},
 	}
 
-	ngap_message.SendPDUSessionResourceReleaseResponse(testAmf, ue, relList, nil)
+	message.SendPDUSessionResourceReleaseResponse(testAmf, ue, relList, nil)
 
 	time.Sleep(100 * time.Millisecond)
 	ue.Remove()
@@ -147,7 +147,7 @@ func TestSendPDUSessionResourceNotify(t *testing.T) {
 		},
 	}
 
-	ngap_message.SendPDUSessionResourceNotify(testAmf, ue, &notiList, &relList)
+	message.SendPDUSessionResourceNotify(testAmf, ue, &notiList, &relList)
 
 	time.Sleep(100 * time.Millisecond)
 	ue.Remove()
@@ -161,7 +161,7 @@ func TestSendNGReset(t *testing.T) {
 	cause := buildCause(ngapType.CausePresentProtocol, ngapType.CauseProtocolPresentAbstractSyntaxErrorReject)
 
 	// ResetAll
-	ngap_message.SendNGReset(testAmf, *cause, nil)
+	message.SendNGReset(testAmf, *cause, nil)
 	time.Sleep(100 * time.Millisecond)
 
 	// Reset Partof
@@ -177,7 +177,7 @@ func TestSendNGReset(t *testing.T) {
 			},
 		},
 	}
-	ngap_message.SendNGReset(testAmf, *cause, partOfNGInterface)
+	message.SendNGReset(testAmf, *cause, partOfNGInterface)
 	time.Sleep(100 * time.Millisecond)
 	ue.Remove()
 }
@@ -197,7 +197,7 @@ func TestSendNGResetAcknowledge(t *testing.T) {
 			},
 		},
 	}
-	ngap_message.SendNGResetAcknowledge(testAmf, partOfNGInterface, nil)
+	message.SendNGResetAcknowledge(testAmf, partOfNGInterface, nil)
 	time.Sleep(100 * time.Millisecond)
 	ue.Remove()
 }
@@ -213,14 +213,14 @@ func TestSendAMFConfigurationUpdateAcknowledge(t *testing.T) {
 	aMFTNLAssociationSetupItem.AMFTNLAssociationAddress.EndpointIPAddress = &addr
 	aMFTNLAssociationSetupList.List = append(aMFTNLAssociationSetupList.List, aMFTNLAssociationSetupItem)
 
-	ngap_message.SendAMFConfigurationUpdateAcknowledge(testAmf, aMFTNLAssociationSetupList, nil, nil)
+	message.SendAMFConfigurationUpdateAcknowledge(testAmf, aMFTNLAssociationSetupList, nil, nil)
 	time.Sleep(100 * time.Millisecond)
 }
 
 func TestSendAMFConfigurationUpdateFailure(t *testing.T) {
 
 	cause := buildCause(ngapType.CausePresentProtocol, ngapType.CauseProtocolPresentAbstractSyntaxErrorReject)
-	ngap_message.SendAMFConfigurationUpdateFailure(testAmf, *cause, nil, nil)
+	message.SendAMFConfigurationUpdateFailure(testAmf, *cause, nil, nil)
 	time.Sleep(100 * time.Millisecond)
 }
 
@@ -233,7 +233,7 @@ func TestSendInitialUEMessage(t *testing.T) {
 		Buffer: []uint8{0x01, 0x02, 0xf8, 0x39, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x47, 0x78},
 	}
 	nasPdu := nasTestpacket.GetRegistrationRequest(nasMessage.RegistrationType5GSInitialRegistration, mobileIdentity5GS, nil, nil)
-	ngap_message.SendInitialUEMessage(testAmf, ue, nasPdu)
+	message.SendInitialUEMessage(testAmf, ue, nasPdu)
 
 	time.Sleep(100 * time.Millisecond)
 	ue.Remove()
@@ -242,7 +242,7 @@ func TestSendInitialUEMessage(t *testing.T) {
 
 func TestSendRanConfigurationUpdate(t *testing.T) {
 
-	ngap_message.SendRANConfigurationUpdate(testAmf)
+	message.SendRANConfigurationUpdate(testAmf)
 	time.Sleep(100 * time.Millisecond)
 
 }
@@ -251,14 +251,14 @@ func TestSendUERadioCapabilityCheckResponse(t *testing.T) {
 
 	ue := initUe(t, "10.0.0.1", "", 8080, 1)
 
-	ngap_message.SendUERadioCapabilityCheckResponse(testAmf, ue, nil)
+	message.SendUERadioCapabilityCheckResponse(testAmf, ue, nil)
 }
 
 func TestSendNASNonDeliveryIndication(t *testing.T) {
 
 	ue := initUe(t, "10.0.0.1", "", 8080, 1)
 	cause := buildCause(ngapType.CausePresentRadioNetwork, ngapType.CauseRadioNetworkPresentNgIntraSystemHandoverTriggered)
-	ngap_message.SendNASNonDeliveryIndication(testAmf, ue, aper.OctetString("\x01\x02\x03"), *cause)
+	message.SendNASNonDeliveryIndication(testAmf, ue, aper.OctetString("\x01\x02\x03"), *cause)
 	time.Sleep(100 * time.Millisecond)
 }
 
@@ -333,10 +333,10 @@ func buildCause(present int, value aper.Enumerated) (cause *ngapType.Cause) {
 	return
 }
 
-func initUe(t *testing.T, v4, v6 string, port int32, amfUeNgapId int64) *n3iwf_context.N3IWFUe {
+func initUe(t *testing.T, v4, v6 string, port int32, amfUeNgapId int64) *context.N3IWFUe {
 	ue := n3iwfSelf.NewN3iwfUe()
 	err := ue.AttachAMF(testAddrAndPort)
-	assert.True(t, err == nil)
+	assert.True(t, err == false)
 	ue.IPAddrv4, ue.IPAddrv6, ue.PortNumber = v4, v6, port
 	ue.AmfUeNgapId = amfUeNgapId
 	return ue
