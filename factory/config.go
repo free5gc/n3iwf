@@ -4,17 +4,23 @@
 
 package factory
 
-import "free5gc/src/n3iwf/context"
+import (
+	"github.com/free5gc/logger_util"
+	"github.com/free5gc/n3iwf/context"
+)
+
+const (
+	N3IWF_EXPECTED_CONFIG_VERSION = "1.0.0"
+)
 
 type Config struct {
-	Info *Info `yaml:"info"`
-
-	Configuration *Configuration `yaml:"configuration"`
+	Info          *Info               `yaml:"info"`
+	Configuration *Configuration      `yaml:"configuration"`
+	Logger        *logger_util.Logger `yaml:"logger"`
 }
 
 type Info struct {
-	Version string `yaml:"version,omitempty"`
-
+	Version     string `yaml:"version,omitempty"`
 	Description string `yaml:"description,omitempty"`
 }
 
@@ -32,4 +38,11 @@ type Configuration struct {
 	Certificate          string `yaml:"Certificate"`          // file path
 	UEIPAddressRange     string `yaml:"UEIPAddressRange"`     // e.g. 10.0.1.0/24
 	InterfaceMark        uint32 `yaml:"IPSecInterfaceMark"`   // must != 0, if not specified, random one
+}
+
+func (c *Config) GetVersion() string {
+	if c.Info != nil && c.Info.Version != "" {
+		return c.Info.Version
+	}
+	return ""
 }

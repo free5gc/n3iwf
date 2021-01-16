@@ -1,8 +1,8 @@
 package message
 
 import (
-	"free5gc/lib/aper"
-	"free5gc/lib/ngap/ngapType"
+	"github.com/free5gc/aper"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func AppendPDUSessionResourceSetupListCxtRes(
@@ -50,7 +50,7 @@ func AppendPDUSessionResourceModifyListModRes(
 	var pduSessionResourceModifyResponseTransfer aper.OctetString = transfer
 	item := ngapType.PDUSessionResourceModifyItemModRes{}
 	item.PDUSessionID.Value = pduSessionID
-	item.PDUSessionResourceModifyResponseTransfer = &pduSessionResourceModifyResponseTransfer
+	item.PDUSessionResourceModifyResponseTransfer = pduSessionResourceModifyResponseTransfer
 	list.List = append(list.List, item)
 }
 

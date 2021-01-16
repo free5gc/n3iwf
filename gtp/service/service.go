@@ -4,14 +4,12 @@ import (
 	"context"
 	"errors"
 	"net"
-	"syscall"
-
-	n3iwf_context "free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/logger"
 
 	"github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
-	"golang.org/x/net/ipv4"
+
+	n3iwf_context "github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/logger"
 )
 
 var gtpLog *logrus.Entry
@@ -52,10 +50,9 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtpv1.UPlaneConn, net.Addr, error
 	}
 
 	return userPlaneConnection, remoteUDPAddr, nil
-
 }
 
-// ListenAndServe binds and listens raw socket on N3IWF N3 interface,
+// ListenAndServe binds and listens user plane socket on N3IWF N3 interface,
 // catching GTP packets and send it to NWu interface
 func ListenAndServe(userPlaneConnection *gtpv1.UPlaneConn) error {
 	go listenGTP(userPlaneConnection)
@@ -88,55 +85,35 @@ func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
 
 		go forward(teid, forwardData)
 	}
-
 }
 
 // forward forwards user plane packets from N3 to UE,
 // with GRE header and new IP header encapsulated
 func forward(ueTEID uint32, packet []byte) {
-	// This is the IP header template for packets with GRE header encapsulated.
-	// The remaining mandatory fields are Dst and TotalLen, which specified
-	// the destination IP address and the packet total length.
-
-	// Find UE information
+	// N3IWF context
 	self := n3iwf_context.N3IWFSelf()
+	// IPv4 packet connection
+	ipv4PacketConn := self.NWuIPv4PacketConn
+	// Find UE information
 	ue, ok := self.AllocatedUETEIDLoad(ueTEID)
 	if !ok {
 		gtpLog.Error("UE context not found")
 		return
 	}
-
-	ipHeader := &ipv4.Header{
-		Version:  4,
-		Len:      20,
-		TOS:      0,
-		Flags:    ipv4.DontFragment,
-		FragOff:  0,
-		TTL:      64,
-		Protocol: syscall.IPPROTO_GRE,
-	}
+	// UE IP
+	ueInnerIPAddr := ue.IPSecInnerIPAddr
 
 	// GRE header
 	greHeader := []byte{0, 0, 8, 0}
-
-	// UE IP
-	ueInnerIP := net.ParseIP(ue.IPSecInnerIP)
-
+	// IP payload
 	greEncapsulatedPacket := append(greHeader, packet...)
-	packetTotalLength := 20 + len(greEncapsulatedPacket)
-
-	ipHeader.Dst = ueInnerIP
-	ipHeader.TotalLen = packetTotalLength
-
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	rawSocket := n3iwfSelf.NWuRawSocket
 
 	// Send to UE
-	if err := rawSocket.WriteTo(ipHeader, greEncapsulatedPacket, nil); err != nil {
-		gtpLog.Errorf("Write to raw socket failed: %+v", err)
+	if n, err := ipv4PacketConn.WriteTo(greEncapsulatedPacket, nil, ueInnerIPAddr); err != nil {
+		gtpLog.Errorf("Write to UE failed: %+v", err)
 		return
 	} else {
 		gtpLog.Trace("Forward NWu <- N3")
-		gtpLog.Tracef("Wrote %d bytes", packetTotalLength)
+		gtpLog.Tracef("Wrote %d bytes", n)
 	}
 }

@@ -4,17 +4,16 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 
-	"free5gc/lib/aper"
-	"free5gc/lib/ngap"
-	"free5gc/lib/ngap/ngapConvert"
-	"free5gc/lib/ngap/ngapType"
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/util"
+	"github.com/free5gc/aper"
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/n3iwf/util"
+	"github.com/free5gc/ngap"
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func BuildNGSetupRequest() ([]byte, error) {
-
 	n3iwfSelf := context.N3IWFSelf()
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
@@ -135,7 +134,6 @@ func BuildNGSetupRequest() ([]byte, error) {
 func BuildNGReset(
 	ngCause ngapType.Cause,
 	partOfNGInterface *ngapType.UEAssociatedLogicalNGConnectionList) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -190,7 +188,6 @@ func BuildNGReset(
 func BuildNGResetAcknowledge(
 	partOfNGInterface *ngapType.UEAssociatedLogicalNGConnectionList,
 	diagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -239,7 +236,6 @@ func BuildInitialContextSetupResponse(
 	responseList *ngapType.PDUSessionResourceSetupListCxtRes,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -315,7 +311,6 @@ func BuildInitialContextSetupFailure(
 	cause ngapType.Cause,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtFail,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentUnsuccessfulOutcome
 	pdu.UnsuccessfulOutcome = new(ngapType.UnsuccessfulOutcome)
@@ -943,7 +938,6 @@ func BuildPDUSessionResourceSetupResponse(
 	responseList *ngapType.PDUSessionResourceSetupListSURes,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListSURes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -1019,7 +1013,6 @@ func BuildPDUSessionResourceModifyResponse(
 	responseList *ngapType.PDUSessionResourceModifyListModRes,
 	failedList *ngapType.PDUSessionResourceFailedToModifyListModRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -1160,14 +1153,12 @@ func BuildPDUSessionResourceModifyIndication(
 	}
 
 	return ngap.Encoder(pdu)
-
 }
 
 func BuildPDUSessionResourceNotify(
 	ue *context.N3IWFUe,
 	notiList *ngapType.PDUSessionResourceNotifyList,
 	relList *ngapType.PDUSessionResourceReleasedListNot) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -1254,14 +1245,12 @@ func BuildPDUSessionResourceNotify(
 	}
 
 	return ngap.Encoder(pdu)
-
 }
 
 func BuildPDUSessionResourceReleaseResponse(
 	ue *context.N3IWFUe,
 	relList ngapType.PDUSessionResourceReleasedListRelRes,
 	diagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -1348,7 +1337,6 @@ func BuildPDUSessionResourceReleaseResponse(
 	}
 
 	return ngap.Encoder(pdu)
-
 }
 
 func BuildErrorIndication(
@@ -1356,7 +1344,6 @@ func BuildErrorIndication(
 	ranUENGAPID *int64,
 	cause *ngapType.Cause,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -1372,7 +1359,6 @@ func BuildErrorIndication(
 	errorIndicationIEs := &errorIndication.ProtocolIEs
 
 	if amfUENGAPID != nil && ranUENGAPID != nil {
-
 		// AMF UE NGAP ID
 		ie := ngapType.ErrorIndicationIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDAMFUENGAPID
@@ -1388,7 +1374,6 @@ func BuildErrorIndication(
 		ie.Value.Present = ngapType.ErrorIndicationIEsPresentRANUENGAPID
 		ie.Value.RANUENGAPID = &ngapType.RANUENGAPID{Value: *ranUENGAPID}
 		errorIndicationIEs.List = append(errorIndicationIEs.List, ie)
-
 	}
 
 	// Cause
@@ -1492,7 +1477,6 @@ func BuildAMFConfigurationUpdateAcknowledge(
 	setupList *ngapType.AMFTNLAssociationSetupList,
 	failList *ngapType.TNLAssociationList,
 	diagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
 	pdu.SuccessfulOutcome = new(ngapType.SuccessfulOutcome)
@@ -1547,14 +1531,12 @@ func BuildAMFConfigurationUpdateAcknowledge(
 	}
 
 	return ngap.Encoder(pdu)
-
 }
 
 func BuildAMFConfigurationUpdateFailure(
 	ngCause ngapType.Cause,
 	time *ngapType.TimeToWait,
 	diagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentUnsuccessfulOutcome
 	pdu.UnsuccessfulOutcome = new(ngapType.UnsuccessfulOutcome)
@@ -1609,11 +1591,9 @@ func BuildAMFConfigurationUpdateFailure(
 	}
 
 	return ngap.Encoder(pdu)
-
 }
 
 func BuildRANConfigurationUpdate() ([]byte, error) {
-
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -1712,7 +1692,6 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 	// }
 
 	return ngap.Encoder(pdu)
-
 }
 
 func BuildUplinkRANConfigurationTransfer() ([]byte, error) {
@@ -1748,7 +1727,7 @@ func BuildPDUSessionResourceSetupResponseTransfer(pduSession *context.PDUSession
 
 	// TODO: use tunnel info allocated by n3iwf
 	// QOS Flow Per TNL Information
-	qosFlowPerTNLInformation := &transfer.QosFlowPerTNLInformation
+	qosFlowPerTNLInformation := &transfer.DLQosFlowPerTNLInformation
 
 	// UP transport layer information - UE(RAN) side
 	qosFlowPerTNLInformation.UPTransportLayerInformation.Present =
@@ -1777,7 +1756,6 @@ func BuildPDUSessionResourceSetupResponseTransfer(pduSession *context.PDUSession
 
 func BuildPDUSessionResourceSetupUnsuccessfulTransfer(
 	cause ngapType.Cause, criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	transfer := ngapType.PDUSessionResourceSetupUnsuccessfulTransfer{}
 
 	// Cause
@@ -1795,8 +1773,7 @@ func BuildPDUSessionResourceModifyResponseTransfer(
 	ulNGUUPTNLInformation *ngapType.UPTransportLayerInformation,
 	dlNGUUPTNLInformation *ngapType.UPTransportLayerInformation,
 	responseList *ngapType.QosFlowAddOrModifyResponseList,
-	failedList *ngapType.QosFlowList) ([]byte, error) {
-
+	failedList *ngapType.QosFlowListWithCause) ([]byte, error) {
 	transfer := ngapType.PDUSessionResourceModifyResponseTransfer{}
 
 	// ulNGUUPTNLInformation store user plane tunnel information of
@@ -1827,7 +1804,6 @@ func BuildPDUSessionResourceModifyResponseTransfer(
 
 func BuildPDUSessionResourceModifyUnsuccessfulTransfer(cause ngapType.Cause,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) ([]byte, error) {
-
 	transfer := ngapType.PDUSessionResourceModifyUnsuccessfulTransfer{}
 
 	// Cause

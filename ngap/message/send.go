@@ -4,9 +4,9 @@ import (
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 
-	"free5gc/lib/ngap/ngapType"
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/logger"
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 var ngaplog *logrus.Entry
@@ -54,7 +54,6 @@ func SendNGReset(
 	amf *context.N3IWFAMF,
 	cause ngapType.Cause,
 	partOfNGInterface *ngapType.UEAssociatedLogicalNGConnectionList) {
-
 	ngaplog.Infoln("[N3IWF] Send NG Reset")
 
 	pkt, err := BuildNGReset(cause, partOfNGInterface)
@@ -70,7 +69,6 @@ func SendNGResetAcknowledge(
 	amf *context.N3IWFAMF,
 	partOfNGInterface *ngapType.UEAssociatedLogicalNGConnectionList,
 	diagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send NG Reset Acknowledge")
 
 	if partOfNGInterface != nil && len(partOfNGInterface.List) == 0 {
@@ -93,7 +91,6 @@ func SendInitialContextSetupResponse(
 	responseList *ngapType.PDUSessionResourceSetupListCxtRes,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send Initial Context Setup Response")
 
 	if responseList != nil && len(responseList.List) > context.MaxNumOfPDUSessions {
@@ -121,7 +118,6 @@ func SendInitialContextSetupFailure(
 	cause ngapType.Cause,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtFail,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send Initial Context Setup Failure")
 
 	if failedList != nil && len(failedList.List) > context.MaxNumOfPDUSessions {
@@ -142,7 +138,6 @@ func SendUEContextModificationResponse(
 	amf *context.N3IWFAMF,
 	ue *context.N3IWFUe,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send UE Context Modification Response")
 
 	pkt, err := BuildUEContextModificationResponse(ue, criticalityDiagnostics)
@@ -159,7 +154,6 @@ func SendUEContextModificationFailure(
 	ue *context.N3IWFUe,
 	cause ngapType.Cause,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send UE Context Modification Failure")
 
 	pkt, err := BuildUEContextModificationFailure(ue, cause, criticalityDiagnostics)
@@ -175,7 +169,6 @@ func SendUEContextReleaseComplete(
 	amf *context.N3IWFAMF,
 	ue *context.N3IWFUe,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send UE Context Release Complete")
 
 	pkt, err := BuildUEContextReleaseComplete(ue, criticalityDiagnostics)
@@ -190,7 +183,6 @@ func SendUEContextReleaseComplete(
 func SendUEContextReleaseRequest(
 	amf *context.N3IWFAMF,
 	ue *context.N3IWFUe, cause ngapType.Cause) {
-
 	ngaplog.Infoln("[N3IWF] Send UE Context Release Request")
 
 	pkt, err := BuildUEContextReleaseRequest(ue, cause)
@@ -221,7 +213,6 @@ func SendUplinkNASTransport(
 	amf *context.N3IWFAMF,
 	ue *context.N3IWFUe,
 	nasPdu []byte) {
-
 	ngaplog.Infoln("[N3IWF] Send Uplink NAS Transport")
 
 	if len(nasPdu) == 0 {
@@ -269,7 +260,6 @@ func SendPDUSessionResourceSetupResponse(
 	responseList *ngapType.PDUSessionResourceSetupListSURes,
 	failedListSURes *ngapType.PDUSessionResourceFailedToSetupListSURes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send PDU Session Resource Setup Response")
 
 	if ue == nil {
@@ -292,7 +282,6 @@ func SendPDUSessionResourceModifyResponse(
 	responseList *ngapType.PDUSessionResourceModifyListModRes,
 	failedList *ngapType.PDUSessionResourceFailedToModifyListModRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send PDU Session Resource Modify Response")
 
 	if ue == nil && criticalityDiagnostics == nil {
@@ -313,7 +302,6 @@ func SendPDUSessionResourceModifyIndication(
 	amf *context.N3IWFAMF,
 	ue *context.N3IWFUe,
 	modifyList []ngapType.PDUSessionResourceModifyItemModInd) {
-
 	ngaplog.Infoln("[N3IWF] Send PDU Session Resource Modify Indication")
 
 	if ue == nil {
@@ -339,7 +327,6 @@ func SendPDUSessionResourceNotify(
 	ue *context.N3IWFUe,
 	notiList *ngapType.PDUSessionResourceNotifyList,
 	relList *ngapType.PDUSessionResourceReleasedListNot) {
-
 	ngaplog.Infoln("[N3IWF] Send PDU Session Resource Notify")
 
 	if ue == nil {
@@ -361,7 +348,6 @@ func SendPDUSessionResourceReleaseResponse(
 	ue *context.N3IWFUe,
 	relList ngapType.PDUSessionResourceReleasedListRelRes,
 	diagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send PDU Session Resource Release Response")
 
 	if ue == nil {
@@ -380,7 +366,6 @@ func SendPDUSessionResourceReleaseResponse(
 	}
 
 	SendToAmf(amf, pkt)
-
 }
 
 func SendErrorIndication(
@@ -389,7 +374,6 @@ func SendErrorIndication(
 	ranUENGAPID *int64,
 	cause *ngapType.Cause,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send Error Indication")
 
 	if (cause == nil) && (criticalityDiagnostics == nil) {
@@ -412,7 +396,6 @@ func SendErrorIndicationWithSctpConn(
 	ranUENGAPID *int64,
 	cause *ngapType.Cause,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send Error Indication")
 
 	if (cause == nil) && (criticalityDiagnostics == nil) {
@@ -445,7 +428,6 @@ func SendUERadioCapabilityCheckResponse(
 
 	pkt, err := BuildUERadioCapabilityCheckResponse(ue, diagnostics)
 	if err != nil {
-
 		ngaplog.Errorf("Build UERadio Capability Check Response failed : %+v\n", err)
 		return
 	}
@@ -457,7 +439,6 @@ func SendAMFConfigurationUpdateAcknowledge(
 	setupList *ngapType.AMFTNLAssociationSetupList,
 	failList *ngapType.TNLAssociationList,
 	diagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send AMF Configuration Update Acknowledge")
 
 	pkt, err := BuildAMFConfigurationUpdateAcknowledge(setupList, failList, diagnostics)
@@ -474,7 +455,6 @@ func SendAMFConfigurationUpdateFailure(
 	ngCause ngapType.Cause,
 	time *ngapType.TimeToWait,
 	diagnostics *ngapType.CriticalityDiagnostics) {
-
 	ngaplog.Infoln("[N3IWF] Send AMF Configuration Update Failure")
 	pkt, err := BuildAMFConfigurationUpdateFailure(ngCause, time, diagnostics)
 	if err != nil {
@@ -486,7 +466,6 @@ func SendAMFConfigurationUpdateFailure(
 }
 
 func SendRANConfigurationUpdate(amf *context.N3IWFAMF) {
-
 	ngaplog.Infoln("[N3IWF] Send RAN Configuration Update")
 
 	if available, _ := context.N3IWFSelf().AMFReInitAvailableListLoad(amf.SCTPAddr); !available {

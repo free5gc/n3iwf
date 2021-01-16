@@ -1,14 +1,14 @@
 package ngap
 
 import (
-	"free5gc/lib/ngap"
-	"free5gc/lib/ngap/ngapType"
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/ngap/handler"
-
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
+
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/n3iwf/ngap/handler"
+	"github.com/free5gc/ngap"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 var Ngaplog *logrus.Entry

@@ -1,7 +1,7 @@
 package message
 
 // IKE types
-type IKEType uint8
+type IKEPayloadType uint8
 
 const (
 	NoNext = 0

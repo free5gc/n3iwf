@@ -1,12 +1,13 @@
 package ike
 
 import (
-	"free5gc/src/n3iwf/ike/handler"
-	ike_message "free5gc/src/n3iwf/ike/message"
-	"free5gc/src/n3iwf/logger"
 	"net"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/free5gc/n3iwf/ike/handler"
+	ike_message "github.com/free5gc/n3iwf/ike/message"
+	"github.com/free5gc/n3iwf/logger"
 )
 
 var ikeLog *logrus.Entry
@@ -22,7 +23,7 @@ func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []by
 		for i := 0; i < 4; i++ {
 			if msg[i] != 0 {
 				ikeLog.Warn(
-					"[IKE] Received an IKE packet that does not prepend 4 bytes zero from UDP port 4500," +
+					"Received an IKE packet that does not prepend 4 bytes zero from UDP port 4500," +
 						" this packet may be the UDP encapsulated ESP. The packet will not be handled.")
 				return
 			}
@@ -30,7 +31,9 @@ func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []by
 		msg = msg[4:]
 	}
 
-	ikeMessage, err := ike_message.Decode(msg)
+	ikeMessage := new(ike_message.IKEMessage)
+
+	err := ikeMessage.Decode(msg)
 	if err != nil {
 		ikeLog.Error(err)
 		return
@@ -46,5 +49,4 @@ func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []by
 	default:
 		ikeLog.Warnf("Unimplemented IKE message type, exchange type: %d", ikeMessage.ExchangeType)
 	}
-
 }

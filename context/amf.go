@@ -2,11 +2,12 @@ package context
 
 import (
 	"bytes"
-	"free5gc/lib/aper"
-	"free5gc/lib/ngap/ngapConvert"
-	"free5gc/lib/ngap/ngapType"
 
 	"git.cs.nctu.edu.tw/calee/sctp"
+
+	"github.com/free5gc/aper"
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 type N3IWFAMF struct {
@@ -35,6 +36,7 @@ type AMFOverloadContent struct {
 	TrafficInd *int64
 	NSSAIList  []SliceOverloadItem
 }
+
 type SliceOverloadItem struct {
 	SNssaiList []ngapType.SNSSAI
 	Action     *ngapType.OverloadAction
@@ -111,6 +113,7 @@ func (amf *N3IWFAMF) StartOverload(
 	amf.AMFOverloadContent = &content
 	return amf.AMFOverloadContent
 }
+
 func (amf *N3IWFAMF) StopOverload() {
 	amf.AMFOverloadContent = nil
 }

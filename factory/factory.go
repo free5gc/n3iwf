@@ -10,27 +10,35 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"free5gc/src/n3iwf/logger"
+	"github.com/free5gc/n3iwf/logger"
 )
 
 var N3iwfConfig Config
 
-func checkErr(err error) {
-	if err != nil {
-		err = fmt.Errorf("[Configuration] %s", err.Error())
-		logger.AppLog.Fatal(err)
+// TODO: Support configuration update from REST api
+func InitConfigFactory(f string) error {
+	if content, err := ioutil.ReadFile(f); err != nil {
+		return err
+	} else {
+		N3iwfConfig = Config{}
+
+		if yamlErr := yaml.Unmarshal(content, &N3iwfConfig); yamlErr != nil {
+			return yamlErr
+		}
 	}
+
+	return nil
 }
 
-// TODO: Support configuration update from REST api
-func InitConfigFactory(f string) {
-	content, err := ioutil.ReadFile(f)
-	checkErr(err)
+func CheckConfigVersion() error {
+	currentVersion := N3iwfConfig.GetVersion()
 
-	N3iwfConfig = Config{}
+	if currentVersion != N3IWF_EXPECTED_CONFIG_VERSION {
+		return fmt.Errorf("config version is [%s], but expected is [%s].",
+			currentVersion, N3IWF_EXPECTED_CONFIG_VERSION)
+	}
 
-	err = yaml.Unmarshal([]byte(content), &N3iwfConfig)
-	checkErr(err)
+	logger.CfgLog.Infof("config version [%s]", currentVersion)
 
-	logger.InitLog.Infof("Successfully initialize configuration %s", f)
+	return nil
 }

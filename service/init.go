@@ -9,15 +9,17 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
-	"free5gc/lib/path_util"
-	"free5gc/src/app"
-	"free5gc/src/n3iwf/factory"
-	ike_service "free5gc/src/n3iwf/ike/service"
-	"free5gc/src/n3iwf/logger"
-	ngap_service "free5gc/src/n3iwf/ngap/service"
-	nwucp_service "free5gc/src/n3iwf/nwucp/service"
-	nwuup_service "free5gc/src/n3iwf/nwuup/service"
-	"free5gc/src/n3iwf/util"
+	aperLogger "github.com/free5gc/aper/logger"
+	"github.com/free5gc/n3iwf/factory"
+	ike_service "github.com/free5gc/n3iwf/ike/service"
+	"github.com/free5gc/n3iwf/logger"
+	ngap_service "github.com/free5gc/n3iwf/ngap/service"
+	nwucp_service "github.com/free5gc/n3iwf/nwucp/service"
+	nwuup_service "github.com/free5gc/n3iwf/nwuup/service"
+	"github.com/free5gc/n3iwf/util"
+	ngapLogger "github.com/free5gc/ngap/logger"
+	"github.com/free5gc/path_util"
+	pathUtilLogger "github.com/free5gc/path_util/logger"
 )
 
 type N3IWF struct{}
@@ -52,35 +54,101 @@ func (*N3IWF) GetCliCmd() (flags []cli.Flag) {
 	return n3iwfCLi
 }
 
-func (*N3IWF) Initialize(c *cli.Context) {
-
+func (n3iwf *N3IWF) Initialize(c *cli.Context) error {
 	config = Config{
 		n3iwfcfg: c.String("n3iwfcfg"),
 	}
 
 	if config.n3iwfcfg != "" {
-		factory.InitConfigFactory(config.n3iwfcfg)
-	} else {
-		DefaultN3iwfConfigPath := path_util.Gofree5gcPath("free5gc/config/n3iwfcfg.conf")
-		factory.InitConfigFactory(DefaultN3iwfConfigPath)
-	}
-
-	if app.ContextSelf().Logger.N3IWF.DebugLevel != "" {
-		level, err := logrus.ParseLevel(app.ContextSelf().Logger.N3IWF.DebugLevel)
-		if err != nil {
-			initLog.Warnf("Log level [%s] is not valid, set to [info] level", app.ContextSelf().Logger.N3IWF.DebugLevel)
-			logger.SetLogLevel(logrus.InfoLevel)
-		} else {
-			logger.SetLogLevel(level)
-			initLog.Infof("Log level is set to [%s] level", level)
+		if err := factory.InitConfigFactory(config.n3iwfcfg); err != nil {
+			return err
 		}
 	} else {
-		initLog.Infoln("Log level is default set to [info] level")
-		logger.SetLogLevel(logrus.InfoLevel)
+		DefaultN3iwfConfigPath := path_util.Free5gcPath("free5gc/config/n3iwfcfg.yaml")
+		if err := factory.InitConfigFactory(DefaultN3iwfConfigPath); err != nil {
+			return err
+		}
 	}
 
-	logger.SetReportCaller(app.ContextSelf().Logger.N3IWF.ReportCaller)
+	n3iwf.setLogLevel()
 
+	if err := factory.CheckConfigVersion(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n3iwf *N3IWF) setLogLevel() {
+	if factory.N3iwfConfig.Logger == nil {
+		initLog.Warnln("N3IWF config without log level setting!!!")
+		return
+	}
+
+	if factory.N3iwfConfig.Logger.N3IWF != nil {
+		if factory.N3iwfConfig.Logger.N3IWF.DebugLevel != "" {
+			if level, err := logrus.ParseLevel(factory.N3iwfConfig.Logger.N3IWF.DebugLevel); err != nil {
+				initLog.Warnf("N3IWF Log level [%s] is invalid, set to [info] level",
+					factory.N3iwfConfig.Logger.N3IWF.DebugLevel)
+				logger.SetLogLevel(logrus.InfoLevel)
+			} else {
+				initLog.Infof("N3IWF Log level is set to [%s] level", level)
+				logger.SetLogLevel(level)
+			}
+		} else {
+			initLog.Infoln("N3IWF Log level is default set to [info] level")
+			logger.SetLogLevel(logrus.InfoLevel)
+		}
+		logger.SetReportCaller(factory.N3iwfConfig.Logger.N3IWF.ReportCaller)
+	}
+
+	if factory.N3iwfConfig.Logger.NGAP != nil {
+		if factory.N3iwfConfig.Logger.NGAP.DebugLevel != "" {
+			if level, err := logrus.ParseLevel(factory.N3iwfConfig.Logger.NGAP.DebugLevel); err != nil {
+				ngapLogger.NgapLog.Warnf("NGAP Log level [%s] is invalid, set to [info] level",
+					factory.N3iwfConfig.Logger.NGAP.DebugLevel)
+				ngapLogger.SetLogLevel(logrus.InfoLevel)
+			} else {
+				ngapLogger.SetLogLevel(level)
+			}
+		} else {
+			ngapLogger.NgapLog.Warnln("NGAP Log level not set. Default set to [info] level")
+			ngapLogger.SetLogLevel(logrus.InfoLevel)
+		}
+		ngapLogger.SetReportCaller(factory.N3iwfConfig.Logger.NGAP.ReportCaller)
+	}
+
+	if factory.N3iwfConfig.Logger.Aper != nil {
+		if factory.N3iwfConfig.Logger.Aper.DebugLevel != "" {
+			if level, err := logrus.ParseLevel(factory.N3iwfConfig.Logger.Aper.DebugLevel); err != nil {
+				aperLogger.AperLog.Warnf("Aper Log level [%s] is invalid, set to [info] level",
+					factory.N3iwfConfig.Logger.Aper.DebugLevel)
+				aperLogger.SetLogLevel(logrus.InfoLevel)
+			} else {
+				aperLogger.SetLogLevel(level)
+			}
+		} else {
+			aperLogger.AperLog.Warnln("Aper Log level not set. Default set to [info] level")
+			aperLogger.SetLogLevel(logrus.InfoLevel)
+		}
+		aperLogger.SetReportCaller(factory.N3iwfConfig.Logger.Aper.ReportCaller)
+	}
+
+	if factory.N3iwfConfig.Logger.PathUtil != nil {
+		if factory.N3iwfConfig.Logger.PathUtil.DebugLevel != "" {
+			if level, err := logrus.ParseLevel(factory.N3iwfConfig.Logger.PathUtil.DebugLevel); err != nil {
+				pathUtilLogger.PathLog.Warnf("PathUtil Log level [%s] is invalid, set to [info] level",
+					factory.N3iwfConfig.Logger.PathUtil.DebugLevel)
+				pathUtilLogger.SetLogLevel(logrus.InfoLevel)
+			} else {
+				pathUtilLogger.SetLogLevel(level)
+			}
+		} else {
+			pathUtilLogger.PathLog.Warnln("PathUtil Log level not set. Default set to [info] level")
+			pathUtilLogger.SetLogLevel(logrus.InfoLevel)
+		}
+		pathUtilLogger.SetReportCaller(factory.N3iwfConfig.Logger.PathUtil.ReportCaller)
+	}
 }
 
 func (n3iwf *N3IWF) FilterCli(c *cli.Context) (args []string) {
@@ -110,46 +178,42 @@ func (n3iwf *N3IWF) Start() {
 	if err := ngap_service.Run(); err != nil {
 		initLog.Errorf("Start NGAP service failed: %+v", err)
 		return
-	} else {
-		initLog.Info("NGAP service running.")
-		wg.Add(1)
 	}
+	initLog.Info("NGAP service running.")
+	wg.Add(1)
 
 	// Relay listeners
 	// Control plane
 	if err := nwucp_service.Run(); err != nil {
 		initLog.Errorf("Listen NWu control plane traffic failed: %+v", err)
-	} else {
-		initLog.Info("NAS TCP server successfully started.")
-		wg.Add(1)
+		return
 	}
+	initLog.Info("NAS TCP server successfully started.")
+	wg.Add(1)
+
 	// User plane
 	if err := nwuup_service.Run(); err != nil {
 		initLog.Errorf("Listen NWu user plane traffic failed: %+v", err)
 		return
-	} else {
-		initLog.Info("Listening NWu user plane traffic")
-		wg.Add(1)
 	}
+	initLog.Info("Listening NWu user plane traffic")
+	wg.Add(1)
 
 	// IKE
 	if err := ike_service.Run(); err != nil {
 		initLog.Errorf("Start IKE service failed: %+v", err)
 		return
-	} else {
-		initLog.Info("IKE service running.")
-		wg.Add(1)
 	}
+	initLog.Info("IKE service running.")
+	wg.Add(1)
 
 	initLog.Info("N3IWF running...")
 
 	wg.Wait()
-
 }
 
 func (n3iwf *N3IWF) Exec(c *cli.Context) error {
-
-	//N3IWF.Initialize(cfgPath, c)
+	// N3IWF.Initialize(cfgPath, c)
 
 	initLog.Traceln("args:", c.String("n3iwfcfg"))
 	args := n3iwf.FilterCli(c)

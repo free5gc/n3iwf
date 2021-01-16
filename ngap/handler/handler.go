@@ -6,18 +6,18 @@ import (
 	"net"
 	"time"
 
-	"free5gc/lib/aper"
-	"free5gc/lib/ngap/ngapConvert"
-	"free5gc/lib/ngap/ngapType"
-	"free5gc/src/n3iwf/context"
-	gtp_service "free5gc/src/n3iwf/gtp/service"
-	"free5gc/src/n3iwf/ike/handler"
-	ike_message "free5gc/src/n3iwf/ike/message"
-	"free5gc/src/n3iwf/logger"
-	ngap_message "free5gc/src/n3iwf/ngap/message"
-
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
+
+	"github.com/free5gc/aper"
+	"github.com/free5gc/n3iwf/context"
+	gtp_service "github.com/free5gc/n3iwf/gtp/service"
+	"github.com/free5gc/n3iwf/ike/handler"
+	ike_message "github.com/free5gc/n3iwf/ike/message"
+	"github.com/free5gc/n3iwf/logger"
+	ngap_message "github.com/free5gc/n3iwf/ngap/message"
+	"github.com/free5gc/ngap/ngapConvert"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 var ngapLog *logrus.Entry
@@ -132,7 +132,6 @@ func HandleNGSetupResponse(sctpAddr string, conn *sctp.SCTPConn, message *ngapTy
 	if criticalityDiagnostics != nil {
 		printCriticalityDiagnostics(criticalityDiagnostics)
 	}
-
 }
 
 func HandleNGSetupFailure(sctpAddr string, conn *sctp.SCTPConn, message *ngapType.NGAPPDU) {
@@ -153,7 +152,7 @@ func HandleNGSetupFailure(sctpAddr string, conn *sctp.SCTPConn, message *ngapTyp
 
 	unsuccessfulOutcome := message.UnsuccessfulOutcome
 	if unsuccessfulOutcome == nil {
-		ngapLog.Error("Unseccessful Message is nil")
+		ngapLog.Error("Unsuccessful Message is nil")
 		return
 	}
 
@@ -212,7 +211,6 @@ func HandleNGSetupFailure(sctpAddr string, conn *sctp.SCTPConn, message *ngapTyp
 	var waitingTime int
 
 	if timeToWait != nil {
-
 		switch timeToWait.Value {
 		case ngapType.TimeToWaitPresentV1s:
 			waitingTime = 1
@@ -227,7 +225,6 @@ func HandleNGSetupFailure(sctpAddr string, conn *sctp.SCTPConn, message *ngapTyp
 		case ngapType.TimeToWaitPresentV60s:
 			waitingTime = 60
 		}
-
 	}
 
 	if waitingTime != 0 {
@@ -242,7 +239,6 @@ func HandleNGSetupFailure(sctpAddr string, conn *sctp.SCTPConn, message *ngapTyp
 }
 
 func HandleNGReset(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
-
 	ngapLog.Infoln("[N3IWF] Handle NG Reset")
 
 	var cause *ngapType.Cause
@@ -350,7 +346,6 @@ func HandleNGReset(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
 }
 
 func HandleNGResetAcknowledge(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
-
 	ngapLog.Infoln("[N3IWF] Handle NG Reset Acknowledge")
 
 	var uEAssociatedLogicalNGConnectionList *ngapType.UEAssociatedLogicalNGConnectionList
@@ -430,7 +425,7 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
 
 	var n3iwfUe *context.N3IWFUe
-	var n3iwfSelf = context.N3IWFSelf()
+	n3iwfSelf := context.N3IWFSelf()
 
 	if message == nil {
 		ngapLog.Error("NGAP Message is nil")
@@ -710,17 +705,14 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 
 	// Send EAP Success to UE
 	ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
-
-	// IKEHDR-SK-{response}
-	var eap *ike_message.EAP
+	responseIKEMessage := new(ike_message.IKEMessage)
+	var responseIKEPayload ike_message.IKEPayloadContainer
 
 	// Build IKE message
-	responseIKEMessage := ike_message.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
+	responseIKEMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
 		ikeSecurityAssociation.LocalSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck,
 		ikeSecurityAssociation.MessageID)
-
-	// Build response
-	var ikePayload []ike_message.IKEPayloadType
+	responseIKEMessage.Payloads.Reset()
 
 	// EAP Success
 	var identifier uint8
@@ -731,10 +723,9 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 			break
 		}
 	}
-	eap = ike_message.BuildEAPSuccess(identifier)
-	ikePayload = append(ikePayload, eap)
+	responseIKEPayload.BuildEAPSuccess(identifier)
 
-	if err := handler.EncryptProcedure(ikeSecurityAssociation, ikePayload, responseIKEMessage); err != nil {
+	if err := handler.EncryptProcedure(ikeSecurityAssociation, responseIKEPayload, responseIKEMessage); err != nil {
 		ngapLog.Errorf("Encrypting IKE message failed: %+v", err)
 		return
 	}
@@ -756,7 +747,6 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 // if failed, an unsuccessfulTransfer is set, otherwise, set to nil
 func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSession *context.PDUSession,
 	transfer ngapType.PDUSessionResourceSetupRequestTransfer) (bool, []byte) {
-
 	var pduSessionAMBR *ngapType.PDUSessionAggregateMaximumBitRate
 	var ulNGUUPTNLInformation *ngapType.UPTransportLayerInformation
 	var pduSessionType *ngapType.PDUSessionType
@@ -983,7 +973,7 @@ func HandleUEContextModificationRequest(amf *context.N3IWFAMF, message *ngapType
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
 
 	var n3iwfUe *context.N3IWFUe
-	var n3iwfSelf = context.N3IWFSelf()
+	n3iwfSelf := context.N3IWFSelf()
 
 	if message == nil {
 		ngapLog.Error("NGAP Message is nil")
@@ -1109,7 +1099,7 @@ func HandleUEContextReleaseCommand(amf *context.N3IWFAMF, message *ngapType.NGAP
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
 
 	var n3iwfUe *context.N3IWFUe
-	var n3iwfSelf = context.N3IWFSelf()
+	n3iwfSelf := context.N3IWFSelf()
 
 	if message == nil {
 		ngapLog.Error("NGAP Message is nil")
@@ -1316,23 +1306,20 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 				}
 			}
 			// Send NAS via IKE EAP
-			// IKEHDR-SK-{response}
-			var eap *ike_message.EAP
+			responseIKEMessage := new(ike_message.IKEMessage)
+			var responseIKEPayload ike_message.IKEPayloadContainer
 
 			// Build IKE message
-			responseIKEMessage := ike_message.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
+			responseIKEMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
 				ikeSecurityAssociation.LocalSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck,
 				ikeSecurityAssociation.MessageID)
-
-			// Build response
-			var ikePayload []ike_message.IKEPayloadType
+			responseIKEMessage.Payloads.Reset()
 
 			// EAP-5G
-			eap = ike_message.BuildEAP5GNAS(identifier, nasPDU.Value)
-			ikePayload = append(ikePayload, eap)
+			responseIKEPayload.BuildEAP5GNAS(identifier, nasPDU.Value)
 
 			if err := handler.EncryptProcedure(
-				ikeSecurityAssociation, ikePayload, responseIKEMessage); err != nil {
+				ikeSecurityAssociation, responseIKEPayload, responseIKEMessage); err != nil {
 				ngapLog.Errorf("[NGAP] Encrypting IKE message failed: %+v", err)
 				return
 			}
@@ -1385,7 +1372,7 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
 
 	var n3iwfUe *context.N3IWFUe
-	var n3iwfSelf = context.N3IWFSelf()
+	n3iwfSelf := context.N3IWFSelf()
 
 	if message == nil {
 		ngapLog.Error("NGAP Message is nil")
@@ -1537,19 +1524,21 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 
 				ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
 
-				// Send CREATE_CHILD_SA to UE
 				// Add MessageID for IKE security association
 				ikeSecurityAssociation.MessageID++
-				ikeMessage := ike_message.BuildIKEHeader(ikeSecurityAssociation.LocalSPI,
+
+				// Send CREATE_CHILD_SA to UE
+				ikeMessage := new(ike_message.IKEMessage)
+				var ikePayload ike_message.IKEPayloadContainer
+
+				// Build IKE message
+				ikeMessage.BuildIKEHeader(ikeSecurityAssociation.LocalSPI,
 					ikeSecurityAssociation.RemoteSPI, ike_message.CREATE_CHILD_SA,
 					ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
-
-				// IKE payload
-				var ikePayload []ike_message.IKEPayloadType
+				ikeMessage.Payloads.Reset()
 
 				// Build SA
-				// Proposals
-				var proposals []*ike_message.Proposal
+				requestSA := ikePayload.BuildSecurityAssociation()
 
 				// Allocate SPI
 				var spi uint32
@@ -1564,108 +1553,47 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 				binary.BigEndian.PutUint32(spiByte, spi)
 
 				// First Proposal - Proposal No.1
-				proposal := ike_message.BuildProposal(1, ike_message.TypeESP, spiByte)
+				proposal := requestSA.Proposals.BuildProposal(1, ike_message.TypeESP, spiByte)
 
 				// Encryption transform
 				var attributeType uint16 = ike_message.AttributeTypeKeyLength
 				var attributeValue uint16 = 256
-				encryptionTransform := ike_message.BuildTransform(
+				proposal.EncryptionAlgorithm.BuildTransform(
 					ike_message.TypeEncryptionAlgorithm, ike_message.ENCR_AES_CBC, &attributeType, &attributeValue, nil)
-				if ok := ike_message.AppendTransformToProposal(proposal, encryptionTransform); !ok {
-					ngapLog.Error("Generate IKE message failed: Cannot append to proposal")
-					n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
-						n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
-					cause := buildCause(ngapType.CausePresentTransport, ngapType.CauseTransportPresentTransportResourceUnavailable)
-					transfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-					if err != nil {
-						ngapLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
-						continue
-					}
-					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(
-						n3iwfUe.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
-					continue
-				}
 				// Integrity transform
 				if pduSession.SecurityIntegrity {
-					integrityTransform := ike_message.BuildTransform(
+					proposal.IntegrityAlgorithm.BuildTransform(
 						ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_SHA1_96, nil, nil, nil)
-					if ok := ike_message.AppendTransformToProposal(proposal, integrityTransform); !ok {
-						ngapLog.Error("Generate IKE message failed: Cannot append to proposal")
-						n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
-							n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
-						cause := buildCause(ngapType.CausePresentTransport, ngapType.CauseTransportPresentTransportResourceUnavailable)
-						transfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-						if err != nil {
-							ngapLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
-							continue
-						}
-						ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(
-							n3iwfUe.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
-						continue
-					}
 				}
 				// ESN transform
-				esnTransform := ike_message.BuildTransform(
+				proposal.ExtendedSequenceNumbers.BuildTransform(
 					ike_message.TypeExtendedSequenceNumbers, ike_message.ESN_NO, nil, nil, nil)
-				if ok := ike_message.AppendTransformToProposal(proposal, esnTransform); !ok {
-					ngapLog.Error("Generate IKE message failed: Cannot append to proposal")
-					n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
-						n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
-					cause := buildCause(ngapType.CausePresentTransport, ngapType.CauseTransportPresentTransportResourceUnavailable)
-					transfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-					if err != nil {
-						ngapLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
-						continue
-					}
-					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(
-						n3iwfUe.TemporaryPDUSessionSetupData.FailedListSURes, pduSessionID, transfer)
-					continue
-				}
-
-				proposals = append(proposals, proposal)
-
-				securityAssociation := ike_message.BuildSecurityAssociation(proposals)
-
-				ikePayload = append(ikePayload, securityAssociation)
 
 				// Build Nonce
 				nonceData := handler.GenerateRandomNumber().Bytes()
-				nonce := ike_message.BuildNonce(nonceData)
+				ikePayload.BuildNonce(nonceData)
 
 				// Store nonce into context
 				ikeSecurityAssociation.ConcatenatedNonce = nonceData
 
-				ikePayload = append(ikePayload, nonce)
-
 				// TSi
 				n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
-				individualTrafficSelector := ike_message.BuildIndividualTrafficSelector(
+				tsi := ikePayload.BuildTrafficSelectorInitiator()
+				tsi.TrafficSelectors.BuildIndividualTrafficSelector(
 					ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
 					0, 65535, n3iwfIPAddr.To4(), n3iwfIPAddr.To4())
-				trafficSelectorInitiator := ike_message.BuildTrafficSelectorInitiator(
-					[]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
-
-				ikePayload = append(ikePayload, trafficSelectorInitiator)
-
 				// TSr
-				ueIPAddr := net.ParseIP(n3iwfUe.IPSecInnerIP)
-				individualTrafficSelector = ike_message.BuildIndividualTrafficSelector(
+				ueIPAddr := n3iwfUe.IPSecInnerIP
+				tsr := ikePayload.BuildTrafficSelectorResponder()
+				tsr.TrafficSelectors.BuildIndividualTrafficSelector(
 					ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
 					0, 65535, ueIPAddr.To4(), ueIPAddr.To4())
-				trafficSelectorResponder := ike_message.BuildTrafficSelectorResponder(
-					[]*ike_message.IndividualTrafficSelector{individualTrafficSelector})
-
-				ikePayload = append(ikePayload, trafficSelectorResponder)
 
 				// Notify-Qos
-				notifyQos := ike_message.BuildNotify5G_QOS_INFO(uint8(pduSessionID), pduSession.QFIList, true)
-
-				ikePayload = append(ikePayload, notifyQos)
+				ikePayload.BuildNotify5G_QOS_INFO(uint8(pduSessionID), pduSession.QFIList, true, false, 0)
 
 				// Notify-UP_IP_ADDRESS
-				notifyUPIPAddr := ike_message.BuildNotifyUP_IP4_ADDRESS(n3iwfSelf.IPSecGatewayAddress)
-
-				ikePayload = append(ikePayload, notifyUPIPAddr)
+				ikePayload.BuildNotifyUP_IP4_ADDRESS(n3iwfSelf.IPSecGatewayAddress)
 
 				if err := handler.EncryptProcedure(
 					n3iwfUe.N3IWFIKESecurityAssociation, ikePayload, ikeMessage); err != nil {
@@ -1694,7 +1622,6 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 			}
 		}
 	}
-
 }
 
 func HandlePDUSessionResourceModifyRequest(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
@@ -1711,7 +1638,7 @@ func HandlePDUSessionResourceModifyRequest(amf *context.N3IWFAMF, message *ngapT
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
 
 	var n3iwfUe *context.N3IWFUe
-	var n3iwfSelf = context.N3IWFSelf()
+	n3iwfSelf := context.N3IWFSelf()
 
 	if message == nil {
 		ngapLog.Error("NGAP Message is nil")
@@ -1834,7 +1761,7 @@ func handlePDUSessionResourceModifyRequestTransfer(
 	var ulNGUUPTNLModifyList *ngapType.ULNGUUPTNLModifyList
 	var networkInstance *ngapType.NetworkInstance
 	var qosFlowAddOrModifyRequestList *ngapType.QosFlowAddOrModifyRequestList
-	var qosFlowToReleaseList *ngapType.QosFlowList
+	var qosFlowToReleaseList *ngapType.QosFlowListWithCause
 	// var additionalULNGUUPTNLInformation *ngapType.UPTransportLayerInformation
 
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
@@ -1843,7 +1770,7 @@ func handlePDUSessionResourceModifyRequestTransfer(
 	var resDLNGUUPTNLInfo *ngapType.UPTransportLayerInformation
 	var resULNGUUPTNLInfo *ngapType.UPTransportLayerInformation
 	var resQosFlowAddOrModifyRequestList ngapType.QosFlowAddOrModifyResponseList
-	var resQosFlowFailedToAddOrModifyList ngapType.QosFlowList
+	var resQosFlowFailedToAddOrModifyList ngapType.QosFlowListWithCause
 
 	for _, ie := range transfer.ProtocolIEs.List {
 		switch ie.Id.Value {
@@ -1930,7 +1857,7 @@ func handlePDUSessionResourceModifyRequestTransfer(
 				cause := buildCause(
 					ngapType.CausePresentRadioNetwork, ngapType.CauseRadioNetworkPresentUnkownQosFlowID)
 
-				item := ngapType.QosFlowItem{
+				item := ngapType.QosFlowWithCauseItem{
 					QosFlowIdentifier: updateItem.QosFlowIdentifier,
 					Cause:             *cause,
 				}
@@ -2032,7 +1959,7 @@ func HandlePDUSessionResourceModifyConfirm(amf *context.N3IWFAMF, message *ngapT
 	}
 
 	var ue *context.N3IWFUe
-	var n3iwfSelf = context.N3IWFSelf()
+	n3iwfSelf := context.N3IWFSelf()
 
 	if rANUENGAPID != nil {
 		var ok bool
@@ -2065,7 +1992,7 @@ func HandlePDUSessionResourceModifyConfirm(amf *context.N3IWFAMF, message *ngapT
 	if pDUSessionResourceModifyListModCfm != nil {
 		for _, item := range pDUSessionResourceModifyListModCfm.List {
 			pduSessionId := item.PDUSessionID.Value
-			ngapLog.Tracef("PDU Session Id[%d] in Pdu Session Resouce Modification Confrim List", pduSessionId)
+			ngapLog.Tracef("PDU Session Id[%d] in Pdu Session Resource Modification Confrim List", pduSessionId)
 			sess, exist := ue.PduSessionList[pduSessionId]
 			if !exist {
 				ngapLog.Warnf("PDU Session Id[%d] is not exist in Ue[ranUeNgapId:%d]", pduSessionId, ue.RanUeNgapId)
@@ -2077,7 +2004,7 @@ func HandlePDUSessionResourceModifyConfirm(amf *context.N3IWFAMF, message *ngapT
 						pduSessionId, err)
 				} else if transfer.QosFlowFailedToModifyList != nil {
 					for _, flow := range transfer.QosFlowFailedToModifyList.List {
-						ngapLog.Warnf("Delete QFI[%d] due to Qos Flow Failure in Pdu Session Resouce Modification Confrim List",
+						ngapLog.Warnf("Delete QFI[%d] due to Qos Flow Failure in Pdu Session Resource Modification Confrim List",
 							flow.QosFlowIdentifier.Value)
 						delete(sess.QosFlows, flow.QosFlowIdentifier.Value)
 					}
@@ -2104,7 +2031,6 @@ func HandlePDUSessionResourceModifyConfirm(amf *context.N3IWFAMF, message *ngapT
 	if criticalityDiagnostics != nil {
 		printCriticalityDiagnostics(criticalityDiagnostics)
 	}
-
 }
 
 func HandlePDUSessionResourceReleaseCommand(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
@@ -2206,7 +2132,7 @@ func HandlePDUSessionResourceReleaseCommand(amf *context.N3IWFAMF, message *ngap
 	}
 
 	// if rANPagingPriority != nil {
-	//n3iwf does not support paging
+	// n3iwf does not support paging
 	// }
 
 	releaseList := ngapType.PDUSessionResourceReleasedListRelRes{}
@@ -2222,7 +2148,7 @@ func HandlePDUSessionResourceReleaseCommand(amf *context.N3IWFAMF, message *ngap
 		ngapLog.Tracef("Release PDU Session Id[%d] due to PDU Session Resource Release Command", pduSessionId)
 		delete(ue.PduSessionList, pduSessionId)
 
-		// reponse list
+		// response list
 		releaseItem := ngapType.PDUSessionResourceReleasedItemRelRes{
 			PDUSessionID: item.PDUSessionID,
 			PDUSessionResourceReleaseResponseTransfer: getPDUSessionResourceReleaseResponseTransfer(),
@@ -2234,7 +2160,6 @@ func HandlePDUSessionResourceReleaseCommand(amf *context.N3IWFAMF, message *ngap
 	// TODO: Send NAS to UE
 	// }
 	ngap_message.SendPDUSessionResourceReleaseResponse(amf, ue, releaseList, nil)
-
 }
 
 func HandleErrorIndication(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
@@ -2384,11 +2309,9 @@ func HandleUERadioCapabilityCheckRequest(amf *context.N3IWFAMF, message *ngapTyp
 	}
 
 	ue.RadioCapability = uERadioCapability
-
 }
 
 func HandleAMFConfigurationUpdate(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
-
 	ngapLog.Infoln("[N3IWF] Handle AMF Configuration Updaet")
 
 	var aMFName *ngapType.AMFName
@@ -2546,7 +2469,6 @@ func HandleRANConfigurationUpdateAcknowledge(amf *context.N3IWFAMF, message *nga
 	if criticalityDiagnostics != nil {
 		printCriticalityDiagnostics(criticalityDiagnostics)
 	}
-
 }
 
 func HandleRANConfigurationUpdateFailure(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
@@ -2603,7 +2525,6 @@ func HandleRANConfigurationUpdateFailure(amf *context.N3IWFAMF, message *ngapTyp
 	var waitingTime int
 
 	if timeToWait != nil {
-
 		switch timeToWait.Value {
 		case ngapType.TimeToWaitPresentV1s:
 			waitingTime = 1
@@ -2618,7 +2539,6 @@ func HandleRANConfigurationUpdateFailure(amf *context.N3IWFAMF, message *ngapTyp
 		case ngapType.TimeToWaitPresentV60s:
 			waitingTime = 60
 		}
-
 	}
 
 	if waitingTime != 0 {
@@ -2699,11 +2619,9 @@ func HandleOverloadStart(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
 	}
 	// TODO: restrict rule about overload action
 	amf.StartOverload(aMFOverloadResponse, aMFTrafficLoadReductionIndication, overloadStartNSSAIList)
-
 }
 
 func HandleOverloadStop(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
-
 	ngapLog.Infoln("[N3IWF] Handle Overload Stop")
 
 	if amf == nil {
@@ -2712,7 +2630,6 @@ func HandleOverloadStop(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
 	}
 	// TODO: remove restrict about overload action
 	amf.StopOverload()
-
 }
 
 func buildCriticalityDiagnostics(
@@ -2721,7 +2638,6 @@ func buildCriticalityDiagnostics(
 	procedureCriticality *aper.Enumerated,
 	iesCriticalityDiagnostics *ngapType.CriticalityDiagnosticsIEList) (
 	criticalityDiagnostics ngapType.CriticalityDiagnostics) {
-
 	if procedureCode != nil {
 		criticalityDiagnostics.ProcedureCode = new(ngapType.ProcedureCode)
 		criticalityDiagnostics.ProcedureCode.Value = *procedureCode
@@ -2746,7 +2662,6 @@ func buildCriticalityDiagnostics(
 
 func buildCriticalityDiagnosticsIEItem(ieCriticality aper.Enumerated, ieID int64, typeOfErr aper.Enumerated) (
 	item ngapType.CriticalityDiagnosticsIEItem) {
-
 	item = ngapType.CriticalityDiagnosticsIEItem{
 		IECriticality: ngapType.Criticality{
 			Value: ieCriticality,
@@ -2789,7 +2704,6 @@ func buildCause(present int, value aper.Enumerated) (cause *ngapType.Cause) {
 }
 
 func printAndGetCause(cause *ngapType.Cause) (present int, value aper.Enumerated) {
-
 	present = cause.Present
 	switch cause.Present {
 	case ngapType.CausePresentRadioNetwork:

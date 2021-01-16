@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net"
 
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/ike"
-	"free5gc/src/n3iwf/logger"
-
 	"github.com/sirupsen/logrus"
+
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/ike"
+	"github.com/free5gc/n3iwf/logger"
 )
 
 var ikeLog *logrus.Entry
@@ -67,7 +67,6 @@ func listenAndServe(localAddr *net.UDPAddr, errChan chan<- error) {
 	data := make([]byte, 65535)
 
 	for {
-
 		n, remoteAddr, err := listener.ReadFromUDP(data)
 		if err != nil {
 			ikeLog.Errorf("ReadFromUDP failed: %+v", err)
@@ -78,6 +77,5 @@ func listenAndServe(localAddr *net.UDPAddr, errChan chan<- error) {
 		copy(forwardData, data[:n])
 
 		go ike.Dispatch(listener, localAddr, remoteAddr, forwardData)
-
 	}
 }

@@ -4,9 +4,9 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"free5gc/lib/aper"
-	"free5gc/lib/ngap/ngapType"
-	"free5gc/src/n3iwf/ike/message"
+	"github.com/free5gc/aper"
+	"github.com/free5gc/n3iwf/ike/message"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 // 3GPP specified EAP-5G
@@ -38,7 +38,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 				// Bound checking
 				if len(anParameterField) < int(anParameterLength) {
-					ikeLog.Error("[IKE] Packet contained error length of value")
+					ikeLog.Error("Packet contained error length of value")
 					return 0, nil, nil, errors.New("Error formatting")
 				} else {
 					anParameterField = anParameterField[:anParameterLength]
@@ -73,12 +73,12 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							ngapGUAMI := new(ngapType.GUAMI)
 							err := aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
 							if err != nil {
-								ikeLog.Errorf("[IKE] APER unmarshal with parameter failed: %+v", err)
+								ikeLog.Errorf("APER unmarshal with parameter failed: %+v", err)
 								return 0, nil, nil, errors.New("Unmarshal failed when decoding GUAMI")
 							}
 							anParameters.GUAMI = ngapGUAMI
 						} else {
-							ikeLog.Warn("[IKE] AN-Parameter GUAMI field empty")
+							ikeLog.Warn("AN-Parameter GUAMI field empty")
 						}
 					case message.ANParametersTypeSelectedPLMNID:
 						if parameterLength != 0 {
@@ -100,12 +100,12 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							ngapPLMN := new(ngapType.PLMNIdentity)
 							err := aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
 							if err != nil {
-								ikeLog.Errorf("[IKE] APER unmarshal with parameter failed: %v", err)
+								ikeLog.Errorf("APER unmarshal with parameter failed: %v", err)
 								return 0, nil, nil, errors.New("Unmarshal failed when decoding PLMN")
 							}
 							anParameters.SelectedPLMNID = ngapPLMN
 						} else {
-							ikeLog.Warn("[IKE] AN-Parameter PLMN field empty")
+							ikeLog.Warn("AN-Parameter PLMN field empty")
 						}
 					case message.ANParametersTypeRequestedNSSAI:
 						if parameterLength != 0 {
@@ -161,13 +161,13 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 													},
 												}
 											} else {
-												ikeLog.Error("[IKE] SNSSAI length error")
+												ikeLog.Error("SNSSAI length error")
 												return 0, nil, nil, errors.New("Error formatting")
 											}
 
 											ngapNSSAI.List = append(ngapNSSAI.List, ngapSNSSAIItem)
 										} else {
-											ikeLog.Error("[IKE] Empty SNSSAI value")
+											ikeLog.Error("Empty SNSSAI value")
 											return 0, nil, nil, errors.New("Error formatting")
 										}
 
@@ -177,16 +177,15 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 									anParameters.RequestedNSSAI = ngapNSSAI
 								} else {
-									ikeLog.Error("[IKE] Empty NSSAI value")
+									ikeLog.Error("Empty NSSAI value")
 									return 0, nil, nil, errors.New("Error formatting")
 								}
 							} else {
-								ikeLog.Error("[IKE] No NSSAI type or length specified")
+								ikeLog.Error("No NSSAI type or length specified")
 								return 0, nil, nil, errors.New("Error formatting")
 							}
-
 						} else {
-							ikeLog.Warn("[IKE] AN-Parameter value for NSSAI empty")
+							ikeLog.Warn("AN-Parameter value for NSSAI empty")
 						}
 					case message.ANParametersTypeEstablishmentCause:
 						if parameterLength != 0 {
@@ -205,19 +204,19 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							establishmentCause := parameterValue[1] & 0x0f
 							switch establishmentCause {
 							case message.EstablishmentCauseEmergency:
-								ikeLog.Trace("[IKE] AN-Parameter establishment cause: Emergency")
+								ikeLog.Trace("AN-Parameter establishment cause: Emergency")
 							case message.EstablishmentCauseHighPriorityAccess:
-								ikeLog.Trace("[IKE] AN-Parameter establishment cause: High Priority Access")
+								ikeLog.Trace("AN-Parameter establishment cause: High Priority Access")
 							case message.EstablishmentCauseMO_Signalling:
-								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MO Signalling")
+								ikeLog.Trace("AN-Parameter establishment cause: MO Signalling")
 							case message.EstablishmentCauseMO_Data:
-								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MO Data")
+								ikeLog.Trace("AN-Parameter establishment cause: MO Data")
 							case message.EstablishmentCauseMPS_PriorityAccess:
-								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MPS Priority Access")
+								ikeLog.Trace("AN-Parameter establishment cause: MPS Priority Access")
 							case message.EstablishmentCauseMCS_PriorityAccess:
-								ikeLog.Trace("[IKE] AN-Parameter establishment cause: MCS Priority Access")
+								ikeLog.Trace("AN-Parameter establishment cause: MCS Priority Access")
 							default:
-								ikeLog.Trace("[IKE] AN-Parameter establishment cause: Unknown. Treat as mo-Data")
+								ikeLog.Trace("AN-Parameter establishment cause: Unknown. Treat as mo-Data")
 								establishmentCause = message.EstablishmentCauseMO_Data
 							}
 
@@ -226,10 +225,10 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 							anParameters.EstablishmentCause = ngapEstablishmentCause
 						} else {
-							ikeLog.Warn("[IKE] AN-Parameter establishment cause field empty")
+							ikeLog.Warn("AN-Parameter establishment cause field empty")
 						}
 					default:
-						ikeLog.Warn("[IKE] Unsopprted AN-Parameter. Ignore.")
+						ikeLog.Warn("Unsopprted AN-Parameter. Ignore.")
 					}
 
 					// shift anParameterField
@@ -240,7 +239,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 			// shift codedData
 			codedData = codedData[2+anParameterLength:]
 		} else {
-			ikeLog.Error("[IKE] No AN-Parameter type or length specified")
+			ikeLog.Error("No AN-Parameter type or length specified")
 			return 0, nil, nil, errors.New("Error formatting")
 		}
 
@@ -260,11 +259,11 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 				nasPDU = append(nasPDU, nasPDUField...)
 			} else {
-				ikeLog.Error("[IKE] No NAS PDU included in EAP-5G packet")
+				ikeLog.Error("No NAS PDU included in EAP-5G packet")
 				return 0, nil, nil, errors.New("No NAS PDU")
 			}
 		} else {
-			ikeLog.Error("[IKE] No NASPDU length specified")
+			ikeLog.Error("No NASPDU length specified")
 			return 0, nil, nil, errors.New("Error formatting")
 		}
 

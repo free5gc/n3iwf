@@ -8,15 +8,14 @@ import (
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/ngap"
-	"free5gc/src/n3iwf/ngap/message"
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/n3iwf/ngap"
+	"github.com/free5gc/n3iwf/ngap/message"
+	lib_ngap "github.com/free5gc/ngap"
 )
 
 var ngapLog *logrus.Entry
-
-const NGAP_PPID_BigEndian = 0x3c000000
 
 func init() {
 	ngapLog = logger.NgapLog
@@ -66,7 +65,7 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 		}
 	}
 
-	// Set default sender SCTP infomation sinfo_ppid = NGAP_PPID = 60
+	// Set default sender SCTP information sinfo_ppid = NGAP_PPID = 60
 	info, err := conn.GetDefaultSentParam()
 	if err != nil {
 		ngapLog.Errorf("[SCTP] GetDefaultSentParam(): %+v", err)
@@ -74,10 +73,10 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 		if errConn != nil {
 			ngapLog.Errorf("conn close error in GetDefaultSentParam(): %+v", errConn)
 		}
-		errChan <- errors.New("Get socket infomation failed.")
+		errChan <- errors.New("Get socket information failed.")
 		return
 	}
-	info.PPID = NGAP_PPID_BigEndian
+	info.PPID = lib_ngap.PPID
 	err = conn.SetDefaultSentParam(info)
 	if err != nil {
 		ngapLog.Errorf("[SCTP] SetDefaultSentParam(): %+v", err)
@@ -109,7 +108,7 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 	data := make([]byte, 65535)
 
 	for {
-		n, info, err := conn.SCTPRead(data)
+		n, info, _, err := conn.SCTPRead(data)
 
 		if err != nil {
 			ngapLog.Debugf("[SCTP] AMF SCTP address: %+v", conn.RemoteAddr().String())
@@ -125,7 +124,7 @@ func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) 
 		} else {
 			ngapLog.Tracef("[SCTP] Successfully read %d bytes.", n)
 
-			if info == nil || info.PPID != NGAP_PPID_BigEndian {
+			if info == nil || info.PPID != lib_ngap.PPID {
 				ngapLog.Warn("Received SCTP PPID != 60")
 				continue
 			}

@@ -3,11 +3,12 @@ package util
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"free5gc/lib/aper"
-	"free5gc/lib/ngap/ngapType"
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/logger"
 	"strings"
+
+	"github.com/free5gc/aper"
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func PlmnIdToNgap(plmnId context.PLMNID) (ngapPlmnId ngapType.PLMNIdentity) {

@@ -13,9 +13,9 @@ import (
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
 	"golang.org/x/net/ipv4"
 
-	"free5gc/lib/idgenerator"
-	"free5gc/lib/ngap/ngapType"
-	"free5gc/src/n3iwf/logger"
+	"github.com/free5gc/idgenerator"
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 var contextLog *logrus.Entry
@@ -60,8 +60,8 @@ type N3IWFContext struct {
 	GTPBindAddress      string
 	TCPPort             uint16
 
-	// N3IWF NWu interface raw socket
-	NWuRawSocket *ipv4.RawConn
+	// N3IWF NWu interface IPv4 packet connection
+	NWuIPv4PacketConn *ipv4.PacketConn
 }
 
 func init() {

@@ -7,11 +7,11 @@ import (
 	"net"
 	"strings"
 
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/ngap/message"
-
 	"github.com/sirupsen/logrus"
+
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/n3iwf/ngap/message"
 )
 
 var nwucpLog *logrus.Entry

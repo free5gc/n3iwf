@@ -2,10 +2,11 @@ package handler
 
 import (
 	"errors"
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/ike/message"
 
 	"github.com/vishvananda/netlink"
+
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/ike/message"
 )
 
 type XFRMEncryptionAlgorithmType uint16
@@ -95,10 +96,18 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *context.Ch
 	xfrmState.Crypt = xfrmEncryptionAlgorithm
 	xfrmState.ESN = childSecurityAssociation.ESN
 
+	if childSecurityAssociation.EnableEncapsulate {
+		xfrmState.Encap = &netlink.XfrmStateEncap{
+			Type:    netlink.XFRM_ENCAP_ESPINUDP,
+			SrcPort: childSecurityAssociation.NATPort,
+			DstPort: childSecurityAssociation.N3IWFPort,
+		}
+	}
+
 	// Commit xfrm state to netlink
 	var err error
 	if err = netlink.XfrmStateAdd(xfrmState); err != nil {
-		ikeLog.Errorf("[IKE] Set XFRM rules failed: %+v", err)
+		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
 		return errors.New("Set XFRM state rule failed")
 	}
 
@@ -124,7 +133,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *context.Ch
 
 	// Commit xfrm policy to netlink
 	if err = netlink.XfrmPolicyAdd(xfrmPolicy); err != nil {
-		ikeLog.Errorf("[IKE] Set XFRM rules failed: %+v", err)
+		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
 		return errors.New("Set XFRM policy rule failed")
 	}
 
@@ -143,10 +152,13 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *context.Ch
 	}
 
 	xfrmState.Src, xfrmState.Dst = xfrmState.Dst, xfrmState.Src
+	if xfrmState.Encap != nil {
+		xfrmState.Encap.SrcPort, xfrmState.Encap.DstPort = xfrmState.Encap.DstPort, xfrmState.Encap.SrcPort
+	}
 
 	// Commit xfrm state to netlink
 	if err = netlink.XfrmStateAdd(xfrmState); err != nil {
-		ikeLog.Errorf("[IKE] Set XFRM rules failed: %+v", err)
+		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
 		return errors.New("Set XFRM state rule failed")
 	}
 
@@ -161,7 +173,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *context.Ch
 
 	// Commit xfrm policy to netlink
 	if err = netlink.XfrmPolicyAdd(xfrmPolicy); err != nil {
-		ikeLog.Errorf("[IKE] Set XFRM rules failed: %+v", err)
+		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
 		return errors.New("Set XFRM policy rule failed")
 	}
 

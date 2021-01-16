@@ -16,13 +16,15 @@ import (
 	"math/big"
 	"strings"
 
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/ike/message"
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/ike/message"
 )
 
 // General data
-var randomNumberMaximum big.Int
-var randomNumberMinimum big.Int
+var (
+	randomNumberMaximum big.Int
+	randomNumberMinimum big.Int
+)
 
 func init() {
 	randomNumberMaximum.SetString(strings.Repeat("F", 512), 16)
@@ -35,7 +37,7 @@ func GenerateRandomNumber() *big.Int {
 	for {
 		number, err = rand.Int(rand.Reader, &randomNumberMaximum)
 		if err != nil {
-			ikeLog.Errorf("[IKE] Error occurs when generate random number: %+v", err)
+			ikeLog.Errorf("Error occurs when generate random number: %+v", err)
 			return nil
 		} else {
 			if number.Cmp(&randomNumberMinimum) == 1 {
@@ -50,10 +52,10 @@ func GenerateRandomUint8() (uint8, error) {
 	number := make([]byte, 1)
 	_, err := io.ReadFull(rand.Reader, number)
 	if err != nil {
-		ikeLog.Errorf("[IKE] Read random failed: %+v", err)
+		ikeLog.Errorf("Read random failed: %+v", err)
 		return 0, errors.New("Read failed")
 	}
-	return uint8(number[0]), nil
+	return number[0], nil
 }
 
 // Diffie-Hellman Exchange
@@ -99,7 +101,7 @@ func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte,
 		factor, ok = new(big.Int).SetString(Group2PrimeString, 16)
 		if !ok {
 			ikeLog.Errorf(
-				"[IKE] Error occurs when setting big number \"factor\" in %d group",
+				"Error occurs when setting big number \"factor\" in %d group",
 				diffieHellmanGroupNumber)
 		}
 	case message.DH_2048_BIT_MODP:
@@ -107,11 +109,11 @@ func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte,
 		factor, ok = new(big.Int).SetString(Group14PrimeString, 16)
 		if !ok {
 			ikeLog.Errorf(
-				"[IKE] Error occurs when setting big number \"factor\" in %d group",
+				"Error occurs when setting big number \"factor\" in %d group",
 				diffieHellmanGroupNumber)
 		}
 	default:
-		ikeLog.Errorf("[IKE] Unsupported Diffie-Hellman group: %d", diffieHellmanGroupNumber)
+		ikeLog.Errorf("Unsupported Diffie-Hellman group: %d", diffieHellmanGroupNumber)
 		return
 	}
 
@@ -126,7 +128,7 @@ func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte,
 	return localPublicValue, sharedKey
 }
 
-// Pseudorandom Funciton
+// Pseudorandom Function
 func NewPseudorandomFunction(key []byte, algorithmType uint16) (hash.Hash, bool) {
 	switch algorithmType {
 	case message.PRF_HMAC_MD5:
@@ -134,7 +136,7 @@ func NewPseudorandomFunction(key []byte, algorithmType uint16) (hash.Hash, bool)
 	case message.PRF_HMAC_SHA1:
 		return hmac.New(sha1.New, key), true
 	default:
-		ikeLog.Errorf("[IKE] Unsupported pseudo random function: %d", algorithmType)
+		ikeLog.Errorf("Unsupported pseudo random function: %d", algorithmType)
 		return nil, false
 	}
 }
@@ -148,7 +150,7 @@ func CalculateChecksum(key []byte, originData []byte, algorithmType uint16) ([]b
 		}
 		integrityFunction := hmac.New(md5.New, key)
 		if _, err := integrityFunction.Write(originData); err != nil {
-			ikeLog.Errorf("[IKE] Hash function write error when calcualting checksum: %+v", err)
+			ikeLog.Errorf("Hash function write error when calculating checksum: %+v", err)
 			return nil, errors.New("Hash function write error")
 		}
 		return integrityFunction.Sum(nil), nil
@@ -158,12 +160,12 @@ func CalculateChecksum(key []byte, originData []byte, algorithmType uint16) ([]b
 		}
 		integrityFunction := hmac.New(sha1.New, key)
 		if _, err := integrityFunction.Write(originData); err != nil {
-			ikeLog.Errorf("[IKE] Hash function write error when calcualting checksum: %+v", err)
+			ikeLog.Errorf("Hash function write error when calculating checksum: %+v", err)
 			return nil, errors.New("Hash function write error")
 		}
 		return integrityFunction.Sum(nil)[:12], nil
 	default:
-		ikeLog.Errorf("[IKE] Unsupported integrity function: %d", algorithmType)
+		ikeLog.Errorf("Unsupported integrity function: %d", algorithmType)
 		return nil, errors.New("Unsupported algorithm")
 	}
 }
@@ -176,7 +178,7 @@ func VerifyIKEChecksum(key []byte, originData []byte, checksum []byte, algorithm
 		}
 		integrityFunction := hmac.New(md5.New, key)
 		if _, err := integrityFunction.Write(originData); err != nil {
-			ikeLog.Errorf("[IKE] Hash function write error when verifying IKE checksum: %+v", err)
+			ikeLog.Errorf("Hash function write error when verifying IKE checksum: %+v", err)
 			return false, errors.New("Hash function write error")
 		}
 		checksumOfMessage := integrityFunction.Sum(nil)
@@ -191,7 +193,7 @@ func VerifyIKEChecksum(key []byte, originData []byte, checksum []byte, algorithm
 		}
 		integrityFunction := hmac.New(sha1.New, key)
 		if _, err := integrityFunction.Write(originData); err != nil {
-			ikeLog.Errorf("[IKE] Hash function write error when verifying IKE checksum: %+v", err)
+			ikeLog.Errorf("Hash function write error when verifying IKE checksum: %+v", err)
 			return false, errors.New("Hash function write error")
 		}
 		checksumOfMessage := integrityFunction.Sum(nil)[:12]
@@ -201,7 +203,7 @@ func VerifyIKEChecksum(key []byte, originData []byte, checksum []byte, algorithm
 
 		return hmac.Equal(checksumOfMessage, checksum), nil
 	default:
-		ikeLog.Errorf("[IKE] Unsupported integrity function: %d", algorithmType)
+		ikeLog.Errorf("Unsupported integrity function: %d", algorithmType)
 		return false, errors.New("Unsupported algorithm")
 	}
 }
@@ -216,7 +218,7 @@ func EncryptMessage(key []byte, originData []byte, algorithmType uint16) ([]byte
 
 		block, err := aes.NewCipher(key)
 		if err != nil {
-			ikeLog.Errorf("[IKE] Error occur when create new cipher: %+v", err)
+			ikeLog.Errorf("Error occur when create new cipher: %+v", err)
 			return nil, errors.New("Create cipher failed")
 		}
 
@@ -225,7 +227,7 @@ func EncryptMessage(key []byte, originData []byte, algorithmType uint16) ([]byte
 
 		_, err = io.ReadFull(rand.Reader, initializationVector)
 		if err != nil {
-			ikeLog.Errorf("[IKE] Read random failed: %+v", err)
+			ikeLog.Errorf("Read random failed: %+v", err)
 			return nil, errors.New("Read random initialization vector failed")
 		}
 
@@ -234,7 +236,7 @@ func EncryptMessage(key []byte, originData []byte, algorithmType uint16) ([]byte
 
 		return cipherText, nil
 	default:
-		ikeLog.Errorf("[IKE] Unsupported encryption algorithm: %d", algorithmType)
+		ikeLog.Errorf("Unsupported encryption algorithm: %d", algorithmType)
 		return nil, errors.New("Unsupported algorithm")
 	}
 }
@@ -243,7 +245,7 @@ func DecryptMessage(key []byte, cipherText []byte, algorithmType uint16) ([]byte
 	switch algorithmType {
 	case message.ENCR_AES_CBC:
 		if len(cipherText) < aes.BlockSize {
-			ikeLog.Error("[IKE] Length of cipher text is too short to decrypt")
+			ikeLog.Error("Length of cipher text is too short to decrypt")
 			return nil, errors.New("Cipher text is too short")
 		}
 
@@ -251,7 +253,7 @@ func DecryptMessage(key []byte, cipherText []byte, algorithmType uint16) ([]byte
 		encryptedMessage := cipherText[aes.BlockSize:]
 
 		if len(encryptedMessage)%aes.BlockSize != 0 {
-			ikeLog.Error("[IKE] Cipher text is not a multiple of block size")
+			ikeLog.Error("Cipher text is not a multiple of block size")
 			return nil, errors.New("Cipher text length error")
 		}
 
@@ -259,7 +261,7 @@ func DecryptMessage(key []byte, cipherText []byte, algorithmType uint16) ([]byte
 
 		block, err := aes.NewCipher(key)
 		if err != nil {
-			ikeLog.Errorf("[IKE] Error occur when create new cipher: %+v", err)
+			ikeLog.Errorf("Error occur when create new cipher: %+v", err)
 			return nil, errors.New("Create cipher failed")
 		}
 		cbcBlockMode := cipher.NewCBCDecrypter(block, initializationVector)
@@ -274,7 +276,7 @@ func DecryptMessage(key []byte, cipherText []byte, algorithmType uint16) ([]byte
 
 		return plainText, nil
 	default:
-		ikeLog.Errorf("[IKE] Unsupported encryption algorithm: %d", algorithmType)
+		ikeLog.Errorf("Unsupported encryption algorithm: %d", algorithmType)
 		return nil, errors.New("Unsupported algorithm")
 	}
 }
@@ -298,7 +300,7 @@ func CompareRootCertificate(certificateEncoding uint8, requestedCertificateAutho
 	n3iwfSelf := context.N3IWFSelf()
 
 	if len(n3iwfSelf.CertificateAuthority) == 0 {
-		ikeLog.Error("[IKE] Certificate authority in context is empty")
+		ikeLog.Error("Certificate authority in context is empty")
 		return false
 	}
 
@@ -345,20 +347,20 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation)
 	if length_SK_d, ok = getKeyLength(transformPseudorandomFunction.TransformType,
 		transformPseudorandomFunction.TransformID, transformPseudorandomFunction.AttributePresent,
 		transformPseudorandomFunction.AttributeValue); !ok {
-		ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+		ikeLog.Error("Get key length of an unsupported algorithm. This may imply an unsupported transform is chosen.")
 		return errors.New("Get key length failed")
 	}
 	if length_SK_ai, ok = getKeyLength(transformIntegrityAlgorithm.TransformType,
 		transformIntegrityAlgorithm.TransformID, transformIntegrityAlgorithm.AttributePresent,
 		transformIntegrityAlgorithm.AttributeValue); !ok {
-		ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+		ikeLog.Error("Get key length of an unsupported algorithm. This may imply an unsupported transform is chosen.")
 		return errors.New("Get key length failed")
 	}
 	length_SK_ar = length_SK_ai
 	if length_SK_ei, ok = getKeyLength(transformEncryptionAlgorithm.TransformType,
 		transformEncryptionAlgorithm.TransformID, transformEncryptionAlgorithm.AttributePresent,
 		transformEncryptionAlgorithm.AttributeValue); !ok {
-		ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+		ikeLog.Error("Get key length of an unsupported algorithm. This may imply an unsupported transform is chosen.")
 		return errors.New("Get key length failed")
 	}
 	length_SK_er = length_SK_ei
@@ -370,7 +372,7 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation)
 
 	if pseudorandomFunction, ok = NewPseudorandomFunction(ikeSecurityAssociation.ConcatenatedNonce,
 		transformPseudorandomFunction.TransformID); !ok {
-		ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
+		ikeLog.Error("Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 		return errors.New("New pseudorandom function failed")
 	}
 
@@ -378,7 +380,7 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation)
 	ikeLog.Tracef("Concatenated nonce:\n%s", hex.Dump(ikeSecurityAssociation.ConcatenatedNonce))
 
 	if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.DiffieHellmanSharedKey); err != nil {
-		ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+		ikeLog.Errorf("Pseudorandom function write error: %+v", err)
 		return errors.New("Pseudorandom function write failed")
 	}
 
@@ -394,11 +396,11 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation)
 	for index = 1; len(keyStream) < totalKeyLength; index++ {
 		if pseudorandomFunction, ok =
 			NewPseudorandomFunction(SKEYSEED, transformPseudorandomFunction.TransformID); !ok {
-			ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
+			ikeLog.Error("Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 			return errors.New("New pseudorandom function failed")
 		}
 		if _, err := pseudorandomFunction.Write(append(append(generatedKeyBlock, seed...), index)); err != nil {
-			ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+			ikeLog.Errorf("Pseudorandom function write error: %+v", err)
 			return errors.New("Pseudorandom function write failed")
 		}
 		generatedKeyBlock = pseudorandomFunction.Sum(nil)
@@ -479,7 +481,7 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 		transformEncryptionAlgorithmForIPSec.TransformID,
 		transformEncryptionAlgorithmForIPSec.AttributePresent,
 		transformEncryptionAlgorithmForIPSec.AttributeValue); !ok {
-		ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+		ikeLog.Error("Get key length of an unsupported algorithm. This may imply an unsupported transform is chosen.")
 		return errors.New("Get key length failed")
 	}
 	if transformIntegrityAlgorithmForIPSec != nil {
@@ -487,7 +489,7 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 			transformIntegrityAlgorithmForIPSec.TransformID,
 			transformIntegrityAlgorithmForIPSec.AttributePresent,
 			transformIntegrityAlgorithmForIPSec.AttributeValue); !ok {
-			ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+			ikeLog.Error("Get key length of an unsupported algorithm. This may imply an unsupported transform is chosen.")
 			return errors.New("Get key length failed")
 		}
 	}
@@ -503,11 +505,11 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 	for index = 1; len(keyStream) < totalKeyLength; index++ {
 		if pseudorandomFunction, ok = NewPseudorandomFunction(ikeSecurityAssociation.SK_d,
 			transformPseudorandomFunction.TransformID); !ok {
-			ikeLog.Error("[IKE] Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
+			ikeLog.Error("Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
 			return errors.New("New pseudorandom function failed")
 		}
 		if _, err := pseudorandomFunction.Write(append(append(generatedKeyBlock, seed...), index)); err != nil {
-			ikeLog.Errorf("[IKE] Pseudorandom function write error: %+v", err)
+			ikeLog.Errorf("Pseudorandom function write error: %+v", err)
 			return errors.New("Pseudorandom function write failed")
 		}
 		generatedKeyBlock = pseudorandomFunction.Sum(nil)
@@ -527,12 +529,11 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 		append(childSecurityAssociation.ResponderToInitiatorIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
 
 	return nil
-
 }
 
 // Decrypt
 func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ikeMessage *message.IKEMessage,
-	encryptedPayload *message.Encrypted) ([]message.IKEPayloadType, error) {
+	encryptedPayload *message.Encrypted) (message.IKEPayloadContainer, error) {
 	// Check parameters
 	if ikeSecurityAssociation == nil {
 		return nil, errors.New("IKE SA is nil")
@@ -566,14 +567,14 @@ func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ik
 		transformIntegrityAlgorithm.TransformID, transformIntegrityAlgorithm.AttributePresent,
 		transformIntegrityAlgorithm.AttributeValue)
 	if !ok {
-		ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+		ikeLog.Error("Get key length of an unsupported algorithm. This may imply an unsupported transform is chosen.")
 		return nil, errors.New("Get key length failed")
 	}
 
 	// Checksum
 	checksum := encryptedPayload.EncryptedData[len(encryptedPayload.EncryptedData)-checksumLength:]
 
-	ikeMessageData, err := message.Encode(ikeMessage)
+	ikeMessageData, err := ikeMessage.Encode()
 	if err != nil {
 		ikeLog.Errorln(err)
 		ikeLog.Error("Error occur when encoding for checksum")
@@ -584,11 +585,11 @@ func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ik
 		ikeMessageData[:len(ikeMessageData)-checksumLength], checksum,
 		transformIntegrityAlgorithm.TransformID)
 	if err != nil {
-		ikeLog.Errorf("[IKE] Error occur when verifying checksum: %+v", err)
+		ikeLog.Errorf("Error occur when verifying checksum: %+v", err)
 		return nil, errors.New("Error verify checksum")
 	}
 	if !ok {
-		ikeLog.Warn("[IKE] Message checksum failed. Drop the message.")
+		ikeLog.Warn("Message checksum failed. Drop the message.")
 		return nil, errors.New("Checksum failed, drop.")
 	}
 
@@ -597,23 +598,23 @@ func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ik
 	plainText, err := DecryptMessage(ikeSecurityAssociation.SK_ei, encryptedData,
 		transformEncryptionAlgorithm.TransformID)
 	if err != nil {
-		ikeLog.Errorf("[IKE] Error occur when decrypting message: %+v", err)
+		ikeLog.Errorf("Error occur when decrypting message: %+v", err)
 		return nil, errors.New("Error decrypting message")
 	}
 
-	decryptedIKEPayload, err := message.DecodePayload(encryptedPayload.NextPayload, plainText)
+	var decryptedIKEPayload message.IKEPayloadContainer
+	err = decryptedIKEPayload.Decode(encryptedPayload.NextPayload, plainText)
 	if err != nil {
 		ikeLog.Errorln(err)
 		return nil, errors.New("Decoding decrypted payload failed")
 	}
 
 	return decryptedIKEPayload, nil
-
 }
 
 // Encrypt
 func EncryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation,
-	ikePayload []message.IKEPayloadType, responseIKEMessage *message.IKEMessage) error {
+	ikePayload message.IKEPayloadContainer, responseIKEMessage *message.IKEMessage) error {
 	// Check parameters
 	if ikeSecurityAssociation == nil {
 		return errors.New("IKE SA is nil")
@@ -647,31 +648,29 @@ func EncryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation,
 		transformIntegrityAlgorithm.TransformID, transformIntegrityAlgorithm.AttributePresent,
 		transformIntegrityAlgorithm.AttributeValue)
 	if !ok {
-		ikeLog.Error("[IKE] Get key length of an unsupported algorithm. This may imply an unsupported tranform is chosen.")
+		ikeLog.Error("Get key length of an unsupported algorithm. This may imply an unsupported transform is chosen.")
 		return errors.New("Get key length failed")
 	}
 
 	// Encrypting
-	notificationPayloadData, err := message.EncodePayload(ikePayload)
+	ikePayloadData, err := ikePayload.Encode()
 	if err != nil {
 		ikeLog.Error(err)
 		return errors.New("Encoding IKE payload failed.")
 	}
 
-	encryptedData, err := EncryptMessage(ikeSecurityAssociation.SK_er, notificationPayloadData,
+	encryptedData, err := EncryptMessage(ikeSecurityAssociation.SK_er, ikePayloadData,
 		transformEncryptionAlgorithm.TransformID)
 	if err != nil {
-		ikeLog.Errorf("[IKE] Encrypting data error: %+v", err)
+		ikeLog.Errorf("Encrypting data error: %+v", err)
 		return errors.New("Error encrypting message")
 	}
 
 	encryptedData = append(encryptedData, make([]byte, checksumLength)...)
-	responseEncryptedPayload := message.BuildEncrypted(ikePayload[0].Type(), encryptedData)
-
-	responseIKEMessage.IKEPayload = append(responseIKEMessage.IKEPayload, responseEncryptedPayload)
+	sk := responseIKEMessage.Payloads.BuildEncrypted(ikePayload[0].Type(), encryptedData)
 
 	// Calculate checksum
-	responseIKEMessageData, err := message.Encode(responseIKEMessage)
+	responseIKEMessageData, err := responseIKEMessage.Encode()
 	if err != nil {
 		ikeLog.Error(err)
 		return errors.New("Encoding IKE message error")
@@ -680,15 +679,13 @@ func EncryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation,
 		responseIKEMessageData[:len(responseIKEMessageData)-checksumLength],
 		transformIntegrityAlgorithm.TransformID)
 	if err != nil {
-		ikeLog.Errorf("[IKE] Calculating checksum failed: %+v", err)
+		ikeLog.Errorf("Calculating checksum failed: %+v", err)
 		return errors.New("Error calculating checksum")
 	}
-	checksumField :=
-		responseEncryptedPayload.EncryptedData[len(responseEncryptedPayload.EncryptedData)-checksumLength:]
+	checksumField := sk.EncryptedData[len(sk.EncryptedData)-checksumLength:]
 	copy(checksumField, checksumOfMessage)
 
 	return nil
-
 }
 
 // Get information of algorithm

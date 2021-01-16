@@ -1,14 +1,15 @@
 package handler
 
 import (
-	ike_message "free5gc/src/n3iwf/ike/message"
 	"net"
+
+	ike_message "github.com/free5gc/n3iwf/ike/message"
 )
 
 func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, message *ike_message.IKEMessage) {
-	ikeLog.Trace("[IKE] Send IKE message to UE")
-	ikeLog.Trace("[IKE] Encoding...")
-	pkt, err := ike_message.Encode(message)
+	ikeLog.Trace("Send IKE message to UE")
+	ikeLog.Trace("Encoding...")
+	pkt, err := message.Encode()
 	if err != nil {
 		ikeLog.Errorln(err)
 		return
@@ -20,7 +21,7 @@ func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, mes
 		pkt = append(prependZero, pkt...)
 	}
 
-	ikeLog.Trace("[IKE] Sending...")
+	ikeLog.Trace("Sending...")
 	n, err := udpConn.WriteToUDP(pkt, dstAddr)
 	if err != nil {
 		ikeLog.Error(err)

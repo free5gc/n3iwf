@@ -12,10 +12,10 @@ import (
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 
-	"free5gc/lib/path_util"
-	"free5gc/src/n3iwf/context"
-	"free5gc/src/n3iwf/factory"
-	"free5gc/src/n3iwf/logger"
+	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/factory"
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/path_util"
 )
 
 var contextLog *logrus.Entry
@@ -113,7 +113,7 @@ func InitN3IWFContext() bool {
 
 		if factory.N3iwfConfig.Configuration.PrivateKey == "" {
 			contextLog.Warn("No private key file path specified, load default key file...")
-			keyPath = path_util.Gofree5gcPath("free5gc/support/TLS/n3iwf.key")
+			keyPath = path_util.Free5gcPath("free5gc/support/TLS/n3iwf.key")
 		} else {
 			keyPath = factory.N3iwfConfig.Configuration.PrivateKey
 		}
@@ -154,7 +154,7 @@ func InitN3IWFContext() bool {
 
 		if factory.N3iwfConfig.Configuration.CertificateAuthority == "" {
 			contextLog.Warn("No certificate authority file path specified, load default CA certificate...")
-			keyPath = path_util.Gofree5gcPath("free5gc/support/TLS/n3iwf.pem")
+			keyPath = path_util.Free5gcPath("free5gc/support/TLS/n3iwf.pem")
 		} else {
 			keyPath = factory.N3iwfConfig.Configuration.CertificateAuthority
 		}
@@ -193,7 +193,7 @@ func InitN3IWFContext() bool {
 
 		if factory.N3iwfConfig.Configuration.Certificate == "" {
 			contextLog.Warn("No certificate file path specified, load default certificate...")
-			keyPath = path_util.Gofree5gcPath("free5gc/support/TLS/n3iwf.pem")
+			keyPath = path_util.Free5gcPath("free5gc/support/TLS/n3iwf.pem")
 		} else {
 			keyPath = factory.N3iwfConfig.Configuration.Certificate
 		}
@@ -239,7 +239,6 @@ func InitN3IWFContext() bool {
 
 func formatSupportedTAList(info *context.N3IWFNFInfo) bool {
 	for taListIndex := range info.SupportedTAList {
-
 		supportedTAItem := &info.SupportedTAList[taListIndex]
 
 		// Checking TAC
@@ -258,11 +257,9 @@ func formatSupportedTAList(info *context.N3IWFNFInfo) bool {
 
 		// Checking SST and SD
 		for plmnListIndex := range supportedTAItem.BroadcastPLMNList {
-
 			broadcastPLMNItem := &supportedTAItem.BroadcastPLMNList[plmnListIndex]
 
 			for sliceListIndex := range broadcastPLMNItem.TAISliceSupportList {
-
 				sliceSupportItem := &broadcastPLMNItem.TAISliceSupportList[sliceListIndex]
 
 				// SST
@@ -289,10 +286,8 @@ func formatSupportedTAList(info *context.N3IWFNFInfo) bool {
 						return false
 					}
 				}
-
 			}
 		}
-
 	}
 
 	return true

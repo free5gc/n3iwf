@@ -4,11 +4,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"free5gc/lib/ngap/ngapType"
-	ike_message "free5gc/src/n3iwf/ike/message"
 	"net"
 
 	gtpv1 "github.com/wmnsk/go-gtp/v1"
+
+	ike_message "github.com/free5gc/n3iwf/ike/message"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 const (
@@ -16,16 +17,16 @@ const (
 )
 
 type N3IWFUe struct {
-	/* UE identity*/
-	RanUeNgapId           int64
-	AmfUeNgapId           int64
-	IPAddrv4              string
-	IPAddrv6              string
-	PortNumber            int32
-	MaskedIMEISV          *ngapType.MaskedIMEISV // TS 38.413 9.3.1.54
-	Guti                  string
-	RRCEstablishmentCause int16
-	IPSecInnerIP          string
+	/* UE identity */
+	RanUeNgapId      int64
+	AmfUeNgapId      int64
+	IPAddrv4         string
+	IPAddrv6         string
+	PortNumber       int32
+	MaskedIMEISV     *ngapType.MaskedIMEISV // TS 38.413 9.3.1.54
+	Guti             string
+	IPSecInnerIP     net.IP
+	IPSecInnerIPAddr *net.IPAddr // Used to send UP packets to UE
 
 	/* Relative Context */
 	AMF *N3IWFAMF
@@ -61,6 +62,7 @@ type N3IWFUe struct {
 	RadioCapability                  *ngapType.UERadioCapability                // TODO: This is for RRC, can be deleted
 	CoreNetworkAssistanceInformation *ngapType.CoreNetworkAssistanceInformation // TS 38.413 9.3.1.15
 	IMSVoiceSupported                int32
+	RRCEstablishmentCause            int16
 }
 
 type PDUSession struct {
@@ -147,6 +149,13 @@ type IKESecurityAssociation struct {
 	LocalUnsignedAuthentication  []byte
 	RemoteUnsignedAuthentication []byte
 
+	// NAT detection
+	// If UEIsBehindNAT == true, N3IWF should enable NAT traversal and
+	// TODO: should support dynamic updating network address (MOBIKE)
+	UEIsBehindNAT bool
+	// If N3IWFIsBehindNAT == true, N3IWF should send UDP keepalive periodically
+	N3IWFIsBehindNAT bool
+
 	// UE context
 	ThisUE *N3IWFUe
 }
@@ -173,6 +182,11 @@ type ChildSecurityAssociation struct {
 	ResponderToInitiatorIntegrityKey  []byte
 	ESN                               bool
 
+	// Encapsulate
+	EnableEncapsulate bool
+	N3IWFPort         int
+	NATPort           int
+
 	// UE context
 	ThisUE *N3IWFUe
 }
@@ -196,7 +210,7 @@ func (ue *N3IWFUe) Remove() {
 	n3iwfSelf := N3IWFSelf()
 	n3iwfSelf.DeleteN3iwfUe(ue.RanUeNgapId)
 	n3iwfSelf.DeleteIKESecurityAssociation(ue.N3IWFIKESecurityAssociation.LocalSPI)
-	n3iwfSelf.DeleteInternalUEIPAddr(ue.IPSecInnerIP)
+	n3iwfSelf.DeleteInternalUEIPAddr(ue.IPSecInnerIP.String())
 	for _, pduSession := range ue.PduSessionList {
 		n3iwfSelf.DeleteTEID(pduSession.GTPConnection.IncomingTEID)
 	}
@@ -272,6 +286,7 @@ func (ue *N3IWFUe) AttachAMF(sctpAddr string) bool {
 		return false
 	}
 }
+
 func (ue *N3IWFUe) DetachAMF() {
 	if ue.AMF == nil {
 		return

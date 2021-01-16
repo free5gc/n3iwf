@@ -1,14 +1,15 @@
 package main
 
 import (
-	"free5gc/src/app"
-	"free5gc/src/n3iwf/logger"
-	"free5gc/src/n3iwf/service"
-	"free5gc/src/n3iwf/version"
+	"fmt"
 	"os"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+
+	"github.com/free5gc/n3iwf/logger"
+	"github.com/free5gc/n3iwf/service"
+	"github.com/free5gc/version"
 )
 
 var N3IWF = &service.N3IWF{}
@@ -28,12 +29,17 @@ func main() {
 	app.Action = action
 	app.Flags = N3IWF.GetCliCmd()
 	if err := app.Run(os.Args); err != nil {
-		logger.AppLog.Errorf("N3IWF Run Error: %v", err)
+		appLog.Errorf("N3IWF Run Error: %v", err)
 	}
 }
 
-func action(c *cli.Context) {
-	app.AppInitializeWillInitialize(c.String("free5gccfg"))
-	N3IWF.Initialize(c)
+func action(c *cli.Context) error {
+	if err := N3IWF.Initialize(c); err != nil {
+		logger.CfgLog.Errorf("%+v", err)
+		return fmt.Errorf("Failed to initialize !!")
+	}
+
 	N3IWF.Start()
+
+	return nil
 }

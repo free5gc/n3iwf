@@ -7,22 +7,25 @@ import (
 	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/sirupsen/logrus"
 
-	"free5gc/lib/logger_conf"
-	"free5gc/lib/logger_util"
+	"github.com/free5gc/logger_conf"
+	"github.com/free5gc/logger_util"
 )
 
 var log *logrus.Logger
 
-var AppLog *logrus.Entry
-var InitLog *logrus.Entry
-var ContextLog *logrus.Entry
-var NgapLog *logrus.Entry
-var IKELog *logrus.Entry
-var GTPLog *logrus.Entry
-var NWuCPLog *logrus.Entry
-var NWuUPLog *logrus.Entry
-var RelayLog *logrus.Entry
-var UtilLog *logrus.Entry
+var (
+	AppLog     *logrus.Entry
+	InitLog    *logrus.Entry
+	CfgLog     *logrus.Entry
+	ContextLog *logrus.Entry
+	NgapLog    *logrus.Entry
+	IKELog     *logrus.Entry
+	GTPLog     *logrus.Entry
+	NWuCPLog   *logrus.Entry
+	NWuUPLog   *logrus.Entry
+	RelayLog   *logrus.Entry
+	UtilLog    *logrus.Entry
+)
 
 func init() {
 	log = logrus.New()
@@ -36,18 +39,19 @@ func init() {
 		FieldsOrder:     []string{"component", "category"},
 	}
 
-	free5gcLogHook, err := logger_util.NewFileHook(logger_conf.Free5gcLogFile, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	free5gcLogHook, err := logger_util.NewFileHook(logger_conf.Free5gcLogFile, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o666)
 	if err == nil {
 		log.Hooks.Add(free5gcLogHook)
 	}
 
-	selfLogHook, err := logger_util.NewFileHook(logger_conf.NfLogDir+"n3iwf.log", os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	selfLogHook, err := logger_util.NewFileHook(logger_conf.NfLogDir+"n3iwf.log", os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o666)
 	if err == nil {
 		log.Hooks.Add(selfLogHook)
 	}
 
 	AppLog = log.WithFields(logrus.Fields{"component": "N3IWF", "category": "App"})
 	InitLog = log.WithFields(logrus.Fields{"component": "N3IWF", "category": "Init"})
+	CfgLog = log.WithFields(logrus.Fields{"component": "N3IWF", "category": "CFG"})
 	ContextLog = log.WithFields(logrus.Fields{"component": "N3IWF", "category": "Context"})
 	NgapLog = log.WithFields(logrus.Fields{"component": "N3IWF", "category": "NGAP"})
 	IKELog = log.WithFields(logrus.Fields{"component": "N3IWF", "category": "IKE"})
@@ -62,6 +66,6 @@ func SetLogLevel(level logrus.Level) {
 	log.SetLevel(level)
 }
 
-func SetReportCaller(bool bool) {
-	log.SetReportCaller(bool)
+func SetReportCaller(set bool) {
+	log.SetReportCaller(set)
 }
