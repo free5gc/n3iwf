@@ -10,7 +10,7 @@ require (
 	github.com/free5gc/idgenerator v1.0.0
 	github.com/free5gc/logger_conf v1.0.0
 	github.com/free5gc/logger_util v1.0.0
-	github.com/free5gc/ngap v1.0.0
+	github.com/free5gc/ngap v1.0.1
 	github.com/free5gc/path_util v1.0.0
 	github.com/free5gc/version v1.0.0
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
