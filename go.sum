@@ -64,8 +64,8 @@ github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymF
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
-github.com/free5gc/aper v1.0.0 h1:EuKAQ2EL5wykcmaJsoIeExLwr97HhQJOiG7qvqSkjZM=
-github.com/free5gc/aper v1.0.0/go.mod h1:L1R91VwLpAIh/kx/hOWXwgBQp3ZZflRHHKCYmfeGegU=
+github.com/free5gc/aper v1.0.1 h1:GUUoLYTKTXv9DIH/T5wwxZRBmOJ74ejwNpzkkmrW9BY=
+github.com/free5gc/aper v1.0.1/go.mod h1:1iGSt+WSNrLnsA0U340Nyd8aAqkPAW80Oko/L2CXK2U=
 github.com/free5gc/http2_util v1.0.0/go.mod h1:GN2BCD8IINjtnAKYGwe+dEeTBRFEv4lQnZblFIIhbdE=
 github.com/free5gc/idgenerator v1.0.0 h1:e55Cn2p8dGCGYv5VoJ6oOsTj3SIVLToNLuS2CDOulZA=
 github.com/free5gc/idgenerator v1.0.0/go.mod h1:+iGY7VUgUX88lqPhGAPGy/b2SxtNJMvymdJbNyjk4HU=
@@ -73,8 +73,8 @@ github.com/free5gc/logger_conf v1.0.0 h1:cMqqB8L4HjE57tP36mBmiVUPIcHv8Ayr12jKfei
 github.com/free5gc/logger_conf v1.0.0/go.mod h1:DHecLXVV1qA5Z+lSoUvZdZ6tCtZidTNmtx99jsCfgLE=
 github.com/free5gc/logger_util v1.0.0 h1:hLTCTnKlEqJURrBwooNFQLavWPdJzS0o9KGIYUNKdJI=
 github.com/free5gc/logger_util v1.0.0/go.mod h1:TK/bAJbm/l2TMNmbsKn83+xUmDNqts69IEir/nCa8w0=
-github.com/free5gc/ngap v1.0.1 h1:zrKJCyJ7mSGRb6cbOn+fSGw/Q8yVFEut9+NoXec64xY=
-github.com/free5gc/ngap v1.0.1/go.mod h1:FDxJ+p62pXgsWuL3NFb2eIxZztR1ggJIWJaclH3SJoE=
+github.com/free5gc/ngap v1.0.2 h1:/89OIJVR0AWdMfiUuoe325RnjlF45UvIFdAxWrrbiYU=
+github.com/free5gc/ngap v1.0.2/go.mod h1:n9BWKtM58fxSSjvGFbsYlGiB9B3FAqMAi8ckkOP/X4Q=
 github.com/free5gc/openapi v1.0.0 h1:DaGVt05b1pSDBOailKAlLj6hAk6vunN0Nhzvl/xcWCY=
 github.com/free5gc/openapi v1.0.0/go.mod h1:7OzxoWBj6KQgznMW2ZiUtZdCGY+t89v4wtgKLhluKgU=
 github.com/free5gc/path_util v1.0.0 h1:vJPGTymaWtavz6fJ/7k6WKEYv5BQLAq/O04RP54sab0=

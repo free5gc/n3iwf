@@ -6,11 +6,11 @@ require (
 	git.cs.nctu.edu.tw/calee/sctp v1.1.0
 	github.com/antonfisher/nested-logrus-formatter v1.3.0
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
-	github.com/free5gc/aper v1.0.0
+	github.com/free5gc/aper v1.0.1
 	github.com/free5gc/idgenerator v1.0.0
 	github.com/free5gc/logger_conf v1.0.0
 	github.com/free5gc/logger_util v1.0.0
-	github.com/free5gc/ngap v1.0.1
+	github.com/free5gc/ngap v1.0.2
 	github.com/free5gc/path_util v1.0.0
 	github.com/free5gc/version v1.0.0
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
