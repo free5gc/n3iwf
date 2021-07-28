@@ -29,6 +29,11 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 		codedData = codedData[2:]
 
+		// [TS 24.502 f30] 9.3.2.2.2.3
+		// AN-parameter value field in GUAMI, PLMN ID and NSSAI is coded as value part
+		// Therefore, IEI of AN-parameter is not needed to be included.
+		// anParameter = AN-parameter Type | AN-parameter Length | Value part of IE
+
 		if len(codedData) >= 2 {
 			// Length of the AN-Parameter field
 			anParameterLength := binary.BigEndian.Uint16(codedData[:2])
@@ -63,12 +68,14 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 								parameterValue = parameterValue[:parameterLength]
 							}
 
-							if len(parameterValue) != 7 {
+							if len(parameterValue) != message.ANParametersLenGUAMI {
 								return 0, nil, nil, errors.New("Unmatched GUAMI length")
 							}
 
+							ikeLog.Debugln("parameterValue: ", parameterValue)
+
 							guamiField := make([]byte, 1)
-							guamiField = append(guamiField, parameterValue[1:]...)
+							guamiField = append(guamiField, parameterValue...)
 							// Decode GUAMI using aper
 							ngapGUAMI := new(ngapType.GUAMI)
 							err := aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
@@ -90,12 +97,12 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 								parameterValue = parameterValue[:parameterLength]
 							}
 
-							if len(parameterValue) != 5 {
+							if len(parameterValue) != message.ANParametersLenPLMNID {
 								return 0, nil, nil, errors.New("Unmatched PLMN ID length")
 							}
 
 							plmnField := make([]byte, 1)
-							plmnField = append(plmnField, parameterValue[2:]...)
+							plmnField = append(plmnField, parameterValue...)
 							// Decode PLMN using aper
 							ngapPLMN := new(ngapType.PLMNIdentity)
 							err := aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
@@ -117,75 +124,54 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 								parameterValue = parameterValue[:parameterLength]
 							}
 
-							if len(parameterValue) >= 2 {
-								nssaiLength := parameterValue[1]
+							ngapNSSAI := new(ngapType.AllowedNSSAI)
 
-								if nssaiLength != 0 {
-									nssaiValue := parameterValue[2:]
+							// [TS 24501 f30] 9.11.2.8 S-NSSAI
+							// s-nssai(LV) consists of
+							// len(1 byte) | SST(1) | SD(3,opt) | Mapped HPLMN SST (1,opt) | Mapped HPLMN SD (3,opt)
+							// The length of minimum s-nssai comprised of a length and a SST is 2 bytes.
 
-									if len(nssaiValue) < int(nssaiLength) {
-										return 0, nil, nil, errors.New("Error formatting")
-									} else {
-										nssaiValue = nssaiValue[:nssaiLength]
-									}
+							for len(parameterValue) >= 2 {
+								snssaiLength := parameterValue[0]
+								snssaiValue := parameterValue[1:]
 
-									ngapNSSAI := new(ngapType.AllowedNSSAI)
-
-									for len(nssaiValue) >= 2 {
-										snssaiLength := nssaiValue[1]
-
-										if snssaiLength != 0 {
-											snssaiValue := nssaiValue[2:]
-
-											if len(snssaiValue) < int(snssaiLength) {
-												return 0, nil, nil, errors.New("Error formatting")
-											} else {
-												snssaiValue = snssaiValue[:snssaiLength]
-											}
-
-											ngapSNSSAIItem := ngapType.AllowedNSSAIItem{}
-
-											if len(snssaiValue) == 1 {
-												ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
-													SST: ngapType.SST{
-														Value: []byte{snssaiValue[0]},
-													},
-												}
-											} else if len(snssaiValue) == 4 {
-												ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
-													SST: ngapType.SST{
-														Value: []byte{snssaiValue[0]},
-													},
-													SD: &ngapType.SD{
-														Value: []byte{snssaiValue[1], snssaiValue[2], snssaiValue[3]},
-													},
-												}
-											} else {
-												ikeLog.Error("SNSSAI length error")
-												return 0, nil, nil, errors.New("Error formatting")
-											}
-
-											ngapNSSAI.List = append(ngapNSSAI.List, ngapSNSSAIItem)
-										} else {
-											ikeLog.Error("Empty SNSSAI value")
-											return 0, nil, nil, errors.New("Error formatting")
-										}
-
-										// shift nssaiValue
-										nssaiValue = nssaiValue[2+snssaiLength:]
-									}
-
-									anParameters.RequestedNSSAI = ngapNSSAI
+								if len(snssaiValue) < int(snssaiLength) {
+									ikeLog.Error("SNSSAI length error")
+									return 0, nil, nil, errors.New("Error formatting")
 								} else {
-									ikeLog.Error("Empty NSSAI value")
+									snssaiValue = snssaiValue[:snssaiLength]
+								}
+
+								ngapSNSSAIItem := ngapType.AllowedNSSAIItem{}
+
+								if len(snssaiValue) == 1 {
+									ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
+										SST: ngapType.SST{
+											Value: []byte{snssaiValue[0]},
+										},
+									}
+								} else if len(snssaiValue) == 4 {
+									ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
+										SST: ngapType.SST{
+											Value: []byte{snssaiValue[0]},
+										},
+										SD: &ngapType.SD{
+											Value: []byte{snssaiValue[1], snssaiValue[2], snssaiValue[3]},
+										},
+									}
+								} else {
+									ikeLog.Error("Empty SNSSAI value")
 									return 0, nil, nil, errors.New("Error formatting")
 								}
-							} else {
-								ikeLog.Error("No NSSAI type or length specified")
-								return 0, nil, nil, errors.New("Error formatting")
+
+								ngapNSSAI.List = append(ngapNSSAI.List, ngapSNSSAIItem)
+
+								// shift parameterValue for parsing next s-nssai
+								parameterValue = parameterValue[1+snssaiLength:]
 							}
+							anParameters.RequestedNSSAI = ngapNSSAI
 						} else {
-							ikeLog.Warn("AN-Parameter value for NSSAI empty")
+							ikeLog.Warn("AN-Parameter NSSAI is empty")
 						}
 					case message.ANParametersTypeEstablishmentCause:
 						if parameterLength != 0 {
@@ -197,11 +183,11 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 								parameterValue = parameterValue[:parameterLength]
 							}
 
-							if len(parameterValue) != 2 {
+							if len(parameterValue) != message.ANParametersLenEstCause {
 								return 0, nil, nil, errors.New("Unmatched Establishment Cause length")
 							}
 
-							establishmentCause := parameterValue[1] & 0x0f
+							establishmentCause := parameterValue[0] & 0x0f
 							switch establishmentCause {
 							case message.EstablishmentCauseEmergency:
 								ikeLog.Trace("AN-Parameter establishment cause: Emergency")

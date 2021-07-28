@@ -258,6 +258,13 @@ const (
 	ANParametersTypeEstablishmentCause = 4
 )
 
+// Used for checking if AN-Parameter length field is legal
+const (
+	ANParametersLenGUAMI    = 6
+	ANParametersLenPLMNID   = 3
+	ANParametersLenEstCause = 1
+)
+
 // Used in IE Establishment Cause field for cause types
 const (
 	EstablishmentCauseEmergency          = 0
