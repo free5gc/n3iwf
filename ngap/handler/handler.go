@@ -908,17 +908,6 @@ func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSessio
 				}
 				return false, responseTransfer
 			}
-			// Listen GTP tunnel
-			if err := gtp_service.ListenAndServe(userPlaneConnection); err != nil {
-				ngapLog.Errorf("Listening GTP tunnel failed: %+v", err)
-				cause := buildCause(ngapType.CausePresentTransport,
-					ngapType.CauseTransportPresentTransportResourceUnavailable)
-				responseTransfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-				if err != nil {
-					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %+v\n", err)
-				}
-				return false, responseTransfer
-			}
 
 			// UE TEID
 			ueTEID := n3iwfSelf.NewTEID(ue)

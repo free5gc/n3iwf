@@ -5,7 +5,7 @@ import (
 	"net"
 
 	"github.com/sirupsen/logrus"
-	gtpv1 "github.com/wmnsk/go-gtp/v1"
+	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 	"golang.org/x/net/ipv4"
 
 	"github.com/free5gc/n3iwf/context"

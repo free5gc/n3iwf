@@ -18,8 +18,8 @@ require (
 	github.com/urfave/cli v1.22.5
 	github.com/vishvananda/netlink v1.1.0
 	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae // indirect
-	github.com/wmnsk/go-gtp v0.7.4
-	golang.org/x/net v0.0.0-20201209123823-ac852fbbde11
-	golang.org/x/sys v0.0.0-20201211090839-8ad439b19e0f
+	github.com/wmnsk/go-gtp v0.7.26
+	golang.org/x/net v0.0.0-20210501142056-aec3718b3fa0
+	golang.org/x/sys v0.0.0-20210603081109-ebe580a85c40
 	gopkg.in/yaml.v2 v2.4.0
 )
