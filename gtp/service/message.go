@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/binary"
 	"encoding/hex"
 
 	gtpMessage "github.com/wmnsk/go-gtp/gtpv1/message"
@@ -63,18 +62,11 @@ func (p *TPDUPacket) GetQoSParameters() (bool, uint8) {
 	return p.rqi, p.qfi
 }
 
-// If E or S flag is set, Sequence number(SQN) and N-PDU number (PN) will be presented.
-// They will be processed by go-gtp in advance if S flag is set but E flag not.
-func (p *TPDUPacket) Marshal(pdu *gtpMessage.TPDU) error {
+func (p *TPDUPacket) Unmarshal(pdu *gtpMessage.TPDU) error {
 	p.staticHeader = pdu
 	p.payload = pdu.Payload
-	if p.HasExtensionHeader() {
-		if !p.staticHeader.HasSequence() {
-			if err := p.marshalSQNAndPN(); err != nil {
-				return err
-			}
-		}
-		if err := p.marshalExtensionHeader(); err != nil {
+	if p.staticHeader.HasExtensionHeader() {
+		if err := p.unmarshalExtensionHeader(); err != nil {
 			return err
 		}
 	}
@@ -84,15 +76,14 @@ func (p *TPDUPacket) Marshal(pdu *gtpMessage.TPDU) error {
 
 // [TS 29.281] [TS 38.415]
 // Define GTP extension header
-func (p *TPDUPacket) marshalExtensionHeader() error {
+func (p *TPDUPacket) unmarshalExtensionHeader() error {
 	payload := p.GetPayload()
 
 	if len(payload) < 1 {
-		return gtpMessage.ErrTooShortToMarshal
+		return gtpMessage.ErrTooShortToParse
 	}
 
-	NextExtensionHeaderFieldValue := payload[0]
-	payload = payload[NextHeaderTypeLength:]
+	NextExtensionHeaderFieldValue := p.staticHeader.NextExtensionHeaderType
 
 	for {
 		switch NextExtensionHeaderFieldValue {
@@ -105,7 +96,7 @@ func (p *TPDUPacket) marshalExtensionHeader() error {
 			// [TS 29.281 5.2.1] Extension Header Length field specifies
 			// the length of the particular Extension header in 4 octets units
 			if int(exh.Length)*4 >= len(payload) {
-				return gtpMessage.ErrTooShortToMarshal
+				return gtpMessage.ErrTooShortToParse
 			}
 
 			exh.Content = payload[1 : exh.Length*4-1]
@@ -129,21 +120,4 @@ func (p *TPDUPacket) marshalExtensionHeader() error {
 		}
 		// TODO: Support the other header field values
 	}
-}
-
-func (p *TPDUPacket) marshalSQNAndPN() error {
-	payload := p.GetPayload()
-
-	if len(payload) < 3 {
-		return gtpMessage.ErrTooShortToMarshal
-	}
-
-	SQN := binary.BigEndian.Uint16(payload)
-	payload = payload[SQNLength:]
-	PN := payload[0]
-	p.SetPayload(payload[PNLength:])
-
-	gtpLog.Tracef("Sequence Number: %d, N-PDU Number: %d", SQN, PN)
-
-	return nil
 }

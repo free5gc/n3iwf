@@ -61,7 +61,7 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) 
 // Parse the fields not supported by go-gtp and forward data to UE.
 func handle5GTPDU(c gtp.Conn, senderAddr net.Addr, msg gtpMessage.Message) error {
 	pdu := TPDUPacket{qos: false}
-	if err := pdu.Marshal(msg.(*gtpMessage.TPDU)); err != nil {
+	if err := pdu.Unmarshal(msg.(*gtpMessage.TPDU)); err != nil {
 		return err
 	}
 
