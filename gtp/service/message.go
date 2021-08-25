@@ -2,70 +2,41 @@ package service
 
 import (
 	"encoding/hex"
+	"errors"
 
 	gtpMessage "github.com/wmnsk/go-gtp/gtpv1/message"
 )
 
-type ExtensionHeader struct {
-	Type           uint8
-	Length         uint8
-	Content        []byte
-	NextHeaderType uint8
+type QoSTPDUPacket struct {
+	tPDU *gtpMessage.TPDU
+	qos  bool
+	rqi  bool
+	qfi  uint8
 }
 
-// [29.281 5.2.1-3] Next Extension Header Field Value
-const (
-	NoMoreExtensionHeaders uint8 = 0x0
-	PDUSessionContainer    uint8 = 0x85
-)
-
-const (
-	SQNLength            int = 2
-	PNLength             int = 1
-	NextHeaderTypeLength int = 1
-)
-
-type TPDUPacket struct {
-	staticHeader    *gtpMessage.TPDU
-	extensionHeader []ExtensionHeader
-	payload         []byte
-	qos             bool
-	rqi             bool
-	qfi             uint8
+func (p *QoSTPDUPacket) GetPayload() []byte {
+	return p.tPDU.Payload
 }
 
-func (p *TPDUPacket) HasExtensionHeader() bool {
-	return ((int(p.staticHeader.Header.Flags) >> 2) & 0x1) == 1
+func (p *QoSTPDUPacket) GetTEID() uint32 {
+	return p.tPDU.TEID()
 }
 
-func (p *TPDUPacket) GetPayload() []byte {
-	return p.payload
+func (p *QoSTPDUPacket) GetExtensionHeader() []*gtpMessage.ExtensionHeader {
+	return p.tPDU.ExtensionHeaders
 }
 
-func (p *TPDUPacket) SetPayload(payload []byte) {
-	p.payload = payload
-}
-
-func (p *TPDUPacket) GetTEID() uint32 {
-	return p.staticHeader.TEID()
-}
-
-func (p *TPDUPacket) GetExtensionHeader() []ExtensionHeader {
-	return p.extensionHeader
-}
-
-func (p *TPDUPacket) HasQoS() bool {
+func (p *QoSTPDUPacket) HasQoS() bool {
 	return p.qos
 }
 
-func (p *TPDUPacket) GetQoSParameters() (bool, uint8) {
+func (p *QoSTPDUPacket) GetQoSParameters() (bool, uint8) {
 	return p.rqi, p.qfi
 }
 
-func (p *TPDUPacket) Unmarshal(pdu *gtpMessage.TPDU) error {
-	p.staticHeader = pdu
-	p.payload = pdu.Payload
-	if p.staticHeader.HasExtensionHeader() {
+func (p *QoSTPDUPacket) Unmarshal(pdu *gtpMessage.TPDU) error {
+	p.tPDU = pdu
+	if p.tPDU.HasExtensionHeader() {
 		if err := p.unmarshalExtensionHeader(); err != nil {
 			return err
 		}
@@ -76,48 +47,23 @@ func (p *TPDUPacket) Unmarshal(pdu *gtpMessage.TPDU) error {
 
 // [TS 29.281] [TS 38.415]
 // Define GTP extension header
-func (p *TPDUPacket) unmarshalExtensionHeader() error {
-	payload := p.GetPayload()
-
-	if len(payload) < 1 {
-		return gtpMessage.ErrTooShortToParse
-	}
-
-	NextExtensionHeaderFieldValue := p.staticHeader.NextExtensionHeaderType
-
-	for {
-		switch NextExtensionHeaderFieldValue {
-		case PDUSessionContainer:
-			var exh ExtensionHeader
-
-			exh.Type = NextExtensionHeaderFieldValue
-			exh.Length = payload[0]
-
-			// [TS 29.281 5.2.1] Extension Header Length field specifies
-			// the length of the particular Extension header in 4 octets units
-			if int(exh.Length)*4 >= len(payload) {
-				return gtpMessage.ErrTooShortToParse
-			}
-
-			exh.Content = payload[1 : exh.Length*4-1]
-
+func (p *QoSTPDUPacket) unmarshalExtensionHeader() error {
+	for _, eh := range p.tPDU.ExtensionHeaders {
+		switch eh.Type {
+		case gtpMessage.ExtHeaderTypePDUSessionContainer:
 			p.qos = true
-			p.rqi = ((int(exh.Content[1]) >> 6) & 0x1) == 1
-			p.qfi = exh.Content[1] & 0x3F
-
-			exh.NextHeaderType = payload[exh.Length*4-1]
-			NextExtensionHeaderFieldValue = exh.NextHeaderType
-
-			p.extensionHeader = append(p.extensionHeader, exh)
-			p.SetPayload(payload[exh.Length*4:])
-
+			p.rqi = ((int(eh.Content[1]) >> 6) & 0x1) == 1
+			p.qfi = eh.Content[1] & 0x3F
 			gtpLog.Tracef("Parsed Extension Header: Len=%d, Next Type=%d, Content Dump:\n%s",
-				exh.Length, exh.NextHeaderType, hex.Dump(exh.Content))
-		case NoMoreExtensionHeaders:
-			return nil
+				eh.Length, eh.NextType, hex.Dump(eh.Content))
 		default:
-			gtpLog.Warningf("Unsupported Extension Header Field Value: %x", NextExtensionHeaderFieldValue)
+			gtpLog.Warningf("Unsupported Extension Header Field Value: %x", eh.Type)
 		}
-		// TODO: Support the other header field values
 	}
+
+	if !p.qos {
+		return errors.New("unmarshalExtensionHeader err: no PDUSessionContainer in ExtensionHeaders.")
+	}
+
+	return nil
 }

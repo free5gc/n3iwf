@@ -60,7 +60,7 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) 
 
 // Parse the fields not supported by go-gtp and forward data to UE.
 func handle5GTPDU(c gtp.Conn, senderAddr net.Addr, msg gtpMessage.Message) error {
-	pdu := TPDUPacket{qos: false}
+	pdu := QoSTPDUPacket{}
 	if err := pdu.Unmarshal(msg.(*gtpMessage.TPDU)); err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func handle5GTPDU(c gtp.Conn, senderAddr net.Addr, msg gtpMessage.Message) error
 }
 
 // Forward user plane packets from N3 to UE with GRE header and new IP header encapsulated
-func forward(packet TPDUPacket) {
+func forward(packet QoSTPDUPacket) {
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
