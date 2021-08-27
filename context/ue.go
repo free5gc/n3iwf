@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	gtpv1 "github.com/wmnsk/go-gtp/v1"
+	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 
 	ike_message "github.com/free5gc/n3iwf/ike/message"
 	"github.com/free5gc/ngap/ngapType"

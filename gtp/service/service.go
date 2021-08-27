@@ -4,27 +4,32 @@ import (
 	"context"
 	"errors"
 	"net"
+	"runtime/debug"
 
 	"github.com/sirupsen/logrus"
-	gtpv1 "github.com/wmnsk/go-gtp/v1"
+	gtp "github.com/wmnsk/go-gtp/gtpv1"
+	gtpMessage "github.com/wmnsk/go-gtp/gtpv1/message"
 
-	n3iwf_context "github.com/free5gc/n3iwf/context"
+	n3iwfContext "github.com/free5gc/n3iwf/context"
 	"github.com/free5gc/n3iwf/logger"
 )
 
 var gtpLog *logrus.Entry
 
+var gtpContext context.Context
+
 func init() {
 	gtpLog = logger.GTPLog
+	gtpContext = context.TODO()
 }
 
 // SetupGTPTunnelWithUPF set up GTP connection with UPF
-// return *gtpv1.UPlaneConn, net.Addr and error
-func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtpv1.UPlaneConn, net.Addr, error) {
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
+// return *gtp.UPlaneConn, net.Addr and error
+func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) {
+	n3iwfSelf := n3iwfContext.N3IWFSelf()
 
 	// Set up GTP connection
-	upfUDPAddr := upfIPAddr + ":2152"
+	upfUDPAddr := upfIPAddr + gtp.GTPUPort
 
 	remoteUDPAddr, err := net.ResolveUDPAddr("udp", upfUDPAddr)
 	if err != nil {
@@ -32,7 +37,7 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtpv1.UPlaneConn, net.Addr, error
 		return nil, nil, errors.New("Resolve Address Failed")
 	}
 
-	n3iwfUDPAddr := n3iwfSelf.GTPBindAddress + ":2152"
+	n3iwfUDPAddr := n3iwfSelf.GTPBindAddress + gtp.GTPUPort
 
 	localUDPAddr, err := net.ResolveUDPAddr("udp", n3iwfUDPAddr)
 	if err != nil {
@@ -40,76 +45,67 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtpv1.UPlaneConn, net.Addr, error
 		return nil, nil, errors.New("Resolve Address Failed")
 	}
 
-	context := context.TODO()
-
 	// Dial to UPF
-	userPlaneConnection, err := gtpv1.DialUPlane(context, localUDPAddr, remoteUDPAddr)
+	userPlaneConnection, err := gtp.DialUPlane(gtpContext, localUDPAddr, remoteUDPAddr)
 	if err != nil {
 		gtpLog.Errorf("Dial to UPF failed: %+v", err)
 		return nil, nil, errors.New("Dial failed")
 	}
 
+	// Overwrite T-PDU handler for supporting extension header containing QoS parameters
+	userPlaneConnection.AddHandler(gtpMessage.MsgTypeTPDU, handle5GTPDU)
+
 	return userPlaneConnection, remoteUDPAddr, nil
 }
 
-// ListenAndServe binds and listens user plane socket on N3IWF N3 interface,
-// catching GTP packets and send it to NWu interface
-func ListenAndServe(userPlaneConnection *gtpv1.UPlaneConn) error {
-	go listenGTP(userPlaneConnection)
+// Parse the fields not supported by go-gtp and forward data to UE.
+func handle5GTPDU(c gtp.Conn, senderAddr net.Addr, msg gtpMessage.Message) error {
+	pdu := TPDUPacket{qos: false}
+	if err := pdu.Unmarshal(msg.(*gtpMessage.TPDU)); err != nil {
+		return err
+	}
+
+	forward(pdu)
 	return nil
 }
 
-// listenGTP handle the gtpv1 UPlane connection. It reads packets(without
-// GTP header) from the connection and call forward() to forward user data
-// to NWu interface.
-func listenGTP(userPlaneConnection *gtpv1.UPlaneConn) {
+// Forward user plane packets from N3 to UE with GRE header and new IP header encapsulated
+func forward(packet TPDUPacket) {
 	defer func() {
-		err := userPlaneConnection.Close()
-		if err != nil {
-			gtpLog.Errorf("userPlaneConnection Close failed: %+v", err)
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			gtpLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 	}()
 
-	payload := make([]byte, 65535)
-
-	for {
-		n, _, teid, err := userPlaneConnection.ReadFromGTP(payload)
-		gtpLog.Tracef("Read %d bytes", n)
-		if err != nil {
-			gtpLog.Errorf("Read from GTP failed: %+v", err)
-			return
-		}
-
-		forwardData := make([]byte, n)
-		copy(forwardData, payload[:n])
-
-		go forward(teid, forwardData)
-	}
-}
-
-// forward forwards user plane packets from N3 to UE,
-// with GRE header and new IP header encapsulated
-func forward(ueTEID uint32, packet []byte) {
 	// N3IWF context
-	self := n3iwf_context.N3IWFSelf()
-	// IPv4 packet connection
-	ipv4PacketConn := self.NWuIPv4PacketConn
+	self := n3iwfContext.N3IWFSelf()
+
+	// Nwu connection in IPv4
+	NWuConn := self.NWuIPv4PacketConn
+
 	// Find UE information
-	ue, ok := self.AllocatedUETEIDLoad(ueTEID)
+	ue, ok := self.AllocatedUETEIDLoad(packet.GetTEID())
 	if !ok {
 		gtpLog.Error("UE context not found")
 		return
 	}
-	// UE IP
+
+	// UE inner IP in IPSec
 	ueInnerIPAddr := ue.IPSecInnerIPAddr
 
-	// GRE header
-	greHeader := []byte{0, 0, 8, 0}
-	// IP payload
-	greEncapsulatedPacket := append(greHeader, packet...)
+	// QoS Related Parameter
+	if packet.HasQoS() {
+		RQI, QFI := packet.GetQoSParameters()
+		gtpLog.Tracef("RQI: %v, QFI: %v", RQI, QFI)
+	}
 
-	// Send to UE
-	if n, err := ipv4PacketConn.WriteTo(greEncapsulatedPacket, nil, ueInnerIPAddr); err != nil {
+	// TODO: Support QoS paramater in GRE header
+	greHeader := []byte{0, 0, 8, 0}
+	greEncapsulatedPacket := append(greHeader, packet.GetPayload()...)
+
+	// Send to UE through Nwu
+	if n, err := NWuConn.WriteTo(greEncapsulatedPacket, nil, ueInnerIPAddr); err != nil {
 		gtpLog.Errorf("Write to UE failed: %+v", err)
 		return
 	} else {
