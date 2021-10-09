@@ -8,10 +8,10 @@ import (
 	gtp "github.com/wmnsk/go-gtp/gtpv1"
 	gtpMsg "github.com/wmnsk/go-gtp/gtpv1/message"
 
+	n3iwfContext "github.com/free5gc/n3iwf/context"
 	"github.com/free5gc/n3iwf/gre"
 	gtpQoSMsg "github.com/free5gc/n3iwf/gtp/message"
 	"github.com/free5gc/n3iwf/logger"
-	n3iwfContext "github.com/free5gc/n3iwf/context"
 )
 
 var gtpLog *logrus.Entry
