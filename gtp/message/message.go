@@ -1,10 +1,12 @@
-package service
+package message
 
 import (
 	"encoding/hex"
 	"errors"
 
 	gtpMessage "github.com/wmnsk/go-gtp/gtpv1/message"
+
+	"github.com/free5gc/n3iwf/logger"
 )
 
 type QoSTPDUPacket struct {
@@ -54,10 +56,10 @@ func (p *QoSTPDUPacket) unmarshalExtensionHeader() error {
 			p.qos = true
 			p.rqi = ((int(eh.Content[1]) >> 6) & 0x1) == 1
 			p.qfi = eh.Content[1] & 0x3F
-			gtpLog.Tracef("Parsed Extension Header: Len=%d, Next Type=%d, Content Dump:\n%s",
+			logger.GTPLog.Tracef("Parsed Extension Header: Len=%d, Next Type=%d, Content Dump:\n%s",
 				eh.Length, eh.NextType, hex.Dump(eh.Content))
 		default:
-			gtpLog.Warningf("Unsupported Extension Header Field Value: %x", eh.Type)
+			logger.GTPLog.Warningf("Unsupported Extension Header Field Value: %x", eh.Type)
 		}
 	}
 
