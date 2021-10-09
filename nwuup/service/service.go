@@ -6,9 +6,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
+	gtpMsg "github.com/wmnsk/go-gtp/gtpv1/message"
 	"golang.org/x/net/ipv4"
 
 	"github.com/free5gc/n3iwf/context"
+	"github.com/free5gc/n3iwf/gre"
+	gtpQoSMsg "github.com/free5gc/n3iwf/gtp/message"
 	"github.com/free5gc/n3iwf/logger"
 )
 
@@ -65,8 +68,8 @@ func listenAndServe(ipv4PacketConn *ipv4.PacketConn) {
 			return
 		}
 
-		forwardData := make([]byte, n-4)
-		copy(forwardData, buffer[4:n])
+		forwardData := make([]byte, n)
+		copy(forwardData, buffer)
 
 		go forward(src.String(), forwardData)
 	}
@@ -74,7 +77,7 @@ func listenAndServe(ipv4PacketConn *ipv4.PacketConn) {
 
 // forward forwards user plane packets from NWu to UPF
 // with GTP header encapsulated
-func forward(ueInnerIP string, packet []byte) {
+func forward(ueInnerIP string, rawData []byte) {
 	// Find UE information
 	self := context.N3IWFSelf()
 	ue, ok := self.AllocatedUEIPAddressLoad(ueInnerIP)
@@ -98,10 +101,38 @@ func forward(ueInnerIP string, packet []byte) {
 
 	userPlaneConnection := gtpConnection.UserPlaneConnection
 
-	n, err := userPlaneConnection.WriteToGTP(gtpConnection.OutgoingTEID, packet, gtpConnection.UPFUDPAddr)
-	if err != nil {
-		nwuupLog.Errorf("Write to UPF failed: %+v", err)
-		if err == gtpv1.ErrConnNotOpened {
+	// Decapsulate GRE header and extract QoS Parameters if exist
+	grePacket := gre.GREPacket{}
+	if err := grePacket.Unmarshal(rawData); err != nil {
+		nwuupLog.Errorf("gre Unmarshal err: %+v", err)
+		return
+	}
+
+	var (
+		n        int
+		writeErr error
+	)
+
+	payload, _ := grePacket.GetPayload()
+
+	// Encapsulate UL PDU SESSION INFORMATION with extension header if the QoS parameters exist
+	if grePacket.GetKeyFlag() {
+		qfi := grePacket.GetQFI()
+		gtpPacket, err := buildQoSGTPPacket(gtpConnection.OutgoingTEID, qfi, payload)
+		if err != nil {
+			nwuupLog.Errorf("buildQoSGTPPacket err: %+v", err)
+			return
+		}
+
+		n, writeErr = userPlaneConnection.WriteTo(gtpPacket, gtpConnection.UPFUDPAddr)
+	} else {
+		nwuupLog.Warnf("Receive GRE header without key field specifying QFI and RQI.")
+		n, writeErr = userPlaneConnection.WriteToGTP(gtpConnection.OutgoingTEID, payload, gtpConnection.UPFUDPAddr)
+	}
+
+	if writeErr != nil {
+		nwuupLog.Errorf("Write to UPF failed: %+v", writeErr)
+		if writeErr == gtpv1.ErrConnNotOpened {
 			nwuupLog.Error("The connection has been closed")
 			// TODO: Release the GTP resource
 		}
@@ -111,4 +142,23 @@ func forward(ueInnerIP string, packet []byte) {
 		nwuupLog.Tracef("Wrote %d bytes", n)
 		return
 	}
+}
+
+func buildQoSGTPPacket(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
+	header := gtpMsg.NewHeader(0x34, gtpMsg.MsgTypeTPDU, teid, 0x00, payload).WithExtensionHeaders(
+		gtpMsg.NewExtensionHeader(
+			gtpMsg.ExtHeaderTypePDUSessionContainer,
+			[]byte{gtpQoSMsg.UL_PDU_SESSION_INFORMATION_TYPE, qfi},
+			gtpMsg.ExtHeaderTypeNoMoreExtensionHeaders,
+		),
+	)
+
+	b := make([]byte, header.MarshalLen())
+
+	if err := header.MarshalTo(b); err != nil {
+		nwuupLog.Errorf("go-gtp MarshalTo err: %+v", err)
+		return nil, err
+	}
+
+	return b, nil
 }

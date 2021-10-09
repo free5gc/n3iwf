@@ -9,6 +9,12 @@ import (
 	"github.com/free5gc/n3iwf/logger"
 )
 
+// [TS 38.415] 5.5.2 Frame format for the PDU Session user plane protocol
+const (
+	DL_PDU_SESSION_INFORMATION_TYPE = 0x00
+	UL_PDU_SESSION_INFORMATION_TYPE = 0x10
+)
+
 type QoSTPDUPacket struct {
 	tPDU *gtpMessage.TPDU
 	qos  bool
@@ -32,8 +38,8 @@ func (p *QoSTPDUPacket) HasQoS() bool {
 	return p.qos
 }
 
-func (p *QoSTPDUPacket) GetQoSParameters() (bool, uint8) {
-	return p.rqi, p.qfi
+func (p *QoSTPDUPacket) GetQoSParameters() (uint8, bool) {
+	return p.qfi, p.rqi
 }
 
 func (p *QoSTPDUPacket) Unmarshal(pdu *gtpMessage.TPDU) error {
@@ -49,6 +55,8 @@ func (p *QoSTPDUPacket) Unmarshal(pdu *gtpMessage.TPDU) error {
 
 // [TS 29.281] [TS 38.415]
 // Define GTP extension header
+// [TS 38.415]
+// Define PDU Session User Plane protocol
 func (p *QoSTPDUPacket) unmarshalExtensionHeader() error {
 	for _, eh := range p.tPDU.ExtensionHeaders {
 		switch eh.Type {

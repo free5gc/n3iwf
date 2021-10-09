@@ -8,6 +8,7 @@ import (
 	gtp "github.com/wmnsk/go-gtp/gtpv1"
 	gtpMsg "github.com/wmnsk/go-gtp/gtpv1/message"
 
+	"github.com/free5gc/n3iwf/gre"
 	gtpQoSMsg "github.com/free5gc/n3iwf/gtp/message"
 	"github.com/free5gc/n3iwf/logger"
 	n3iwfContext "github.com/free5gc/n3iwf/context"
@@ -55,18 +56,27 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 	// UE inner IP in IPSec
 	ueInnerIPAddr := ue.IPSecInnerIPAddr
 
+	var (
+		qfi uint8
+		rqi bool
+	)
+
 	// QoS Related Parameter
 	if packet.HasQoS() {
-		RQI, QFI := packet.GetQoSParameters()
-		gtpLog.Tracef("RQI: %v, QFI: %v", RQI, QFI)
+		qfi, rqi = packet.GetQoSParameters()
+		gtpLog.Tracef("QFI: %v, RQI: %v", qfi, rqi)
 	}
 
-	// TODO: Support QoS paramater in GRE header
-	greHeader := []byte{0, 0, 8, 0}
-	greEncapsulatedPacket := append(greHeader, packet.GetPayload()...)
+	// Encasulate IPv4 packet with GRE header before forward to UE through IPsec
+	grePacket := gre.GREPacket{}
+
+	// TODO:[24.502(v15.7) 9.3.3 ] The Protocol Type field should be set to zero
+	grePacket.SetPayload(packet.GetPayload(), gre.IPv4)
+	grePacket.SetQoS(qfi, rqi)
+	forwardData := grePacket.Marshal()
 
 	// Send to UE through Nwu
-	if n, err := NWuConn.WriteTo(greEncapsulatedPacket, nil, ueInnerIPAddr); err != nil {
+	if n, err := NWuConn.WriteTo(forwardData, nil, ueInnerIPAddr); err != nil {
 		gtpLog.Errorf("Write to UE failed: %+v", err)
 		return
 	} else {
