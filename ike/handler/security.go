@@ -423,13 +423,17 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation)
 	ikeSecurityAssociation.SK_pr = keyStream[:length_SK_pr]
 	// keyStream = keyStream[length_SK_pr:]
 
-	ikeLog.Tracef("SK_d:\n%s", hex.Dump(ikeSecurityAssociation.SK_d))
-	ikeLog.Tracef("SK_ai:\n%s", hex.Dump(ikeSecurityAssociation.SK_ai))
-	ikeLog.Tracef("SK_ar:\n%s", hex.Dump(ikeSecurityAssociation.SK_ar))
-	ikeLog.Tracef("SK_ei:\n%s", hex.Dump(ikeSecurityAssociation.SK_ei))
-	ikeLog.Tracef("SK_er:\n%s", hex.Dump(ikeSecurityAssociation.SK_er))
-	ikeLog.Tracef("SK_pi:\n%s", hex.Dump(ikeSecurityAssociation.SK_pi))
-	ikeLog.Tracef("SK_pr:\n%s", hex.Dump(ikeSecurityAssociation.SK_pr))
+	ikeLog.Debugln("====== IKE Security Association Info =====")
+	ikeLog.Debugf("Remote SPI: %016x", ikeSecurityAssociation.RemoteSPI)
+	ikeLog.Debugf("Local  SPI: %016x", ikeSecurityAssociation.LocalSPI)
+	ikeLog.Debugf("Encryption Algorithm: %d", ikeSecurityAssociation.EncryptionAlgorithm.TransformID)
+	ikeLog.Debugf("SK_ei: %x", ikeSecurityAssociation.SK_ei)
+	ikeLog.Debugf("SK_er: %x", ikeSecurityAssociation.SK_er)
+	ikeLog.Debugf("Integrity Algorithm: %d", ikeSecurityAssociation.IntegrityAlgorithm.TransformID)
+	ikeLog.Debugf("SK_ai: %x", ikeSecurityAssociation.SK_ai)
+	ikeLog.Debugf("SK_ar: %x", ikeSecurityAssociation.SK_ar)
+	ikeLog.Debugf("SK_pi: %x", ikeSecurityAssociation.SK_pi)
+	ikeLog.Debugf("SK_pr: %x", ikeSecurityAssociation.SK_pr)
 
 	return nil
 }
@@ -527,6 +531,19 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 	keyStream = keyStream[lengthEncryptionKeyIPSec:]
 	childSecurityAssociation.ResponderToInitiatorIntegrityKey =
 		append(childSecurityAssociation.ResponderToInitiatorIntegrityKey, keyStream[:lengthIntegrityKeyIPSec]...)
+
+	ikeLog.Debugln("====== IPSec/Child SA: Initiator To Responder =====")
+	ikeLog.Debugf("IPSec SPI: %016x", childSecurityAssociation.SPI)
+	ikeLog.Debugf("IPSec Encryption Algorithm: %d", childSecurityAssociation.EncryptionAlgorithm)
+	ikeLog.Debugf("IPSec Encryption Key: %x", childSecurityAssociation.InitiatorToResponderEncryptionKey)
+	ikeLog.Debugf("IPSec Integrity  Algorithm: %d", childSecurityAssociation.IntegrityAlgorithm)
+	ikeLog.Debugf("IPSec Integrity  Key: %x", childSecurityAssociation.InitiatorToResponderIntegrityKey)
+	ikeLog.Debugln("====== IPSec/Child SA: Responder To Initiator =====")
+	ikeLog.Debugf("IPSec SPI: %016x", childSecurityAssociation.SPI)
+	ikeLog.Debugf("IPSec Encryption Algorithm: %d", childSecurityAssociation.EncryptionAlgorithm)
+	ikeLog.Debugf("IPSec Encryption Key: %x", childSecurityAssociation.ResponderToInitiatorEncryptionKey)
+	ikeLog.Debugf("IPSec Integrity  Algorithm: %d", childSecurityAssociation.IntegrityAlgorithm)
+	ikeLog.Debugf("IPSec Integrity  Key: %x", childSecurityAssociation.ResponderToInitiatorIntegrityKey)
 
 	return nil
 }
