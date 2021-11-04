@@ -544,24 +544,26 @@ func BuildUEContextReleaseComplete(ue *context.N3IWFUe,
 
 	uEContextReleaseCompleteIEs.List = append(uEContextReleaseCompleteIEs.List, ie)
 
-	// PDU Session Resource List
-	ie = ngapType.UEContextReleaseCompleteIEs{}
-	ie.Id.Value = ngapType.ProtocolIEIDPDUSessionResourceListCxtRelCpl
-	ie.Criticality.Value = ngapType.CriticalityPresentReject
-	ie.Value.Present = ngapType.UEContextReleaseCompleteIEsPresentPDUSessionResourceListCxtRelCpl
-	ie.Value.PDUSessionResourceListCxtRelCpl = new(ngapType.PDUSessionResourceListCxtRelCpl)
+	// PDU Session Resource List (optional)
+	if len(ue.PduSessionList) > 0 {
+		ie = ngapType.UEContextReleaseCompleteIEs{}
+		ie.Id.Value = ngapType.ProtocolIEIDPDUSessionResourceListCxtRelCpl
+		ie.Criticality.Value = ngapType.CriticalityPresentReject
+		ie.Value.Present = ngapType.UEContextReleaseCompleteIEsPresentPDUSessionResourceListCxtRelCpl
+		ie.Value.PDUSessionResourceListCxtRelCpl = new(ngapType.PDUSessionResourceListCxtRelCpl)
 
-	pDUSessionResourceListCxtRelCpl := ie.Value.PDUSessionResourceListCxtRelCpl
+		pDUSessionResourceListCxtRelCpl := ie.Value.PDUSessionResourceListCxtRelCpl
 
-	// PDU Session Resource Item (in PDU Session Resource List)
-	for _, pduSession := range ue.PduSessionList {
-		pDUSessionResourceItemCxtRelCpl := ngapType.PDUSessionResourceItemCxtRelCpl{}
-		pDUSessionResourceItemCxtRelCpl.PDUSessionID.Value = pduSession.Id
-		pDUSessionResourceListCxtRelCpl.List =
-			append(pDUSessionResourceListCxtRelCpl.List, pDUSessionResourceItemCxtRelCpl)
+		// PDU Session Resource Item (in PDU Session Resource List)
+		for _, pduSession := range ue.PduSessionList {
+			pDUSessionResourceItemCxtRelCpl := ngapType.PDUSessionResourceItemCxtRelCpl{}
+			pDUSessionResourceItemCxtRelCpl.PDUSessionID.Value = pduSession.Id
+			pDUSessionResourceListCxtRelCpl.List =
+				append(pDUSessionResourceListCxtRelCpl.List, pDUSessionResourceItemCxtRelCpl)
+		}
+
+		uEContextReleaseCompleteIEs.List = append(uEContextReleaseCompleteIEs.List, ie)
 	}
-
-	uEContextReleaseCompleteIEs.List = append(uEContextReleaseCompleteIEs.List, ie)
 
 	// Criticality Diagnostics (optional)
 	if criticalityDiagnostics != nil {

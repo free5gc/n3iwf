@@ -882,7 +882,9 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				}
 				ue.IPAddrv4 = ueAddr.IP.To4().String()
 				ue.PortNumber = int32(ueAddr.Port)
-				ue.RRCEstablishmentCause = int16(anParameters.EstablishmentCause.Value)
+				if anParameters.EstablishmentCause != nil {
+					ue.RRCEstablishmentCause = int16(anParameters.EstablishmentCause.Value)
+				}
 
 				// Send Initial UE Message
 				ngap_message.SendInitialUEMessage(selectedAMF, ue, nasPDU)
