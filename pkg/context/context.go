@@ -255,7 +255,8 @@ func (context *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (*N3IWFUe, bool) {
 	}
 }
 
-func (context *N3IWFContext) AMFSelection(ueSpecifiedGUAMI *ngapType.GUAMI) *N3IWFAMF {
+func (context *N3IWFContext) AMFSelection(ueSpecifiedGUAMI *ngapType.GUAMI,
+	ueSpecifiedPLMNId *ngapType.PLMNIdentity) *N3IWFAMF {
 	var availableAMF *N3IWFAMF
 	context.AMFPool.Range(func(key, value interface{}) bool {
 		amf := value.(*N3IWFAMF)
@@ -263,7 +264,14 @@ func (context *N3IWFContext) AMFSelection(ueSpecifiedGUAMI *ngapType.GUAMI) *N3I
 			availableAMF = amf
 			return false
 		} else {
-			return true
+			// Fail to find through GUAMI served by UE.
+			// Try again using SelectedPLMNId
+			if amf.FindAvalibleAMFByCompareSelectedPLMNId(ueSpecifiedPLMNId) {
+				availableAMF = amf
+				return false
+			} else {
+				return true
+			}
 		}
 	})
 	return availableAMF

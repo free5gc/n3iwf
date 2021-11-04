@@ -137,3 +137,13 @@ func (amf *N3IWFAMF) FindAvalibleAMFByCompareGUAMI(ueSpecifiedGUAMI *ngapType.GU
 	}
 	return false
 }
+
+func (amf *N3IWFAMF) FindAvalibleAMFByCompareSelectedPLMNId(ueSpecifiedSelectedPLMNId *ngapType.PLMNIdentity) bool {
+	for _, amfServedPLMNId := range amf.PLMNSupportList.List {
+		if !bytes.Equal(amfServedPLMNId.PLMNIdentity.Value, ueSpecifiedSelectedPLMNId.Value) {
+			continue
+		}
+		return true
+	}
+	return false
+}

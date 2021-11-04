@@ -21,8 +21,10 @@ type ANParameters struct {
 
 func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *ANParameters, nasPDU []byte, err error) {
 	if len(codedData) >= 2 {
-		eap5GMessageID = codedData[0]
+		ikeLog.Debug("===== Unmarshal EAP5G Data (Ref: TS24.502 Fig. 9.3.2.2.2-1) =====")
 
+		eap5GMessageID = codedData[0]
+		ikeLog.Debugf("Message-Id: %d", eap5GMessageID)
 		if eap5GMessageID == message.EAP5GType5GStop {
 			return
 		}
@@ -37,6 +39,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 		if len(codedData) >= 2 {
 			// Length of the AN-Parameter field
 			anParameterLength := binary.BigEndian.Uint16(codedData[:2])
+			ikeLog.Debugf("AN-parameters length: %d", anParameterLength)
 
 			if anParameterLength != 0 {
 				anParameterField := codedData[2:]
@@ -49,6 +52,8 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 					anParameterField = anParameterField[:anParameterLength]
 				}
 
+				ikeLog.Debugf("Parsing AN-parameters...: % v", anParameterField)
+
 				anParameters = new(ANParameters)
 
 				// Parse AN-Parameters
@@ -59,6 +64,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 					switch parameterType {
 					case message.ANParametersTypeGUAMI:
+						ikeLog.Debugf("-> Parameter type: GUAMI")
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -72,8 +78,6 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 								return 0, nil, nil, errors.New("Unmatched GUAMI length")
 							}
 
-							ikeLog.Debugln("parameterValue: ", parameterValue)
-
 							guamiField := make([]byte, 1)
 							guamiField = append(guamiField, parameterValue...)
 							// Decode GUAMI using aper
@@ -84,10 +88,16 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 								return 0, nil, nil, errors.New("Unmarshal failed when decoding GUAMI")
 							}
 							anParameters.GUAMI = ngapGUAMI
+							ikeLog.Debugf("Unmarshal GUAMI: % x", guamiField)
+							ikeLog.Debugf("\tGUAMI: PLMNIdentity[% x], "+
+								"AMFRegionID[% x], AMFSetID[% x], AMFPointer[% x]",
+								anParameters.GUAMI.PLMNIdentity, anParameters.GUAMI.AMFRegionID,
+								anParameters.GUAMI.AMFSetID, anParameters.GUAMI.AMFPointer)
 						} else {
 							ikeLog.Warn("AN-Parameter GUAMI field empty")
 						}
 					case message.ANParametersTypeSelectedPLMNID:
+						ikeLog.Debugf("-> Parameter type: ANParametersTypeSelectedPLMNID")
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -111,10 +121,13 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 								return 0, nil, nil, errors.New("Unmarshal failed when decoding PLMN")
 							}
 							anParameters.SelectedPLMNID = ngapPLMN
+							ikeLog.Debugf("Unmarshal SelectedPLMNID: % x", plmnField)
+							ikeLog.Debugf("\tSelectedPLMNID: % x", anParameters.SelectedPLMNID.Value)
 						} else {
 							ikeLog.Warn("AN-Parameter PLMN field empty")
 						}
 					case message.ANParametersTypeRequestedNSSAI:
+						ikeLog.Debugf("-> Parameter type: ANParametersTypeRequestedNSSAI")
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -166,6 +179,15 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 								ngapNSSAI.List = append(ngapNSSAI.List, ngapSNSSAIItem)
 
+								ikeLog.Debugf("Unmarshal SNSSAI: % x", parameterValue[:1+snssaiLength])
+								ikeLog.Debugf("\t\t\tSST: % x", ngapSNSSAIItem.SNSSAI.SST.Value)
+								sd := ngapSNSSAIItem.SNSSAI.SD
+								if sd == nil {
+									ikeLog.Debugf("\t\t\tSD: nil")
+								} else {
+									ikeLog.Debugf("\t\t\tSD: % x", sd.Value)
+								}
+
 								// shift parameterValue for parsing next s-nssai
 								parameterValue = parameterValue[1+snssaiLength:]
 							}
@@ -174,6 +196,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							ikeLog.Warn("AN-Parameter NSSAI is empty")
 						}
 					case message.ANParametersTypeEstablishmentCause:
+						ikeLog.Debugf("-> Parameter type: ANParametersTypeEstablishmentCause")
 						if parameterLength != 0 {
 							parameterValue := anParameterField[2:]
 
@@ -186,6 +209,8 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							if len(parameterValue) != message.ANParametersLenEstCause {
 								return 0, nil, nil, errors.New("Unmatched Establishment Cause length")
 							}
+
+							ikeLog.Debugf("Unmarshal ANParametersTypeEstablishmentCause: % x", parameterValue)
 
 							establishmentCause := parameterValue[0] & 0x0f
 							switch establishmentCause {
@@ -232,6 +257,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 		if len(codedData) >= 2 {
 			// Length of the NASPDU field
 			nasPDULength := binary.BigEndian.Uint16(codedData[:2])
+			ikeLog.Debugf("nasPDULength: %d", nasPDULength)
 
 			if nasPDULength != 0 {
 				nasPDUField := codedData[2:]
@@ -242,6 +268,8 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 				} else {
 					nasPDUField = nasPDUField[:nasPDULength]
 				}
+
+				ikeLog.Debugf("nasPDUField: % v", nasPDUField)
 
 				nasPDU = append(nasPDU, nasPDUField...)
 			} else {

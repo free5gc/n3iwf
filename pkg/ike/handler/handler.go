@@ -802,8 +802,40 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 			// Send Initial UE Message or Uplink NAS Transport
 			if anParameters != nil {
+				// print AN parameters
+				ikeLog.Debug("Select AMF with the following AN parameters:")
+				if anParameters.GUAMI == nil {
+					ikeLog.Debug("\tGUAMI: nil")
+				} else {
+					ikeLog.Debugf("\tGUAMI: PLMNIdentity[% x], "+
+						"AMFRegionID[% x], AMFSetID[% x], AMFPointer[% x]",
+						anParameters.GUAMI.PLMNIdentity, anParameters.GUAMI.AMFRegionID,
+						anParameters.GUAMI.AMFSetID, anParameters.GUAMI.AMFPointer)
+				}
+				if anParameters.SelectedPLMNID == nil {
+					ikeLog.Debug("\tSelectedPLMNID: nil")
+				} else {
+					ikeLog.Debugf("\tSelectedPLMNID: % v", anParameters.SelectedPLMNID.Value)
+				}
+				if anParameters.RequestedNSSAI == nil {
+					ikeLog.Debug("\tRequestedNSSAI: nil")
+				} else {
+					ikeLog.Debugf("\tRequestedNSSAI:")
+					for i := 0; i < len(anParameters.RequestedNSSAI.List); i++ {
+						ikeLog.Debugf("\tRequestedNSSAI:")
+						ikeLog.Debugf("\t\tSNSSAI %d:", i+1)
+						ikeLog.Debugf("\t\t\tSST: % x", anParameters.RequestedNSSAI.List[i].SNSSAI.SST.Value)
+						sd := anParameters.RequestedNSSAI.List[i].SNSSAI.SD
+						if sd == nil {
+							ikeLog.Debugf("\t\t\tSD: nil")
+						} else {
+							ikeLog.Debugf("\t\t\tSD: % x", sd.Value)
+						}
+					}
+				}
+
 				// AMF selection
-				selectedAMF := n3iwfSelf.AMFSelection(anParameters.GUAMI)
+				selectedAMF := n3iwfSelf.AMFSelection(anParameters.GUAMI, anParameters.SelectedPLMNID)
 				if selectedAMF == nil {
 					ikeLog.Warn("No avalible AMF for this UE")
 					return

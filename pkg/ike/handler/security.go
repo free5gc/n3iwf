@@ -424,8 +424,8 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation)
 	// keyStream = keyStream[length_SK_pr:]
 
 	ikeLog.Debugln("====== IKE Security Association Info =====")
-	ikeLog.Debugf("Remote SPI: %016x", ikeSecurityAssociation.RemoteSPI)
-	ikeLog.Debugf("Local  SPI: %016x", ikeSecurityAssociation.LocalSPI)
+	ikeLog.Debugf("Initiator's SPI: %016x", ikeSecurityAssociation.RemoteSPI)
+	ikeLog.Debugf("Responder's  SPI: %016x", ikeSecurityAssociation.LocalSPI)
 	ikeLog.Debugf("Encryption Algorithm: %d", ikeSecurityAssociation.EncryptionAlgorithm.TransformID)
 	ikeLog.Debugf("SK_ei: %x", ikeSecurityAssociation.SK_ei)
 	ikeLog.Debugf("SK_er: %x", ikeSecurityAssociation.SK_er)
