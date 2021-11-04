@@ -838,8 +838,31 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				selectedAMF := n3iwfSelf.AMFSelection(anParameters.GUAMI, anParameters.SelectedPLMNID)
 				if selectedAMF == nil {
 					ikeLog.Warn("No avalible AMF for this UE")
+
+					// Send EAP failure
+					// Build IKE message
+					responseIKEMessage.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+						ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+					responseIKEMessage.Payloads.Reset()
+
+					// EAP
+					identifier, err := GenerateRandomUint8()
+					if err != nil {
+						ikeLog.Errorf("Generate random uint8 failed: %+v", err)
+						return
+					}
+					responseIKEPayload.BuildEAPfailure(identifier)
+
+					if err := EncryptProcedure(ikeSecurityAssociation, responseIKEPayload, responseIKEMessage); err != nil {
+						ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
+						return
+					}
+
+					// Send IKE message to UE
+					SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 					return
 				}
+				ikeLog.Infof("Selected AMF Name: %s", selectedAMF.AMFName.Value)
 
 				// Create UE context
 				ue := n3iwfSelf.NewN3iwfUe()
