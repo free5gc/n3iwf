@@ -801,7 +801,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 			}
 
 			// Send Initial UE Message or Uplink NAS Transport
-			if anParameters != nil {
+			if ikeSecurityAssociation.ThisUE == nil { // if anParameters != nil {
 				// print AN parameters
 				ikeLog.Debug("Select AMF with the following AN parameters:")
 				if anParameters.GUAMI == nil {
