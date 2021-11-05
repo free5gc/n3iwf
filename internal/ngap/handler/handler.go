@@ -1317,6 +1317,15 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 			handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr,
 				n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
 		} else {
+			// According to TS 24.502 8.2.4,
+			// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
+			// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
+			// According to TS 24.502 9.4,
+			// a NAS message envelope = Length | NAS Message
+			nasEnv := make([]byte, 2)
+			binary.BigEndian.PutUint16(nasEnv, uint16(len(nasPDU.Value)))
+			nasEnv = append(nasEnv, nasPDU.Value...)
+
 			// Check ue.TCPConnection. If failed, retry 2 times.
 			maxRetryTimes := 3
 			for i := 0; i < maxRetryTimes; i++ {
@@ -1324,7 +1333,7 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 					if i == (maxRetryTimes - 1) {
 						ngapLog.Warn(
 							"No connection found for UE to send NAS message. This message will be cached in N3IWF")
-						n3iwfUe.TemporaryCachedNASMessage = nasPDU.Value
+						n3iwfUe.TemporaryCachedNASMessage = nasEnv
 						return
 					} else {
 						ngapLog.Warn("No NAS signalling session found, retry...")
@@ -1336,7 +1345,7 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 			}
 
 			// Send to UE
-			if n, err := n3iwfUe.TCPConnection.Write(nasPDU.Value); err != nil {
+			if n, err := n3iwfUe.TCPConnection.Write(nasEnv); err != nil {
 				ngapLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
 			} else {
 				ngapLog.Trace("Forward NWu <- N2")
@@ -1445,7 +1454,16 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 			ngapLog.Error("No IPSec NAS signalling SA for this UE")
 			return
 		} else {
-			if n, err := n3iwfUe.TCPConnection.Write(nasPDU.Value); err != nil {
+			// According to TS 24.502 8.2.4,
+			// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
+			// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
+			// According to TS 24.502 9.4,
+			// a NAS message envelope = Length | NAS Message
+			nasEnv := make([]byte, 2)
+			binary.BigEndian.PutUint16(nasEnv, uint16(len(nasPDU.Value)))
+			nasEnv = append(nasEnv, nasPDU.Value...)
+
+			if n, err := n3iwfUe.TCPConnection.Write(nasEnv); err != nil {
 				ngapLog.Errorf("Send NAS to UE failed: %+v", err)
 				return
 			} else {
