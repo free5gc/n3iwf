@@ -1027,8 +1027,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		var ueIPAddr, n3iwfIPAddr net.IP
 		if addrRequest {
 			// IP addresses (IPSec)
-			ueIPAddr = n3iwfSelf.NewInternalUEIPAddr(thisUE)
-			n3iwfIPAddr = net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
+			ueIPAddr = n3iwfSelf.NewInternalUEIPAddr(thisUE).To4()
+			n3iwfIPAddr = net.ParseIP(n3iwfSelf.IPSecGatewayAddress).To4()
 
 			responseConfiguration := responseIKEPayload.BuildConfiguration(ike_message.CFG_REPLY)
 			responseConfiguration.ConfigurationAttribute.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_ADDRESS, ueIPAddr)
