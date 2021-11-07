@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"math/rand"
 	"net"
 	"time"
@@ -839,7 +840,7 @@ func handlePDUSessionResourceSetupRequestTransfer(ue *context.N3IWFUe, pduSessio
 			return false, responseTransfer
 		}
 	} else {
-		pduSession.SecurityIntegrity = false
+		pduSession.SecurityIntegrity = true
 		pduSession.SecurityCipher = true
 	}
 
@@ -1368,6 +1369,7 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 	var nasPDU *ngapType.NASPDU
 	var pduSessionResourceSetupListSUReq *ngapType.PDUSessionResourceSetupListSUReq
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
+	var pduSessionEstablishmentAccept *ngapType.NASPDU
 
 	var n3iwfUe *context.N3IWFUe
 	n3iwfSelf := context.N3IWFSelf()
@@ -1485,8 +1487,7 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 
 		for _, item := range pduSessionResourceSetupListSUReq.List {
 			pduSessionID := item.PDUSessionID.Value
-			// TODO: send NAS to UE
-			// pduSessionNasPdu := item.NASPDU
+			pduSessionEstablishmentAccept = item.PDUSessionNASPDU
 			snssai := item.SNSSAI
 
 			transfer := ngapType.PDUSessionResourceSetupRequestTransfer{}
@@ -1539,9 +1540,9 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 				var ikePayload ike_message.IKEPayloadContainer
 
 				// Build IKE message
-				ikeMessage.BuildIKEHeader(ikeSecurityAssociation.LocalSPI,
-					ikeSecurityAssociation.RemoteSPI, ike_message.CREATE_CHILD_SA,
-					ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
+				ikeMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
+					ikeSecurityAssociation.LocalSPI, ike_message.CREATE_CHILD_SA,
+					0, ikeSecurityAssociation.MessageID)
 				ikeMessage.Payloads.Reset()
 
 				// Build SA
@@ -1572,6 +1573,12 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 					proposal.IntegrityAlgorithm.BuildTransform(
 						ike_message.TypeIntegrityAlgorithm, ike_message.AUTH_HMAC_SHA1_96, nil, nil, nil)
 				}
+
+				// RFC 7296
+				// Diffie-Hellman transform is optional in CREATE_CHILD_SA
+				// proposal.DiffieHellmanGroup.BuildTransform(
+				// 	ike_message.TypeDiffieHellmanGroup, ike_message.DH_1024_BIT_MODP, nil, nil, nil)
+
 				// ESN transform
 				proposal.ExtendedSequenceNumbers.BuildTransform(
 					ike_message.TypeExtendedSequenceNumbers, ike_message.ESN_NO, nil, nil, nil)
@@ -1589,6 +1596,7 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 				tsi.TrafficSelectors.BuildIndividualTrafficSelector(
 					ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
 					0, 65535, n3iwfIPAddr.To4(), n3iwfIPAddr.To4())
+
 				// TSr
 				ueIPAddr := n3iwfUe.IPSecInnerIP
 				tsr := ikePayload.BuildTrafficSelectorResponder()
@@ -1607,13 +1615,15 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 					ngapLog.Errorf("Encrypting IKE message failed: %+v", err)
 					n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
 						n3iwfUe.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
-					cause := buildCause(ngapType.CausePresentTransport, ngapType.CauseTransportPresentTransportResourceUnavailable)
+					cause := buildCause(ngapType.CausePresentTransport,
+						ngapType.CauseTransportPresentTransportResourceUnavailable)
 					transfer, err := ngap_message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
 					if err != nil {
 						ngapLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %+v", err)
 						continue
 					}
-					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(n3iwfUe.TemporaryPDUSessionSetupData.FailedListSURes,
+					ngap_message.AppendPDUSessionResourceFailedToSetupListSURes(
+						n3iwfUe.TemporaryPDUSessionSetupData.FailedListSURes,
 						pduSessionID, transfer)
 					continue
 				}
@@ -1624,10 +1634,22 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 			} else {
 				// Send PDU Session Resource Setup Response to AMF
 				ngap_message.SendPDUSessionResourceSetupResponse(amf, n3iwfUe,
-					n3iwfUe.TemporaryPDUSessionSetupData.SetupListSURes, n3iwfUe.TemporaryPDUSessionSetupData.FailedListSURes, nil)
+					n3iwfUe.TemporaryPDUSessionSetupData.SetupListSURes,
+					n3iwfUe.TemporaryPDUSessionSetupData.FailedListSURes, nil)
 				break
 			}
 		}
+
+		// TS 23.501 4.12.5 Requested PDU Session Establishment via Untrusted non-3GPP Access
+		// After all IPsec Child SAs are established, the N3IWF shall forward to UE via the signalling IPsec SA
+		// the PDU Session Establishment Accept message
+		nasEnv := make([]byte, 2)
+		binary.BigEndian.PutUint16(nasEnv, uint16(len(pduSessionEstablishmentAccept.Value)))
+		nasEnv = append(nasEnv, pduSessionEstablishmentAccept.Value...)
+		ngapLog.Tracef("pduSessionEstablishmentAccept:\n%s", hex.Dump(nasEnv))
+
+		// Cache the pduSessionEstablishmentAccept and forward to the UE after all CREATE_CHILD_SAs finish
+		n3iwfUe.TemporaryCachedNASMessage = nasEnv
 	}
 }
 

@@ -535,15 +535,15 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 	ikeLog.Debugln("====== IPSec/Child SA: Initiator To Responder =====")
 	ikeLog.Debugf("IPSec SPI: %016x", childSecurityAssociation.SPI)
 	ikeLog.Debugf("IPSec Encryption Algorithm: %d", childSecurityAssociation.EncryptionAlgorithm)
-	ikeLog.Debugf("IPSec Encryption Key: %x", childSecurityAssociation.InitiatorToResponderEncryptionKey)
+	ikeLog.Debugf("IPSec Encryption Key: 0x%x", childSecurityAssociation.InitiatorToResponderEncryptionKey)
 	ikeLog.Debugf("IPSec Integrity  Algorithm: %d", childSecurityAssociation.IntegrityAlgorithm)
-	ikeLog.Debugf("IPSec Integrity  Key: %x", childSecurityAssociation.InitiatorToResponderIntegrityKey)
+	ikeLog.Debugf("IPSec Integrity  Key: 0x%x", childSecurityAssociation.InitiatorToResponderIntegrityKey)
 	ikeLog.Debugln("====== IPSec/Child SA: Responder To Initiator =====")
 	ikeLog.Debugf("IPSec SPI: %016x", childSecurityAssociation.SPI)
 	ikeLog.Debugf("IPSec Encryption Algorithm: %d", childSecurityAssociation.EncryptionAlgorithm)
-	ikeLog.Debugf("IPSec Encryption Key: %x", childSecurityAssociation.ResponderToInitiatorEncryptionKey)
+	ikeLog.Debugf("IPSec Encryption Key: 0x%x", childSecurityAssociation.ResponderToInitiatorEncryptionKey)
 	ikeLog.Debugf("IPSec Integrity  Algorithm: %d", childSecurityAssociation.IntegrityAlgorithm)
-	ikeLog.Debugf("IPSec Integrity  Key: %x", childSecurityAssociation.ResponderToInitiatorIntegrityKey)
+	ikeLog.Debugf("IPSec Integrity  Key: 0x%x", childSecurityAssociation.ResponderToInitiatorIntegrityKey)
 
 	return nil
 }

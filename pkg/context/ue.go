@@ -36,9 +36,12 @@ type N3IWFUe struct {
 
 	/* PDU Session Setup Temporary Data */
 	TemporaryPDUSessionSetupData *PDUSessionSetupTemporaryData
+
 	/* Temporary cached NAS message */
 	// Used when NAS registration accept arrived before
-	// UE setup NAS TCP connection with N3IWF
+	// UE setup NAS TCP connection with N3IWF, and
+	// Forward pduSessionEstablishmentAccept to UE after
+	// UE send CREATE_CHILD_SA response
 	TemporaryCachedNASMessage []byte
 
 	/* Security */

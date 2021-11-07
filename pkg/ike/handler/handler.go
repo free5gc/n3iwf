@@ -1257,12 +1257,14 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	}
 
 	// Find corresponding IKE security association
-	localSPI := message.InitiatorSPI
-	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(localSPI)
+	responderSPI := message.ResponderSPI
+
+	ikeLog.Warnf("CREATE_CHILD_SA responderSPI: %+v", responderSPI)
+	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(responderSPI)
 	if !ok {
 		ikeLog.Warn("Unrecognized SPI")
 		// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
-		responseIKEMessage.BuildIKEHeader(message.InitiatorSPI, 0, ike_message.INFORMATIONAL,
+		responseIKEMessage.BuildIKEHeader(0, message.ResponderSPI, ike_message.INFORMATIONAL,
 			ike_message.ResponseBitCheck, message.MessageID)
 		responseIKEMessage.Payloads.Reset()
 		responseIKEMessage.Payloads.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
@@ -1307,7 +1309,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			trafficSelectorResponder = ikePayload.(*ike_message.TrafficSelectorResponder)
 		default:
 			ikeLog.Warnf(
-				"Get IKE payload (type %d) in IKE_AUTH message, this payload will not be handled by IKE handler",
+				"Get IKE payload (type %d) in CREATE_CHILD_SA message, this payload will not be handled by IKE handler",
 				ikePayload.Type())
 		}
 	}
@@ -1370,6 +1372,25 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		ikeLog.Errorf("Create child security association context failed: %+v", err)
 		return
 	}
+
+	// Build TSi if there is no one in the response
+	if len(trafficSelectorInitiator.TrafficSelectors) == 0 {
+		ikeLog.Warnf("There is no TSi in CREATE_CHILD_SA response.")
+		n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
+		trafficSelectorInitiator.TrafficSelectors.BuildIndividualTrafficSelector(
+			ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
+			0, 65535, n3iwfIPAddr, n3iwfIPAddr)
+	}
+
+	// Build TSr if there is no one in the response
+	if len(trafficSelectorResponder.TrafficSelectors) == 0 {
+		ikeLog.Warnf("There is no TSr in CREATE_CHILD_SA response.")
+		ueIPAddr := thisUE.IPSecInnerIP
+		trafficSelectorResponder.TrafficSelectors.BuildIndividualTrafficSelector(
+			ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
+			0, 65535, ueIPAddr, ueIPAddr)
+	}
+
 	err = parseIPAddressInformationToChildSecurityAssociation(childSecurityAssociationContext, ueAddr.IP,
 		trafficSelectorInitiator.TrafficSelectors[0], trafficSelectorResponder.TrafficSelectors[0])
 	if err != nil {
@@ -1394,6 +1415,13 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	if err = ApplyXFRMRule(true, childSecurityAssociationContext); err != nil {
 		ikeLog.Errorf("Applying XFRM rules failed: %+v", err)
 		return
+	} else {
+		// Forward PDU Seesion Establishment Accept to UE
+		if n, ikeErr := thisUE.TCPConnection.Write(thisUE.TemporaryCachedNASMessage); ikeErr != nil {
+			ikeLog.Errorf("Writing via IPSec signalling SA failed: %+v", err)
+		} else {
+			ikeLog.Tracef("Forward PDU Seesion Establishment Accept to UE. Wrote %d bytes", n)
+		}
 	}
 
 	// Append NGAP PDU session resource setup response transfer
@@ -1422,8 +1450,8 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			var ikePayload ike_message.IKEPayloadContainer
 
 			// Build IKE message
-			ikeMessage.BuildIKEHeader(ikeSecurityAssociation.LocalSPI,
-				ikeSecurityAssociation.RemoteSPI, ike_message.CREATE_CHILD_SA,
+			ikeMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
+				ikeSecurityAssociation.LocalSPI, ike_message.CREATE_CHILD_SA,
 				ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
 			ikeMessage.Payloads.Reset()
 
