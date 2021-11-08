@@ -1160,6 +1160,18 @@ func HandleUEContextReleaseCommand(amf *context.N3IWFAMF, message *ngapType.NGAP
 	ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
 }
 
+func encapNasMsgToEnvelope(nasPDU *ngapType.NASPDU) []byte {
+	// According to TS 24.502 8.2.4,
+	// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
+	// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
+	// According to TS 24.502 9.4,
+	// a NAS message envelope = Length | NAS Message
+	nasEnv := make([]byte, 2)
+	binary.BigEndian.PutUint16(nasEnv, uint16(len(nasPDU.Value)))
+	nasEnv = append(nasEnv, nasPDU.Value...)
+	return nasEnv
+}
+
 func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
 	ngapLog.Infoln("[N3IWF] Handle Downlink NAS Transport")
 
@@ -1318,14 +1330,9 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 			handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr,
 				n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
 		} else {
-			// According to TS 24.502 8.2.4,
-			// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
-			// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
-			// According to TS 24.502 9.4,
-			// a NAS message envelope = Length | NAS Message
-			nasEnv := make([]byte, 2)
-			binary.BigEndian.PutUint16(nasEnv, uint16(len(nasPDU.Value)))
-			nasEnv = append(nasEnv, nasPDU.Value...)
+			// Using a "NAS message envelope" to transport a NAS message
+			// over the non-3GPP access between the UE and the N3IWF
+			nasEnv := encapNasMsgToEnvelope(nasPDU)
 
 			// Check ue.TCPConnection. If failed, retry 2 times.
 			maxRetryTimes := 3
@@ -1456,14 +1463,9 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 			ngapLog.Error("No IPSec NAS signalling SA for this UE")
 			return
 		} else {
-			// According to TS 24.502 8.2.4,
-			// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
-			// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
-			// According to TS 24.502 9.4,
-			// a NAS message envelope = Length | NAS Message
-			nasEnv := make([]byte, 2)
-			binary.BigEndian.PutUint16(nasEnv, uint16(len(nasPDU.Value)))
-			nasEnv = append(nasEnv, nasPDU.Value...)
+			// Using a "NAS message envelope" to transport a NAS message
+			// over the non-3GPP access between the UE and the N3IWF
+			nasEnv := encapNasMsgToEnvelope(nasPDU)
 
 			if n, err := n3iwfUe.TCPConnection.Write(nasEnv); err != nil {
 				ngapLog.Errorf("Send NAS to UE failed: %+v", err)

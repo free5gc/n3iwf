@@ -92,6 +92,21 @@ func listenAndServe(tcpListener net.Listener) {
 	}
 }
 
+func decapNasMsgFromEnvelope(envelop []byte) []byte {
+	// According to TS 24.502 8.2.4,
+	// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
+	// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
+	// According to TS 24.502 9.4,
+	// a NAS message envelope = Length | NAS Message
+
+	// Get NAS Message Length
+	nasLen := binary.BigEndian.Uint16(envelop[:2])
+	nasMsg := make([]byte, nasLen)
+	copy(nasMsg, envelop[2:2+nasLen])
+
+	return nasMsg
+}
+
 // serveConn handle accepted TCP connection. It reads NAS packets
 // from the connection and call forward() to forward NAS messages
 // to AMF
@@ -117,16 +132,8 @@ func serveConn(ue *context.N3IWFUe, connection net.Conn) {
 		}
 		nwucpLog.Tracef("Get NAS PDU from UE:\nNAS length: %d\nNAS content:\n%s", n, hex.Dump(data[:n]))
 
-		// According to TS 24.502 8.2.4,
-		// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
-		// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
-		// According to TS 24.502 9.4,
-		// a NAS message envelope = Length | NAS Message
-
-		// Get NAS Message Length
-		nasLen := binary.BigEndian.Uint16(data[:2])
-		forwardData := make([]byte, nasLen)
-		copy(forwardData, data[2:2+nasLen])
+		// Decap Nas envelope
+		forwardData := decapNasMsgFromEnvelope(data)
 
 		go forward(ue, forwardData)
 	}
