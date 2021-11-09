@@ -1284,7 +1284,7 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 
 	if nasPDU != nil {
 		// TODO: Send NAS PDU to UE
-		if n3iwfUe.N3IWFChildSecurityAssociation == nil {
+		if !n3iwfUe.SignallingIPsecSAEstablished {
 			var identifier uint8
 			ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
 
@@ -1539,6 +1539,9 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 				ikeMessage := new(ike_message.IKEMessage)
 				var ikePayload ike_message.IKEPayloadContainer
 
+				// Adaptive to Landslide
+				ikeSecurityAssociation.MessageID = 0
+
 				// Build IKE message
 				ikeMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
 					ikeSecurityAssociation.LocalSPI, ike_message.CREATE_CHILD_SA,
@@ -1582,6 +1585,8 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 				// ESN transform
 				proposal.ExtendedSequenceNumbers.BuildTransform(
 					ike_message.TypeExtendedSequenceNumbers, ike_message.ESN_NO, nil, nil, nil)
+
+				n3iwfUe.CreateHalfChildSA(ikeMessage.MessageID, spi)
 
 				// Build Nonce
 				nonceData := handler.GenerateRandomNumber().Bytes()

@@ -1,7 +1,6 @@
 package context
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -50,7 +49,13 @@ type N3IWFUe struct {
 
 	/* IKE Security Association */
 	N3IWFIKESecurityAssociation   *IKESecurityAssociation
-	N3IWFChildSecurityAssociation *ChildSecurityAssociation
+	N3IWFChildSecurityAssociation map[uint32]*ChildSecurityAssociation // inbound SPI as key
+	SignallingIPsecSAEstablished  bool
+
+	/* Temporary Mapping of two SPIs */
+	// Exchange Message ID(including a SPI) and ChildSA(including a SPI)
+	// Mapping of Message ID of exchange in IKE and Child SA when creating new child SA
+	TemporaryExchangeMsgIDChildSAMapping map[uint32]*ChildSecurityAssociation // Message ID as a key
 
 	/* NAS IKE Connection */
 	IKEConnection *UDPSocketInfo
@@ -165,7 +170,8 @@ type IKESecurityAssociation struct {
 
 type ChildSecurityAssociation struct {
 	// SPI
-	SPI uint32
+	InboundSPI  uint32 // N3IWF Specify
+	OutboundSPI uint32 // Non-3GPP UE Specify
 
 	// IP address
 	PeerPublicIPAddr  net.IP
@@ -204,6 +210,8 @@ func (ue *N3IWFUe) init(ranUeNgapId int64) {
 	ue.RanUeNgapId = ranUeNgapId
 	ue.AmfUeNgapId = AmfUeNgapIdUnspecified
 	ue.PduSessionList = make(map[int64]*PDUSession)
+	ue.N3IWFChildSecurityAssociation = make(map[uint32]*ChildSecurityAssociation)
+	ue.TemporaryExchangeMsgIDChildSAMapping = make(map[uint32]*ChildSecurityAssociation)
 }
 
 func (ue *N3IWFUe) Remove() {
@@ -240,9 +248,27 @@ func (ue *N3IWFUe) CreatePDUSession(pduSessionID int64, snssai ngapType.SNSSAI) 
 	return pduSession, nil
 }
 
-func (ue *N3IWFUe) CreateIKEChildSecurityAssociation(
+// When N3IWF send CREATE_CHILD_SA request to N3UE, the inbound SPI of childSA will be only stored first until
+// receive response and call CompleteChildSAWithProposal to fill the all data of childSA
+func (ue *N3IWFUe) CreateHalfChildSA(msgID, inboundSPI uint32) {
+	childSA := new(ChildSecurityAssociation)
+	childSA.InboundSPI = inboundSPI
+	// Link UE context
+	childSA.ThisUE = ue
+	// Map Exchange Message ID and Child SA data until get paired response
+	ue.TemporaryExchangeMsgIDChildSAMapping[msgID] = childSA
+}
+
+func (ue *N3IWFUe) CompleteChildSA(msgID uint32, outboundSPI uint32,
 	chosenSecurityAssociation *ike_message.SecurityAssociation) (*ChildSecurityAssociation, error) {
-	childSecurityAssociation := new(ChildSecurityAssociation)
+	childSA, ok := ue.TemporaryExchangeMsgIDChildSAMapping[msgID]
+
+	if !ok {
+		return nil, fmt.Errorf("There's not a half child SA created by the exchange with message ID %d.", msgID)
+	}
+
+	// Remove mapping of exchange msg ID and child SA
+	delete(ue.TemporaryExchangeMsgIDChildSAMapping, msgID)
 
 	if chosenSecurityAssociation == nil {
 		return nil, errors.New("chosenSecurityAssociation is nil")
@@ -252,32 +278,30 @@ func (ue *N3IWFUe) CreateIKEChildSecurityAssociation(
 		return nil, errors.New("No proposal")
 	}
 
-	childSecurityAssociation.SPI = binary.BigEndian.Uint32(chosenSecurityAssociation.Proposals[0].SPI)
+	childSA.OutboundSPI = outboundSPI
 
 	if len(chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm) != 0 {
-		childSecurityAssociation.EncryptionAlgorithm =
+		childSA.EncryptionAlgorithm =
 			chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm[0].TransformID
 	}
 	if len(chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm) != 0 {
-		childSecurityAssociation.IntegrityAlgorithm =
+		childSA.IntegrityAlgorithm =
 			chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm[0].TransformID
 	}
 	if len(chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers) != 0 {
 		if chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers[0].TransformID == 0 {
-			childSecurityAssociation.ESN = false
+			childSA.ESN = false
 		} else {
-			childSecurityAssociation.ESN = true
+			childSA.ESN = true
 		}
 	}
 
-	// Link UE context
-	childSecurityAssociation.ThisUE = ue
-	// Record to N3IWF context
-	n3iwfContext.ChildSA.Store(childSecurityAssociation.SPI, childSecurityAssociation)
+	// Record to UE context with inbound SPI as key
+	ue.N3IWFChildSecurityAssociation[childSA.InboundSPI] = childSA
+	// Record to N3IWF context with inbound SPI as key
+	n3iwfContext.ChildSA.Store(childSA.InboundSPI, childSA)
 
-	ue.N3IWFChildSecurityAssociation = childSecurityAssociation
-
-	return childSecurityAssociation, nil
+	return childSA, nil
 }
 
 func (ue *N3IWFUe) AttachAMF(sctpAddr string) bool {

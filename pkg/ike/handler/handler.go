@@ -554,12 +554,6 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					continue // The SPI of ESP must be 32-bit
 				}
 
-				// check SPI
-				spi := binary.BigEndian.Uint32(proposal.SPI)
-				if _, ok := n3iwfSelf.ChildSA.Load(spi); ok {
-					continue
-				}
-
 				if len(proposal.EncryptionAlgorithm) > 0 {
 					for _, transform := range proposal.EncryptionAlgorithm {
 						if is_Kernel_Supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID,
@@ -1063,10 +1057,32 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		ikeSecurityAssociation.TrafficSelectorInitiator = responseTrafficSelectorInitiator
 		ikeSecurityAssociation.TrafficSelectorResponder = responseTrafficSelectorResponder
 
-		// Get xfrm needed data
-		// As specified in RFC 7296, ESP negotiate two child security association (pair) in one IKE_AUTH
+		// Get data needed by xfrm
+
+		// Allocate N3IWF inbound SPI
+		var inboundSPI uint32
+		inboundSPIByte := make([]byte, 4)
+		for {
+			randomUint64 := GenerateRandomNumber().Uint64()
+			// check if the inbound SPI havn't been allocated by N3IWF
+			if _, ok := n3iwfSelf.ChildSA.Load(uint32(randomUint64)); !ok {
+				inboundSPI = uint32(randomUint64)
+				break
+			}
+		}
+		binary.BigEndian.PutUint32(inboundSPIByte, inboundSPI)
+
+		outboundSPI := binary.BigEndian.Uint32(ikeSecurityAssociation.IKEAuthResponseSA.Proposals[0].SPI)
+		ikeLog.Infof("Inbound SPI: %+v, Outbound SPI: %+v", inboundSPI, outboundSPI)
+
+		// SPI field of IKEAuthResponseSA is used to save outbound SPI temporarily.
+		// After N3IWF produced its inbound SPI, the field will be overwritten with the SPI.
+		ikeSecurityAssociation.IKEAuthResponseSA.Proposals[0].SPI = inboundSPIByte
+
+		// Consider 0x01 as the speicified index for IKE_AUTH exchange
+		thisUE.CreateHalfChildSA(0x01, inboundSPI)
 		childSecurityAssociationContext, err :=
-			thisUE.CreateIKEChildSecurityAssociation(ikeSecurityAssociation.IKEAuthResponseSA)
+			thisUE.CompleteChildSA(0x01, outboundSPI, ikeSecurityAssociation.IKEAuthResponseSA)
 		if err != nil {
 			ikeLog.Errorf("Create child security association context failed: %+v", err)
 			return
@@ -1111,6 +1127,9 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 		// Send IKE message to UE
 		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
+
+		// After this, N3IWF will forward NAS with Child SA (IPSec SA)
+		thisUE.SignallingIPsecSAEstablished = true
 
 		// If needed, setup PDU session
 		if thisUE.TemporaryPDUSessionSetupData != nil {
@@ -1366,8 +1385,11 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	}
 
 	// Get xfrm needed data
-	// As specified in RFC 7296, ESP negotiate two child security association (pair) in one IKE_AUTH
-	childSecurityAssociationContext, err := thisUE.CreateIKEChildSecurityAssociation(securityAssociation)
+	// As specified in RFC 7296, ESP negotiate two child security association (pair) in one exchange
+	// Message ID is used to be a index to pair two SPI in serveral IKE messages.
+	outboundSPI := binary.BigEndian.Uint32(securityAssociation.Proposals[0].SPI)
+	childSecurityAssociationContext, err := thisUE.CompleteChildSA(
+		ikeSecurityAssociation.MessageID, outboundSPI, securityAssociation)
 	if err != nil {
 		ikeLog.Errorf("Create child security association context failed: %+v", err)
 		return

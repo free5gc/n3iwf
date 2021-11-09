@@ -90,7 +90,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *context.Ch
 	xfrmState.Dst = childSecurityAssociation.LocalPublicIPAddr
 	xfrmState.Proto = netlink.XFRM_PROTO_ESP
 	xfrmState.Mode = netlink.XFRM_MODE_TUNNEL
-	xfrmState.Spi = int(childSecurityAssociation.SPI)
+	xfrmState.Spi = int(childSecurityAssociation.InboundSPI)
 	xfrmState.Mark = mark
 	xfrmState.Auth = xfrmIntegrityAlgorithm
 	xfrmState.Crypt = xfrmEncryptionAlgorithm
@@ -151,6 +151,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *context.Ch
 		}
 	}
 
+	xfrmState.Spi = int(childSecurityAssociation.OutboundSPI)
 	xfrmState.Src, xfrmState.Dst = xfrmState.Dst, xfrmState.Src
 	if xfrmState.Encap != nil {
 		xfrmState.Encap.SrcPort, xfrmState.Encap.DstPort = xfrmState.Encap.DstPort, xfrmState.Encap.SrcPort
@@ -163,6 +164,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *context.Ch
 	}
 
 	// Policy
+	xfrmPolicyTemplate.Spi = int(childSecurityAssociation.OutboundSPI)
 	xfrmPolicyTemplate.Src, xfrmPolicyTemplate.Dst = xfrmPolicyTemplate.Dst, xfrmPolicyTemplate.Src
 
 	xfrmPolicy.Src, xfrmPolicy.Dst = xfrmPolicy.Dst, xfrmPolicy.Src

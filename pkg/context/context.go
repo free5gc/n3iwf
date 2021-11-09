@@ -35,7 +35,7 @@ type N3IWFContext struct {
 	AMFPool                sync.Map // map[string]*N3IWFAMF, SCTPAddr as key
 	AMFReInitAvailableList sync.Map // map[string]bool, SCTPAddr as key
 	IKESA                  sync.Map // map[uint64]*IKESecurityAssociation, SPI as key
-	ChildSA                sync.Map // map[uint32]*ChildSecurityAssociation, SPI as key
+	ChildSA                sync.Map // map[uint32]*ChildSecurityAssociation, inboundSPI as key
 	GTPConnectionWithUPF   sync.Map // map[string]*gtpv1.UPlaneConn, UPF address as key
 	AllocatedUEIPAddress   sync.Map // map[string]*N3IWFUe, IPAddr as key
 	AllocatedUETEID        sync.Map // map[uint32]*N3IWFUe, TEID as key
