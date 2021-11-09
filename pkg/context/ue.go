@@ -120,7 +120,8 @@ type IKESecurityAssociation struct {
 	LocalSPI  uint64
 
 	// Message ID
-	MessageID uint32
+	InitiatorMessageID uint32
+	ResponderMessageID uint32
 
 	// Transforms for IKE SA
 	EncryptionAlgorithm    *ike_message.Transform

@@ -277,7 +277,7 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 	// Create new IKE security association
 	ikeSecurityAssociation := n3iwfSelf.NewIKESecurityAssociation()
 	ikeSecurityAssociation.RemoteSPI = message.InitiatorSPI
-	ikeSecurityAssociation.MessageID = message.MessageID
+	ikeSecurityAssociation.InitiatorMessageID = message.MessageID
 	ikeSecurityAssociation.UEIsBehindNAT = ueIsBehindNAT
 	ikeSecurityAssociation.N3IWFIsBehindNAT = n3iwfIsBehindNAT
 
@@ -483,7 +483,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 	// NOTE: tune it
 	transformPseudorandomFunction := ikeSecurityAssociation.PseudorandomFunction
-	ikeSecurityAssociation.MessageID = message.MessageID
+	ikeSecurityAssociation.InitiatorMessageID = message.MessageID
 
 	switch ikeSecurityAssociation.State {
 	case PreSignalling:
@@ -867,7 +867,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				ue.AMF = selectedAMF
 
 				// Store some information in conext
-				ikeSecurityAssociation.MessageID = message.MessageID
+				ikeSecurityAssociation.InitiatorMessageID = message.MessageID
 
 				ue.IKEConnection = &context.UDPSocketInfo{
 					Conn:      udpConn,
@@ -887,7 +887,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				amf := ue.AMF
 
 				// Store some information in context
-				ikeSecurityAssociation.MessageID = message.MessageID
+				ikeSecurityAssociation.InitiatorMessageID = message.MessageID
 
 				ue.IKEConnection = &context.UDPSocketInfo{
 					Conn:      udpConn,
@@ -1139,7 +1139,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					pduSession := thisUE.PduSessionList[pduSessionID]
 
 					// Add MessageID for IKE security association
-					ikeSecurityAssociation.MessageID++
+					ikeSecurityAssociation.InitiatorMessageID++
 
 					// Send CREATE_CHILD_SA to UE
 					ikeMessage := new(ike_message.IKEMessage)
@@ -1148,7 +1148,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					// Build IKE message
 					ikeMessage.BuildIKEHeader(ikeSecurityAssociation.LocalSPI,
 						ikeSecurityAssociation.RemoteSPI, ike_message.CREATE_CHILD_SA,
-						ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
+						ike_message.InitiatorBitCheck, ikeSecurityAssociation.InitiatorMessageID)
 					ikeMessage.Payloads.Reset()
 
 					// Build SA
@@ -1334,7 +1334,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	}
 
 	// Record message ID
-	ikeSecurityAssociation.MessageID = message.MessageID
+	ikeSecurityAssociation.ResponderMessageID = message.MessageID
 
 	// UE context
 	thisUE := ikeSecurityAssociation.ThisUE
@@ -1389,7 +1389,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	// Message ID is used to be a index to pair two SPI in serveral IKE messages.
 	outboundSPI := binary.BigEndian.Uint32(securityAssociation.Proposals[0].SPI)
 	childSecurityAssociationContext, err := thisUE.CompleteChildSA(
-		ikeSecurityAssociation.MessageID, outboundSPI, securityAssociation)
+		ikeSecurityAssociation.ResponderMessageID, outboundSPI, securityAssociation)
 	if err != nil {
 		ikeLog.Errorf("Create child security association context failed: %+v", err)
 		return
@@ -1465,7 +1465,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			pduSession := thisUE.PduSessionList[pduSessionID]
 
 			// Add MessageID for IKE security association
-			ikeSecurityAssociation.MessageID++
+			ikeSecurityAssociation.ResponderMessageID++
 
 			// Send CREATE_CHILD_SA to UE
 			ikeMessage := new(ike_message.IKEMessage)
@@ -1474,7 +1474,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			// Build IKE message
 			ikeMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
 				ikeSecurityAssociation.LocalSPI, ike_message.CREATE_CHILD_SA,
-				ike_message.InitiatorBitCheck, ikeSecurityAssociation.MessageID)
+				ike_message.InitiatorBitCheck, ikeSecurityAssociation.ResponderMessageID)
 			ikeMessage.Payloads.Reset()
 
 			// Build SA

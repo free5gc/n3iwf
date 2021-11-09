@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"math/rand"
 	"net"
 	"time"
@@ -712,7 +711,7 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 	// Build IKE message
 	responseIKEMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
 		ikeSecurityAssociation.LocalSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck,
-		ikeSecurityAssociation.MessageID)
+		ikeSecurityAssociation.InitiatorMessageID)
 	responseIKEMessage.Payloads.Reset()
 
 	// EAP Success
@@ -1314,7 +1313,7 @@ func HandleDownlinkNASTransport(amf *context.N3IWFAMF, message *ngapType.NGAPPDU
 			// Build IKE message
 			responseIKEMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
 				ikeSecurityAssociation.LocalSPI, ike_message.IKE_AUTH, ike_message.ResponseBitCheck,
-				ikeSecurityAssociation.MessageID)
+				ikeSecurityAssociation.InitiatorMessageID)
 			responseIKEMessage.Payloads.Reset()
 
 			// EAP-5G
@@ -1534,21 +1533,17 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 
 				ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
 
-				// Add MessageID for IKE security association
-				ikeSecurityAssociation.MessageID++
-
 				// Send CREATE_CHILD_SA to UE
 				ikeMessage := new(ike_message.IKEMessage)
 				var ikePayload ike_message.IKEPayloadContainer
 
-				// Adaptive to Landslide
-				ikeSecurityAssociation.MessageID = 0
-
 				// Build IKE message
 				ikeMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
 					ikeSecurityAssociation.LocalSPI, ike_message.CREATE_CHILD_SA,
-					0, ikeSecurityAssociation.MessageID)
+					0, ikeSecurityAssociation.ResponderMessageID)
 				ikeMessage.Payloads.Reset()
+				// Add MessageID for IKE security association
+				ikeSecurityAssociation.ResponderMessageID++
 
 				// Build SA
 				requestSA := ikePayload.BuildSecurityAssociation()
@@ -1650,10 +1645,7 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 		// TS 23.501 4.12.5 Requested PDU Session Establishment via Untrusted non-3GPP Access
 		// After all IPsec Child SAs are established, the N3IWF shall forward to UE via the signalling IPsec SA
 		// the PDU Session Establishment Accept message
-		nasEnv := make([]byte, 2)
-		binary.BigEndian.PutUint16(nasEnv, uint16(len(pduSessionEstablishmentAccept.Value)))
-		nasEnv = append(nasEnv, pduSessionEstablishmentAccept.Value...)
-		ngapLog.Tracef("pduSessionEstablishmentAccept:\n%s", hex.Dump(nasEnv))
+		nasEnv := encapNasMsgToEnvelope(pduSessionEstablishmentAccept)
 
 		// Cache the pduSessionEstablishmentAccept and forward to the UE after all CREATE_CHILD_SAs finish
 		n3iwfUe.TemporaryCachedNASMessage = nasEnv
