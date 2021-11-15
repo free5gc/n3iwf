@@ -179,5 +179,40 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, childSecurityAssociation *context.Ch
 		return errors.New("Set XFRM policy rule failed")
 	}
 
+	printSAInfo(n3iwf_is_initiator, childSecurityAssociation)
+
 	return nil
+}
+
+func printSAInfo(n3iwf_is_initiator bool, childSecurityAssociation *context.ChildSecurityAssociation) {
+	var InboundEncryptionKey, InboundIntegrityKey, OutboundEncryptionKey, OutboundIntegrityKey []byte
+
+	if n3iwf_is_initiator {
+		InboundEncryptionKey = childSecurityAssociation.ResponderToInitiatorEncryptionKey
+		InboundIntegrityKey = childSecurityAssociation.ResponderToInitiatorIntegrityKey
+		OutboundEncryptionKey = childSecurityAssociation.InitiatorToResponderEncryptionKey
+		OutboundIntegrityKey = childSecurityAssociation.InitiatorToResponderIntegrityKey
+	} else {
+		InboundEncryptionKey = childSecurityAssociation.InitiatorToResponderEncryptionKey
+		InboundIntegrityKey = childSecurityAssociation.InitiatorToResponderIntegrityKey
+		OutboundEncryptionKey = childSecurityAssociation.ResponderToInitiatorEncryptionKey
+		OutboundIntegrityKey = childSecurityAssociation.ResponderToInitiatorIntegrityKey
+	}
+	ikeLog.Debug("====== IPSec/Child SA Info ======")
+	// ====== Inbound ======
+	ikeLog.Debugf("IPSec Inbound  SPI: 0x%016x", childSecurityAssociation.InboundSPI)
+	ikeLog.Debugf("[UE:%+v] -> [N3IWF:%+v]",
+		childSecurityAssociation.PeerPublicIPAddr, childSecurityAssociation.LocalPublicIPAddr)
+	ikeLog.Debugf("IPSec Encryption Algorithm: %d", childSecurityAssociation.EncryptionAlgorithm)
+	ikeLog.Debugf("IPSec Encryption Key: 0x%x", InboundEncryptionKey)
+	ikeLog.Debugf("IPSec Integrity  Algorithm: %d", childSecurityAssociation.IntegrityAlgorithm)
+	ikeLog.Debugf("IPSec Integrity  Key: 0x%x", InboundIntegrityKey)
+	// ====== Outbound ======
+	ikeLog.Debugf("IPSec Outbound  SPI: 0x%016x", childSecurityAssociation.OutboundSPI)
+	ikeLog.Debugf("[N3IWF:%+v] -> [UE:%+v]",
+		childSecurityAssociation.LocalPublicIPAddr, childSecurityAssociation.PeerPublicIPAddr)
+	ikeLog.Debugf("IPSec Encryption Algorithm: %d", childSecurityAssociation.EncryptionAlgorithm)
+	ikeLog.Debugf("IPSec Encryption Key: 0x%x", OutboundEncryptionKey)
+	ikeLog.Debugf("IPSec Integrity  Algorithm: %d", childSecurityAssociation.IntegrityAlgorithm)
+	ikeLog.Debugf("IPSec Integrity  Key: 0x%x", OutboundIntegrityKey)
 }
