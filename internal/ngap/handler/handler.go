@@ -1153,10 +1153,9 @@ func HandleUEContextReleaseCommand(amf *context.N3IWFAMF, message *ngapType.NGAP
 		printAndGetCause(cause)
 	}
 
-	// TODO: release pdu session and gtp info for ue
-	n3iwfUe.Remove()
+	handler.SendUEInformationExchange(n3iwfUe)
 
-	ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
+	// TODO: release pdu session and gtp info for ue
 }
 
 func encapNasMsgToEnvelope(nasPDU *ngapType.NASPDU) []byte {

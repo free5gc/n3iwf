@@ -3,6 +3,7 @@ package handler
 import (
 	"net"
 
+	"github.com/free5gc/n3iwf/pkg/context"
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
 )
 
@@ -31,4 +32,21 @@ func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, mes
 		ikeLog.Errorf("Not all of the data is sent. Total length: %d. Sent: %d.", len(pkt), n)
 		return
 	}
+}
+
+func SendUEInformationExchange(
+	n3iwfUe *context.N3IWFUe) {
+	ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
+	responseIKEMessage := new(ike_message.IKEMessage)
+	var responseIKEPayload ike_message.IKEPayloadContainer
+
+	// Build IKE message
+	responseIKEMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
+		ikeSecurityAssociation.LocalSPI, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck,
+		ikeSecurityAssociation.InitiatorMessageID)
+
+	responseIKEPayload.BuildDeletePayload(ike_message.TypeSA, 0, 0, nil)
+
+	SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr,
+		n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
 }

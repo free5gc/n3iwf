@@ -1603,6 +1603,42 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	}
 }
 
+func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage) {
+	ikeLog.Infoln("Handle Informational")
+
+	if message == nil {
+		ikeLog.Error("IKE Message is nil")
+		return
+	}
+
+	// Check if UE is response to a request that delete the ike SA
+	if len(message.Payloads) == 0 {
+		n3iwfSelf := context.N3IWFSelf()
+		ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(message.ResponderSPI)
+
+		if !ok {
+			ikeLog.Warn("Unrecognized SPI")
+			// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
+			responseIKEMessage := new(ike_message.IKEMessage)
+			responseIKEMessage.BuildIKEHeader(0, message.ResponderSPI, ike_message.INFORMATIONAL,
+				ike_message.ResponseBitCheck, message.MessageID)
+			responseIKEMessage.Payloads.Reset()
+			responseIKEMessage.Payloads.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
+
+			SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
+
+			return
+		}
+
+		n3iwfUe := ikeSecurityAssociation.ThisUE
+		amf := n3iwfUe.AMF
+
+		n3iwfUe.Remove()
+
+		ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
+	}
+}
+
 func is_supported(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) bool {
 	switch transformType {
 	case ike_message.TypeEncryptionAlgorithm:
