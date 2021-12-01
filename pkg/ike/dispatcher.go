@@ -54,6 +54,8 @@ func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []by
 		handler.HandleIKEAUTH(udpConn, localAddr, remoteAddr, ikeMessage)
 	case ike_message.CREATE_CHILD_SA:
 		handler.HandleCREATECHILDSA(udpConn, localAddr, remoteAddr, ikeMessage)
+	case ike_message.INFORMATIONAL:
+		handler.HandleInformational(udpConn, localAddr, remoteAddr, ikeMessage)
 	default:
 		ikeLog.Warnf("Unimplemented IKE message type, exchange type: %d", ikeMessage.ExchangeType)
 	}

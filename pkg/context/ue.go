@@ -230,6 +230,12 @@ func (ue *N3IWFUe) Remove() {
 	n3iwfSelf.DeleteN3iwfUe(ue.RanUeNgapId)
 	n3iwfSelf.DeleteIKESecurityAssociation(ue.N3IWFIKESecurityAssociation.LocalSPI)
 	n3iwfSelf.DeleteInternalUEIPAddr(ue.IPSecInnerIP.String())
+
+	// Delete child SA
+	for _, childSA := range ue.N3IWFChildSecurityAssociation {
+		n3iwfSelf.ChildSA.Delete(childSA.InboundSPI)
+	}
+
 	for _, pduSession := range ue.PduSessionList {
 		n3iwfSelf.DeleteTEID(pduSession.GTPConnection.IncomingTEID)
 	}

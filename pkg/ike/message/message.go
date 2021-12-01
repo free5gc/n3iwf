@@ -798,7 +798,9 @@ func (del *Delete) marshal() ([]byte, error) {
 	deleteData[1] = del.SPISize
 	binary.BigEndian.PutUint16(deleteData[2:4], del.NumberOfSPI)
 
-	deleteData = append(deleteData, del.SPIs...)
+	if int(del.NumberOfSPI) > 0 {
+		deleteData = append(deleteData, del.SPIs...)
+	}
 
 	return deleteData, nil
 }
