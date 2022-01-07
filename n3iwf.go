@@ -7,8 +7,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 
-	"github.com/free5gc/n3iwf/logger"
-	"github.com/free5gc/n3iwf/service"
+	"github.com/free5gc/n3iwf/internal/logger"
+	"github.com/free5gc/n3iwf/pkg/service"
 	"github.com/free5gc/version"
 )
 
