@@ -18,54 +18,49 @@ import (
 	"github.com/free5gc/n3iwf/pkg/factory"
 	ike_service "github.com/free5gc/n3iwf/pkg/ike/service"
 	ngapLogger "github.com/free5gc/ngap/logger"
-	"github.com/free5gc/path_util"
-	pathUtilLogger "github.com/free5gc/path_util/logger"
 )
 
 type N3IWF struct{}
 
 type (
-	// Config information.
-	Config struct {
-		n3iwfcfg string
+	// Commands information.
+	Commands struct {
+		config string
 	}
 )
 
-var config Config
+var commands Commands
 
-var n3iwfCLi = []cli.Flag{
+var cliCmd = []cli.Flag{
 	cli.StringFlag{
-		Name:  "free5gccfg",
-		Usage: "common config file",
+		Name:  "config, c",
+		Usage: "Load configuration from `FILE`",
 	},
 	cli.StringFlag{
-		Name:  "n3iwfcfg",
-		Usage: "n3iwf config file",
+		Name:  "log, l",
+		Usage: "Output NF log to `FILE`",
 	},
-}
-
-var initLog *logrus.Entry
-
-func init() {
-	initLog = logger.InitLog
+	cli.StringFlag{
+		Name:  "log5gc, lc",
+		Usage: "Output free5gc log to `FILE`",
+	},
 }
 
 func (*N3IWF) GetCliCmd() (flags []cli.Flag) {
-	return n3iwfCLi
+	return cliCmd
 }
 
 func (n3iwf *N3IWF) Initialize(c *cli.Context) error {
-	config = Config{
-		n3iwfcfg: c.String("n3iwfcfg"),
+	commands = Commands{
+		config: c.String("config"),
 	}
 
-	if config.n3iwfcfg != "" {
-		if err := factory.InitConfigFactory(config.n3iwfcfg); err != nil {
+	if commands.config != "" {
+		if err := factory.InitConfigFactory(commands.config); err != nil {
 			return err
 		}
 	} else {
-		DefaultN3iwfConfigPath := path_util.Free5gcPath("free5gc/config/n3iwfcfg.yaml")
-		if err := factory.InitConfigFactory(DefaultN3iwfConfigPath); err != nil {
+		if err := factory.InitConfigFactory(util.N3iwfDefaultConfigPath); err != nil {
 			return err
 		}
 	}
@@ -76,27 +71,31 @@ func (n3iwf *N3IWF) Initialize(c *cli.Context) error {
 		return err
 	}
 
+	if _, err := factory.N3iwfConfig.Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (n3iwf *N3IWF) setLogLevel() {
 	if factory.N3iwfConfig.Logger == nil {
-		initLog.Warnln("N3IWF config without log level setting!!!")
+		logger.InitLog.Warnln("N3IWF config without log level setting!!!")
 		return
 	}
 
 	if factory.N3iwfConfig.Logger.N3IWF != nil {
 		if factory.N3iwfConfig.Logger.N3IWF.DebugLevel != "" {
 			if level, err := logrus.ParseLevel(factory.N3iwfConfig.Logger.N3IWF.DebugLevel); err != nil {
-				initLog.Warnf("N3IWF Log level [%s] is invalid, set to [info] level",
+				logger.InitLog.Warnf("N3IWF Log level [%s] is invalid, set to [info] level",
 					factory.N3iwfConfig.Logger.N3IWF.DebugLevel)
 				logger.SetLogLevel(logrus.InfoLevel)
 			} else {
-				initLog.Infof("N3IWF Log level is set to [%s] level", level)
+				logger.InitLog.Infof("N3IWF Log level is set to [%s] level", level)
 				logger.SetLogLevel(level)
 			}
 		} else {
-			initLog.Infoln("N3IWF Log level is default set to [info] level")
+			logger.InitLog.Infoln("N3IWF Log level is default set to [info] level")
 			logger.SetLogLevel(logrus.InfoLevel)
 		}
 		logger.SetReportCaller(factory.N3iwfConfig.Logger.N3IWF.ReportCaller)
@@ -133,22 +132,6 @@ func (n3iwf *N3IWF) setLogLevel() {
 		}
 		aperLogger.SetReportCaller(factory.N3iwfConfig.Logger.Aper.ReportCaller)
 	}
-
-	if factory.N3iwfConfig.Logger.PathUtil != nil {
-		if factory.N3iwfConfig.Logger.PathUtil.DebugLevel != "" {
-			if level, err := logrus.ParseLevel(factory.N3iwfConfig.Logger.PathUtil.DebugLevel); err != nil {
-				pathUtilLogger.PathLog.Warnf("PathUtil Log level [%s] is invalid, set to [info] level",
-					factory.N3iwfConfig.Logger.PathUtil.DebugLevel)
-				pathUtilLogger.SetLogLevel(logrus.InfoLevel)
-			} else {
-				pathUtilLogger.SetLogLevel(level)
-			}
-		} else {
-			pathUtilLogger.PathLog.Warnln("PathUtil Log level not set. Default set to [info] level")
-			pathUtilLogger.SetLogLevel(logrus.InfoLevel)
-		}
-		pathUtilLogger.SetReportCaller(factory.N3iwfConfig.Logger.PathUtil.ReportCaller)
-	}
 }
 
 func (n3iwf *N3IWF) FilterCli(c *cli.Context) (args []string) {
@@ -165,10 +148,10 @@ func (n3iwf *N3IWF) FilterCli(c *cli.Context) (args []string) {
 }
 
 func (n3iwf *N3IWF) Start() {
-	initLog.Infoln("Server started")
+	logger.InitLog.Infoln("Server started")
 
 	if !util.InitN3IWFContext() {
-		initLog.Error("Initicating context failed")
+		logger.InitLog.Error("Initicating context failed")
 		return
 	}
 
@@ -176,38 +159,38 @@ func (n3iwf *N3IWF) Start() {
 
 	// NGAP
 	if err := ngap_service.Run(); err != nil {
-		initLog.Errorf("Start NGAP service failed: %+v", err)
+		logger.InitLog.Errorf("Start NGAP service failed: %+v", err)
 		return
 	}
-	initLog.Info("NGAP service running.")
+	logger.InitLog.Info("NGAP service running.")
 	wg.Add(1)
 
 	// Relay listeners
 	// Control plane
 	if err := nwucp_service.Run(); err != nil {
-		initLog.Errorf("Listen NWu control plane traffic failed: %+v", err)
+		logger.InitLog.Errorf("Listen NWu control plane traffic failed: %+v", err)
 		return
 	}
-	initLog.Info("NAS TCP server successfully started.")
+	logger.InitLog.Info("NAS TCP server successfully started.")
 	wg.Add(1)
 
 	// User plane
 	if err := nwuup_service.Run(); err != nil {
-		initLog.Errorf("Listen NWu user plane traffic failed: %+v", err)
+		logger.InitLog.Errorf("Listen NWu user plane traffic failed: %+v", err)
 		return
 	}
-	initLog.Info("Listening NWu user plane traffic")
+	logger.InitLog.Info("Listening NWu user plane traffic")
 	wg.Add(1)
 
 	// IKE
 	if err := ike_service.Run(); err != nil {
-		initLog.Errorf("Start IKE service failed: %+v", err)
+		logger.InitLog.Errorf("Start IKE service failed: %+v", err)
 		return
 	}
-	initLog.Info("IKE service running.")
+	logger.InitLog.Info("IKE service running.")
 	wg.Add(1)
 
-	initLog.Info("N3IWF running...")
+	logger.InitLog.Info("N3IWF running...")
 
 	wg.Wait()
 }
@@ -215,9 +198,9 @@ func (n3iwf *N3IWF) Start() {
 func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 	// N3IWF.Initialize(cfgPath, c)
 
-	initLog.Traceln("args:", c.String("n3iwfcfg"))
+	logger.InitLog.Traceln("args:", c.String("n3iwfcfg"))
 	args := n3iwf.FilterCli(c)
-	initLog.Traceln("filter: ", args)
+	logger.InitLog.Traceln("filter: ", args)
 	command := exec.Command("./n3iwf", args...)
 
 	wg := sync.WaitGroup{}
@@ -225,7 +208,7 @@ func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 
 	stdout, err := command.StdoutPipe()
 	if err != nil {
-		initLog.Fatalln(err)
+		logger.InitLog.Fatalln(err)
 	}
 	go func() {
 		in := bufio.NewScanner(stdout)
@@ -237,7 +220,7 @@ func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 
 	stderr, err := command.StderrPipe()
 	if err != nil {
-		initLog.Fatalln(err)
+		logger.InitLog.Fatalln(err)
 	}
 	go func() {
 		in := bufio.NewScanner(stderr)
@@ -249,7 +232,7 @@ func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 
 	go func() {
 		if errCom := command.Start(); errCom != nil {
-			initLog.Errorf("N3IWF start error: %v", errCom)
+			logger.InitLog.Errorf("N3IWF start error: %v", errCom)
 		}
 		wg.Done()
 	}()
