@@ -65,7 +65,7 @@ func (n3iwf *N3IWF) Initialize(c *cli.Context) error {
 		}
 	}
 
-	n3iwf.setLogLevel()
+	n3iwf.SetLogLevel()
 
 	if err := factory.CheckConfigVersion(); err != nil {
 		return err
@@ -78,7 +78,7 @@ func (n3iwf *N3IWF) Initialize(c *cli.Context) error {
 	return nil
 }
 
-func (n3iwf *N3IWF) setLogLevel() {
+func (n3iwf *N3IWF) SetLogLevel() {
 	if factory.N3iwfConfig.Logger == nil {
 		logger.InitLog.Warnln("N3IWF config without log level setting!!!")
 		return
