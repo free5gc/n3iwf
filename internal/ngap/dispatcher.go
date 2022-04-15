@@ -1,6 +1,8 @@
 package ngap
 
 import (
+	"runtime/debug"
+
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 
@@ -18,6 +20,13 @@ func init() {
 }
 
 func Dispatch(conn *sctp.SCTPConn, msg []byte) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.NgapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
 	// AMF SCTP address
 	sctpAddr := conn.RemoteAddr().String()
 	// AMF context

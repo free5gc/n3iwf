@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	N3IWF_EXPECTED_CONFIG_VERSION = "1.0.1"
+	N3iwfExpectedConfigVersion = "1.0.3"
 )
 
 type Config struct {
@@ -60,13 +60,14 @@ type Configuration struct {
 	N3IWFInfo        context.N3IWFNFInfo        `yaml:"N3IWFInformation" valid:"required"`
 	AMFSCTPAddresses []context.AMFSCTPAddresses `yaml:"AMFSCTPAddresses" valid:"required"`
 
-	IKEBindAddr          string `yaml:"IKEBindAddress" valid:"host,required"`
-	IPSecGatewayAddr     string `yaml:"IPSecInterfaceAddress" valid:"host,required"`
-	GTPBindAddr          string `yaml:"GTPBindAddress" valid:"host,required"`
 	TCPPort              uint16 `yaml:"NASTCPPort" valid:"port,required"`
-	FQDN                 string `yaml:"FQDN" valid:"url,required"`                   // e.g. n3iwf.free5gc.org
-	UEIPAddressRange     string `yaml:"UEIPAddressRange" valid:"cidr,required"`      // e.g. 10.0.1.0/24
-	InterfaceMark        uint32 `yaml:"IPSecInterfaceMark" valid:"numeric,optional"` // must != 0
+	IKEBindAddr          string `yaml:"IKEBindAddress" valid:"host,required"`
+	IPSecGatewayAddr     string `yaml:"IPSecTunnelAddress" valid:"host,required"`
+	UEIPAddressRange     string `yaml:"UEIPAddressRange" valid:"cidr,required"`                // e.g. 10.0.1.0/24
+	XfrmIfaceName        string `yaml:"XFRMInterfaceName" valid:"stringlength(1|10),optional"` // must != 0
+	XfrmIfaceId          uint32 `yaml:"XFRMInterfaceID" valid:"numeric,optional"`              // must != 0
+	GTPBindAddr          string `yaml:"GTPBindAddress" valid:"host,required"`
+	FQDN                 string `yaml:"FQDN" valid:"url,required"` // e.g. n3iwf.free5gc.org
 	PrivateKey           string `yaml:"PrivateKey" valid:"type(string),minstringlength(1),optional"`
 	CertificateAuthority string `yaml:"CertificateAuthority" valid:"type(string),minstringlength(1),optional"`
 	Certificate          string `yaml:"Certificate" valid:"type(string),minstringlength(1),optional"`

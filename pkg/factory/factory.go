@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 )
@@ -33,9 +33,9 @@ func InitConfigFactory(f string) error {
 func CheckConfigVersion() error {
 	currentVersion := N3iwfConfig.GetVersion()
 
-	if currentVersion != N3IWF_EXPECTED_CONFIG_VERSION {
+	if currentVersion != N3iwfExpectedConfigVersion {
 		return fmt.Errorf("config version is [%s], but expected is [%s].",
-			currentVersion, N3IWF_EXPECTED_CONFIG_VERSION)
+			currentVersion, N3iwfExpectedConfigVersion)
 	}
 
 	logger.CfgLog.Infof("config version [%s]", currentVersion)

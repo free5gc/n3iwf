@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"io"
+	"runtime/debug"
 	"time"
 
 	"git.cs.nctu.edu.tw/calee/sctp"
@@ -43,9 +44,15 @@ func Run() error {
 }
 
 func listenAndServe(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.NgapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
 	var conn *sctp.SCTPConn
 	var err error
-
 	// Connect the session
 	for i := 0; i < 3; i++ {
 		conn, err = sctp.DialSCTP("sctp", localAddr, remoteAddr)

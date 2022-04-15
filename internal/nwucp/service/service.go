@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime/debug"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -47,6 +48,11 @@ func Run() error {
 // received from the connection.
 func listenAndServe(tcpListener net.Listener) {
 	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.NWuCPLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+
 		err := tcpListener.Close()
 		if err != nil {
 			nwucpLog.Errorf("Error closing tcpListener: %+v", err)
@@ -112,6 +118,11 @@ func decapNasMsgFromEnvelope(envelop []byte) []byte {
 // to AMF
 func serveConn(ue *context.N3IWFUe, connection net.Conn) {
 	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.NWuCPLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+
 		err := connection.Close()
 		if err != nil {
 			nwucpLog.Errorf("Error closing connection: %+v", err)
@@ -142,6 +153,13 @@ func serveConn(ue *context.N3IWFUe, connection net.Conn) {
 // forward forwards NAS messages sent from UE to the
 // associated AMF
 func forward(ue *context.N3IWFUe, packet []byte) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.NWuCPLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
 	nwucpLog.Trace("Forward NWu -> N2")
 	message.SendUplinkNASTransport(ue.AMF, ue, packet)
 }

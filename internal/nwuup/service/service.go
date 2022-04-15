@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"net"
+	"runtime/debug"
 
 	"github.com/sirupsen/logrus"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
@@ -52,6 +53,11 @@ func Run() error {
 // forward packet.
 func listenAndServe(ipv4PacketConn *ipv4.PacketConn) {
 	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.NWuUPLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+
 		err := ipv4PacketConn.Close()
 		if err != nil {
 			nwuupLog.Errorf("Error closing raw socket: %+v", err)
@@ -60,24 +66,36 @@ func listenAndServe(ipv4PacketConn *ipv4.PacketConn) {
 
 	buffer := make([]byte, 65535)
 
+	if err := ipv4PacketConn.SetControlMessage(ipv4.FlagInterface|ipv4.FlagTTL, true); err != nil {
+		nwuupLog.Errorf("Set control message visibility for IPv4 packet connection fail: %+v", err)
+		return
+	}
+
 	for {
-		n, _, src, err := ipv4PacketConn.ReadFrom(buffer)
-		nwuupLog.Tracef("Read %d bytes", n)
+		n, cm, src, err := ipv4PacketConn.ReadFrom(buffer)
+		nwuupLog.Tracef("Read %d bytes, %s", n, cm)
 		if err != nil {
-			nwuupLog.Errorf("Error read from IPv4 Packet connection: %+v", err)
+			nwuupLog.Errorf("Error read from IPv4 packet connection: %+v", err)
 			return
 		}
 
 		forwardData := make([]byte, n)
 		copy(forwardData, buffer)
 
-		go forward(src.String(), forwardData)
+		go forward(src.String(), cm.IfIndex, forwardData)
 	}
 }
 
 // forward forwards user plane packets from NWu to UPF
 // with GTP header encapsulated
-func forward(ueInnerIP string, rawData []byte) {
+func forward(ueInnerIP string, ifIndex int, rawData []byte) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.NWuUPLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
 	// Find UE information
 	self := context.N3IWFSelf()
 	ue, ok := self.AllocatedUEIPAddressLoad(ueInnerIP)
@@ -88,8 +106,12 @@ func forward(ueInnerIP string, rawData []byte) {
 
 	var pduSession *context.PDUSession
 
-	for _, pduSession = range ue.PduSessionList {
-		break
+	for _, childSA := range ue.N3IWFChildSecurityAssociation {
+		// Check which child SA the packet come from with interface index,
+		// and find the corresponding PDU session
+		if childSA.XfrmIface != nil && childSA.XfrmIface.Attrs().Index == ifIndex {
+			pduSession = ue.PduSessionList[childSA.PDUSessionIds[0]]
+		}
 	}
 
 	if pduSession == nil {

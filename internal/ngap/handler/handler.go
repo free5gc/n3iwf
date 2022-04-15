@@ -1583,7 +1583,7 @@ func HandlePDUSessionResourceSetupRequest(amf *context.N3IWFAMF, message *ngapTy
 				proposal.ExtendedSequenceNumbers.BuildTransform(
 					ike_message.TypeExtendedSequenceNumbers, ike_message.ESN_NO, nil, nil, nil)
 
-				n3iwfUe.CreateHalfChildSA(ikeMessage.MessageID, spi)
+				n3iwfUe.CreateHalfChildSA(ikeMessage.MessageID, spi, pduSessionID)
 
 				// Build Nonce
 				nonceData := handler.GenerateRandomNumber().Bytes()

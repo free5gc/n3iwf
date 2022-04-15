@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"net"
 	"strings"
@@ -19,12 +20,9 @@ import (
 
 var contextLog *logrus.Entry
 
-func init() {
-	contextLog = logger.ContextLog
-}
-
 func InitN3IWFContext() bool {
 	var ok bool
+	contextLog = logger.ContextLog
 
 	if factory.N3iwfConfig.Configuration == nil {
 		contextLog.Error("No N3IWF configuration found")
@@ -226,11 +224,27 @@ func InitN3IWFContext() bool {
 		n3iwfContext.Subnet = ueIPRange
 	}
 
-	if factory.N3iwfConfig.Configuration.InterfaceMark == 0 {
-		contextLog.Warn("IPSec interface mark is not defined, set to default value 7")
-		n3iwfContext.Mark = 7
+	// XFRM related
+	ikeBindIfaceName, err := GetInterfaceName(factory.N3iwfConfig.Configuration.IKEBindAddr)
+	if err != nil {
+		contextLog.Error(err)
+		return false
 	} else {
-		n3iwfContext.Mark = factory.N3iwfConfig.Configuration.InterfaceMark
+		n3iwfContext.XfrmParentIfaceName = ikeBindIfaceName
+	}
+
+	if factory.N3iwfConfig.Configuration.XfrmIfaceName == "" {
+		contextLog.Error("XFRM interface Name is empty, set to default \"ipsec\"")
+		n3iwfContext.XfrmIfaceName = "ipsec"
+	} else {
+		n3iwfContext.XfrmIfaceName = factory.N3iwfConfig.Configuration.XfrmIfaceName
+	}
+
+	if factory.N3iwfConfig.Configuration.XfrmIfaceId == 0 {
+		contextLog.Warn("XFRM interface id is not defined, set to default value 7")
+		n3iwfContext.XfrmIfaceId = 7
+	} else {
+		n3iwfContext.XfrmIfaceId = factory.N3iwfConfig.Configuration.XfrmIfaceId
 	}
 
 	return true
@@ -290,4 +304,24 @@ func formatSupportedTAList(info *context.N3IWFNFInfo) bool {
 	}
 
 	return true
+}
+
+func GetInterfaceName(IPAddress string) (interfaceName string, err error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "nil", err
+	}
+
+	for _, inter := range interfaces {
+		addrs, err := inter.Addrs()
+		if err != nil {
+			return "nil", err
+		}
+		for _, addr := range addrs {
+			if IPAddress == addr.String()[0:strings.Index(addr.String(), "/")] {
+				return inter.Name, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("Cannot find interface name")
 }

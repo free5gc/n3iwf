@@ -3,11 +3,18 @@ package service
 import (
 	"bufio"
 	"fmt"
+	"net"
+	"os"
 	"os/exec"
+	"os/signal"
+	"runtime/debug"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
+	"github.com/vishvananda/netlink"
 
 	aperLogger "github.com/free5gc/aper/logger"
 	"github.com/free5gc/n3iwf/internal/logger"
@@ -15,8 +22,10 @@ import (
 	nwucp_service "github.com/free5gc/n3iwf/internal/nwucp/service"
 	nwuup_service "github.com/free5gc/n3iwf/internal/nwuup/service"
 	"github.com/free5gc/n3iwf/internal/util"
+	"github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 	ike_service "github.com/free5gc/n3iwf/pkg/ike/service"
+	"github.com/free5gc/n3iwf/pkg/ike/xfrm"
 	ngapLogger "github.com/free5gc/ngap/logger"
 )
 
@@ -155,6 +164,29 @@ func (n3iwf *N3IWF) Start() {
 		return
 	}
 
+	if err := n3iwf.InitDefaultXfrmInterface(); err != nil {
+		logger.InitLog.Errorf("Initicating XFRM interface for control plane failed: %+v", err)
+		return
+	}
+
+	// Graceful Shutdown
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				// Print stack for panic to log. Fatalf() will let program exit.
+				logger.InitLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			}
+		}()
+
+		<-signalChannel
+		n3iwf.Terminate()
+		// Waiting for negotiatioon with netlink for deleting interfaces
+		time.Sleep(2 * time.Second)
+		os.Exit(0)
+	}()
+
 	wg := sync.WaitGroup{}
 
 	// NGAP
@@ -195,6 +227,60 @@ func (n3iwf *N3IWF) Start() {
 	wg.Wait()
 }
 
+func (n3iwf *N3IWF) InitDefaultXfrmInterface() error {
+	n3iwfContext := context.N3IWFSelf()
+
+	// Setup default IPsec interface for Control Plane
+	var linkIPSec netlink.Link
+	var err error
+	n3iwfIPAddr := net.ParseIP(n3iwfContext.IPSecGatewayAddress).To4()
+	n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfContext.Subnet.Mask}
+	newXfrmiName := fmt.Sprintf("%s-default", n3iwfContext.XfrmIfaceName)
+
+	if linkIPSec, err = xfrm.SetupIPsecXfrmi(newXfrmiName, n3iwfContext.XfrmParentIfaceName,
+		n3iwfContext.XfrmIfaceId, n3iwfIPAddrAndSubnet); err != nil {
+		logger.InitLog.Errorf("Setup XFRM interface %s fail: %+v", newXfrmiName, err)
+		return err
+	}
+
+	route := &netlink.Route{
+		LinkIndex: linkIPSec.Attrs().Index,
+		Dst:       n3iwfContext.Subnet,
+	}
+
+	if err := netlink.RouteAdd(route); err != nil {
+		logger.InitLog.Warnf("netlink.RouteAdd: %+v", err)
+	}
+
+	logger.InitLog.Infof("Setup XFRM interface %s ", newXfrmiName)
+
+	n3iwfContext.XfrmIfaces.LoadOrStore(n3iwfContext.XfrmIfaceId, linkIPSec)
+	n3iwfContext.XfrmIfaceIdOffsetForUP = 1
+
+	return nil
+}
+
+func (n3iwf *N3IWF) RemoveIPsecInterfaces() {
+	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf.XfrmIfaces.Range(
+		func(key, value interface{}) bool {
+			iface := value.(netlink.Link)
+			if err := netlink.LinkDel(iface); err != nil {
+				logger.InitLog.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
+			} else {
+				logger.InitLog.Infof("Delete interface: %s", iface.Attrs().Name)
+			}
+			return true
+		})
+}
+
+func (n3iwf *N3IWF) Terminate() {
+	logger.InitLog.Info("Terminating N3IWF...")
+	logger.InitLog.Info("Deleting interfaces created by N3IWF")
+	n3iwf.RemoveIPsecInterfaces()
+	logger.InitLog.Info("N3IWF terminated")
+}
+
 func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 	// N3IWF.Initialize(cfgPath, c)
 
@@ -211,6 +297,13 @@ func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 		logger.InitLog.Fatalln(err)
 	}
 	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				// Print stack for panic to log. Fatalf() will let program exit.
+				logger.InitLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			}
+		}()
+
 		in := bufio.NewScanner(stdout)
 		for in.Scan() {
 			fmt.Println(in.Text())
@@ -223,6 +316,13 @@ func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 		logger.InitLog.Fatalln(err)
 	}
 	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				// Print stack for panic to log. Fatalf() will let program exit.
+				logger.InitLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			}
+		}()
+
 		in := bufio.NewScanner(stderr)
 		for in.Scan() {
 			fmt.Println(in.Text())
@@ -231,6 +331,13 @@ func (n3iwf *N3IWF) Exec(c *cli.Context) error {
 	}()
 
 	go func() {
+		defer func() {
+			if p := recover(); p != nil {
+				// Print stack for panic to log. Fatalf() will let program exit.
+				logger.InitLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			}
+		}()
+
 		if errCom := command.Start(); errCom != nil {
 			logger.InitLog.Errorf("N3IWF start error: %v", errCom)
 		}

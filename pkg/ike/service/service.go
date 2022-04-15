@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"net"
+	"runtime/debug"
 
 	"github.com/sirupsen/logrus"
 
@@ -55,6 +56,13 @@ func Run() error {
 }
 
 func listenAndServe(localAddr *net.UDPAddr, errChan chan<- error) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.IKELog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
 	listener, err := net.ListenUDP("udp", localAddr)
 	if err != nil {
 		ikeLog.Errorf("Listen UDP failed: %+v", err)

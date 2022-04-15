@@ -558,8 +558,8 @@ func BuildUEContextReleaseComplete(ue *context.N3IWFUe,
 		for _, pduSession := range ue.PduSessionList {
 			pDUSessionResourceItemCxtRelCpl := ngapType.PDUSessionResourceItemCxtRelCpl{}
 			pDUSessionResourceItemCxtRelCpl.PDUSessionID.Value = pduSession.Id
-			pDUSessionResourceListCxtRelCpl.List =
-				append(pDUSessionResourceListCxtRelCpl.List, pDUSessionResourceItemCxtRelCpl)
+			pDUSessionResourceListCxtRelCpl.List = append(pDUSessionResourceListCxtRelCpl.List,
+				pDUSessionResourceItemCxtRelCpl)
 		}
 
 		uEContextReleaseCompleteIEs.List = append(uEContextReleaseCompleteIEs.List, ie)
@@ -629,8 +629,8 @@ func BuildUEContextReleaseRequest(ue *context.N3IWFUe, cause ngapType.Cause) ([]
 	for _, pduSession := range ue.PduSessionList {
 		pDUSessionResourceItem := ngapType.PDUSessionResourceItemCxtRelReq{}
 		pDUSessionResourceItem.PDUSessionID.Value = pduSession.Id
-		pDUSessionResourceListCxtRelReq.List =
-			append(pDUSessionResourceListCxtRelReq.List, pDUSessionResourceItem)
+		pDUSessionResourceListCxtRelReq.List = append(pDUSessionResourceListCxtRelReq.List,
+			pDUSessionResourceItem)
 	}
 	uEContextReleaseRequestIEs.List = append(uEContextReleaseRequestIEs.List, ie)
 
@@ -1749,8 +1749,8 @@ func BuildPDUSessionResourceSetupResponseTransfer(pduSession *context.PDUSession
 				Value: int64(qfi),
 			},
 		}
-		qosFlowPerTNLInformation.AssociatedQosFlowList.List =
-			append(qosFlowPerTNLInformation.AssociatedQosFlowList.List, associatedQosFlowItem)
+		qosFlowPerTNLInformation.AssociatedQosFlowList.List = append(
+			qosFlowPerTNLInformation.AssociatedQosFlowList.List, associatedQosFlowItem)
 	}
 
 	return aper.MarshalWithParams(transfer, "valueExt")

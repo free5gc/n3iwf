@@ -1,6 +1,8 @@
 package message
 
 import (
+	"runtime/debug"
+
 	"git.cs.nctu.edu.tw/calee/sctp"
 	"github.com/sirupsen/logrus"
 
@@ -28,6 +30,13 @@ func SendToAmf(amf *context.N3IWFAMF, pkt []byte) {
 }
 
 func SendNGSetupRequest(conn *sctp.SCTPConn) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.NgapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
 	ngaplog.Infoln("[N3IWF] Send NG Setup Request")
 
 	sctpAddr := conn.RemoteAddr().String()
