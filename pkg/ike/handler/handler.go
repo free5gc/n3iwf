@@ -9,15 +9,18 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	ngap_message "github.com/free5gc/n3iwf/internal/ngap/message"
 	"github.com/free5gc/n3iwf/pkg/context"
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
+	"github.com/free5gc/n3iwf/pkg/ike/xfrm"
 	"github.com/free5gc/ngap/ngapType"
 )
 
@@ -1080,7 +1083,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		ikeSecurityAssociation.IKEAuthResponseSA.Proposals[0].SPI = inboundSPIByte
 
 		// Consider 0x01 as the speicified index for IKE_AUTH exchange
-		thisUE.CreateHalfChildSA(0x01, inboundSPI)
+		thisUE.CreateHalfChildSA(0x01, inboundSPI, -1)
 		childSecurityAssociationContext, err :=
 			thisUE.CompleteChildSA(0x01, outboundSPI, ikeSecurityAssociation.IKEAuthResponseSA)
 		if err != nil {
@@ -1120,7 +1123,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		}
 
 		// Aplly XFRM rules
-		if err = ApplyXFRMRule(false, childSecurityAssociationContext); err != nil {
+		// IPsec for CP always use default XFRM interface
+		if err = xfrm.ApplyXFRMRule(false, n3iwfSelf.XfrmIfaceId, childSecurityAssociationContext); err != nil {
 			ikeLog.Errorf("Applying XFRM rules failed: %+v", err)
 			return
 		}
@@ -1433,8 +1437,37 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		childSecurityAssociationContext.NATPort = ueAddr.Port
 	}
 
+	newXfrmiId := n3iwfSelf.XfrmIfaceId
+
+	// The additional PDU session will be separated from default xfrm interface
+	// to avoid SPD entry collision
+	if len(thisUE.PduSessionList) > 1 {
+		// Setup XFRM interface for ipsec
+		var linkIPSec netlink.Link
+		n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress).To4()
+		n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfSelf.Subnet.Mask}
+		newXfrmiId += n3iwfSelf.XfrmIfaceId + n3iwfSelf.XfrmIfaceIdOffsetForUP
+		newXfrmiName := fmt.Sprintf("%s-%d", n3iwfSelf.XfrmIfaceName, newXfrmiId)
+
+		if linkIPSec, err = xfrm.SetupIPsecXfrmi(newXfrmiName, n3iwfSelf.XfrmParentIfaceName,
+			newXfrmiId, n3iwfIPAddrAndSubnet); err != nil {
+			ikeLog.Errorf("Setup XFRM interface %s fail: %+v", newXfrmiName, err)
+			return
+		}
+
+		n3iwfSelf.XfrmIfaces.LoadOrStore(newXfrmiId, linkIPSec)
+		childSecurityAssociationContext.XfrmIface = linkIPSec
+		n3iwfSelf.XfrmIfaceIdOffsetForUP++
+	} else {
+		if linkIPSec, ok := n3iwfSelf.XfrmIfaces.Load(newXfrmiId); ok {
+			childSecurityAssociationContext.XfrmIface = linkIPSec.(netlink.Link)
+		} else {
+			ikeLog.Warnf("Cannot find the XFRM interface with if_id: %d", newXfrmiId)
+		}
+	}
+
 	// Aplly XFRM rules
-	if err = ApplyXFRMRule(true, childSecurityAssociationContext); err != nil {
+	if err = xfrm.ApplyXFRMRule(true, newXfrmiId, childSecurityAssociationContext); err != nil {
 		ikeLog.Errorf("Applying XFRM rules failed: %+v", err)
 		return
 	} else {

@@ -2,6 +2,7 @@ package ike
 
 import (
 	"net"
+	"runtime/debug"
 
 	"github.com/sirupsen/logrus"
 
@@ -17,6 +18,13 @@ func init() {
 }
 
 func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []byte) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			logger.IKELog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
 	// As specified in RFC 7296 section 3.1, the IKE message send from/to UDP port 4500
 	// should prepend a 4 bytes zero
 	if localAddr.Port == 4500 {

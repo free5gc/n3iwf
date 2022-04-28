@@ -51,8 +51,14 @@ type N3IWFContext struct {
 	// UEIPAddressRange
 	Subnet *net.IPNet
 
-	// Network interface mark for xfrm
-	Mark uint32
+	// XFRM interface
+	XfrmIfaceId         uint32
+	XfrmIfaces          sync.Map // map[uint32]*netlink.Link, XfrmIfaceId as key
+	XfrmIfaceName       string
+	XfrmParentIfaceName string
+
+	// Every UE's first UP IPsec will use default XFRM interface, additoinal UP IPsec will offset its XFRM id
+	XfrmIfaceIdOffsetForUP uint32
 
 	// N3IWF local address
 	IKEBindAddress      string

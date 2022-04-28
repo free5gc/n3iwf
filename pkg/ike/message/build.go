@@ -178,8 +178,8 @@ func (container *TransformContainer) BuildTransform(
 			transform.AttributeValue = *attributeValue
 		} else if len(variableLengthAttributeValue) != 0 {
 			transform.AttributeFormat = AttributeFormatUseTLV
-			transform.VariableLengthAttributeValue =
-				append(transform.VariableLengthAttributeValue, variableLengthAttributeValue...)
+			transform.VariableLengthAttributeValue = append(transform.VariableLengthAttributeValue,
+				variableLengthAttributeValue...)
 		} else {
 			return
 		}

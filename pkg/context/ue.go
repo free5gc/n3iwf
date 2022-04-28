@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/vishvananda/netlink"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
@@ -174,6 +175,9 @@ type ChildSecurityAssociation struct {
 	InboundSPI  uint32 // N3IWF Specify
 	OutboundSPI uint32 // Non-3GPP UE Specify
 
+	// Associated XFRM interface
+	XfrmIface netlink.Link
+
 	// IP address
 	PeerPublicIPAddr  net.IP
 	LocalPublicIPAddr net.IP
@@ -196,6 +200,9 @@ type ChildSecurityAssociation struct {
 	EnableEncapsulate bool
 	N3IWFPort         int
 	NATPort           int
+
+	// PDU Session IDs associated with this child SA
+	PDUSessionIds []int64
 
 	// UE context
 	ThisUE *N3IWFUe
@@ -251,9 +258,10 @@ func (ue *N3IWFUe) CreatePDUSession(pduSessionID int64, snssai ngapType.SNSSAI) 
 
 // When N3IWF send CREATE_CHILD_SA request to N3UE, the inbound SPI of childSA will be only stored first until
 // receive response and call CompleteChildSAWithProposal to fill the all data of childSA
-func (ue *N3IWFUe) CreateHalfChildSA(msgID, inboundSPI uint32) {
+func (ue *N3IWFUe) CreateHalfChildSA(msgID, inboundSPI uint32, pduSessionID int64) {
 	childSA := new(ChildSecurityAssociation)
 	childSA.InboundSPI = inboundSPI
+	childSA.PDUSessionIds = append(childSA.PDUSessionIds, pduSessionID)
 	// Link UE context
 	childSA.ThisUE = ue
 	// Map Exchange Message ID and Child SA data until get paired response
@@ -282,12 +290,10 @@ func (ue *N3IWFUe) CompleteChildSA(msgID uint32, outboundSPI uint32,
 	childSA.OutboundSPI = outboundSPI
 
 	if len(chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm) != 0 {
-		childSA.EncryptionAlgorithm =
-			chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm[0].TransformID
+		childSA.EncryptionAlgorithm = chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm[0].TransformID
 	}
 	if len(chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm) != 0 {
-		childSA.IntegrityAlgorithm =
-			chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm[0].TransformID
+		childSA.IntegrityAlgorithm = chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm[0].TransformID
 	}
 	if len(chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers) != 0 {
 		if chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers[0].TransformID == 0 {
