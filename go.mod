@@ -8,7 +8,7 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/free5gc/aper v1.0.4
 	github.com/free5gc/ngap v1.0.6
-	github.com/free5gc/util v1.0.1
+	github.com/free5gc/util v1.0.3
 	github.com/sirupsen/logrus v1.8.1
 	github.com/urfave/cli v1.22.5
 	github.com/vishvananda/netlink v1.1.0
