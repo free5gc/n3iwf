@@ -42,10 +42,13 @@ func SendUEInformationExchange(
 
 	// Build IKE message
 	responseIKEMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
-		ikeSecurityAssociation.LocalSPI, ike_message.INFORMATIONAL, ike_message.ResponseBitCheck,
-		ikeSecurityAssociation.InitiatorMessageID)
-
-	responseIKEPayload.BuildDeletePayload(ike_message.TypeSA, 0, 0, nil)
+		ikeSecurityAssociation.LocalSPI, ike_message.INFORMATIONAL, 0,
+		ikeSecurityAssociation.ResponderMessageID)
+	responseIKEPayload.BuildDeletePayload(1, 0, 0, nil)
+	if err := EncryptProcedure(ikeSecurityAssociation, responseIKEPayload, responseIKEMessage); err != nil {
+		ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
+		return
+	}
 
 	SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr,
 		n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
