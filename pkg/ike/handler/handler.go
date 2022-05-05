@@ -1611,31 +1611,41 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		return
 	}
 
-	// Check if UE is response to a request that delete the ike SA
-	if len(message.Payloads) == 0 {
-		n3iwfSelf := context.N3IWFSelf()
-		ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(message.ResponderSPI)
+	n3iwfSelf := context.N3IWFSelf()
+	responseIKEMessage := new(ike_message.IKEMessage)
+	responderSPI := message.ResponderSPI
+	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(responderSPI)
 
-		if !ok {
-			ikeLog.Warn("Unrecognized SPI")
-			// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
-			responseIKEMessage := new(ike_message.IKEMessage)
-			responseIKEMessage.BuildIKEHeader(0, message.ResponderSPI, ike_message.INFORMATIONAL,
-				ike_message.ResponseBitCheck, message.MessageID)
-			responseIKEMessage.Payloads.Reset()
-			responseIKEMessage.Payloads.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
+	if !ok {
+		ikeLog.Warn("Unrecognized SPI")
+		// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
+		responseIKEMessage.BuildIKEHeader(0, message.ResponderSPI, ike_message.INFORMATIONAL,
+			ike_message.ResponseBitCheck, message.MessageID)
+		responseIKEMessage.Payloads.Reset()
+		responseIKEMessage.Payloads.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
 
-			SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 
-			return
+		return
+	}
+
+	for _, ikePayload := range message.Payloads {
+		switch ikePayload.Type() {
+		case ike_message.TypeSK:
+			nextPayload := ikePayload.(*ike_message.Encrypted).NextPayload
+
+			// Check if UE is response to a request that delete the ike SA
+			if nextPayload == 42 {
+				n3iwfUe := ikeSecurityAssociation.ThisUE
+				amf := n3iwfUe.AMF
+				n3iwfUe.Remove()
+				ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
+			}
+		default:
+			ikeLog.Warnf(
+				"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
 		}
-
-		n3iwfUe := ikeSecurityAssociation.ThisUE
-		amf := n3iwfUe.AMF
-
-		n3iwfUe.Remove()
-
-		ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
 	}
 }
 
