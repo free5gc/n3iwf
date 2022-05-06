@@ -178,6 +178,9 @@ type ChildSecurityAssociation struct {
 	// Associated XFRM interface
 	XfrmIface netlink.Link
 
+	XfrmStateList  []netlink.XfrmState
+	XfrmPolicyList []netlink.XfrmPolicy
+
 	// IP address
 	PeerPublicIPAddr  net.IP
 	LocalPublicIPAddr net.IP
@@ -222,7 +225,7 @@ func (ue *N3IWFUe) init(ranUeNgapId int64) {
 	ue.TemporaryExchangeMsgIDChildSAMapping = make(map[uint32]*ChildSecurityAssociation)
 }
 
-func (ue *N3IWFUe) Remove() {
+func (ue *N3IWFUe) Remove() error {
 	// remove from AMF context
 	ue.DetachAMF()
 	// remove from N3IWF context
@@ -233,12 +236,32 @@ func (ue *N3IWFUe) Remove() {
 
 	// Delete child SA
 	for _, childSA := range ue.N3IWFChildSecurityAssociation {
-		n3iwfSelf.ChildSA.Delete(childSA.InboundSPI)
+		iface := childSA.XfrmIface
+		// Delete child SA xfrmState
+		for _, xfrmState := range childSA.XfrmStateList {
+			if err := netlink.XfrmStateDel(&xfrmState); err != nil {
+				return fmt.Errorf("Delete xfrmstate error : %+v", err)
+			}
+		}
+		// Delete child SA xfrmPolicy
+		for _, xfrmPolicy := range childSA.XfrmPolicyList {
+			if err := netlink.XfrmPolicyDel(&xfrmPolicy); err != nil {
+				return fmt.Errorf("Delete xfrmPolicy error : %+v", err)
+			}
+		}
+		if iface == nil || iface.Attrs().Name == "xfrmi-default" {
+		} else if err := netlink.LinkDel(iface); err != nil {
+			return fmt.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
+		} else {
+			n3iwfSelf.XfrmIfaces.Delete(uint32(childSA.XfrmStateList[0].Ifid))
+		}
 	}
 
 	for _, pduSession := range ue.PduSessionList {
 		n3iwfSelf.DeleteTEID(pduSession.GTPConnection.IncomingTEID)
 	}
+
+	return nil
 }
 
 func (ue *N3IWFUe) FindPDUSession(pduSessionID int64) *PDUSession {
