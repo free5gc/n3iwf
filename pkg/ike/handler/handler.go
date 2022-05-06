@@ -1638,7 +1638,10 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			if nextPayload == 42 {
 				n3iwfUe := ikeSecurityAssociation.ThisUE
 				amf := n3iwfUe.AMF
-				n3iwfUe.Remove()
+				if err := n3iwfUe.Remove(); err != nil {
+					ikeLog.Errorf("Delete Ue Context error : %+v", err)
+				}
+
 				ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
 			}
 		default:
