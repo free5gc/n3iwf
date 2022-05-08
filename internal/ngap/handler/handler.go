@@ -304,7 +304,9 @@ func HandleNGReset(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
 		ngapLog.Trace("ResetType Present: NG Interface")
 		// TODO: Release Uu Interface related to this amf(IPSec)
 		// Remove all Ue
-		amf.RemoveAllRelatedUe()
+		if err := amf.RemoveAllRelatedUe(); err != nil {
+			ngapLog.Errorf("RemoveAllRelatedUe error : %+v", err)
+		}
 		ngap_message.SendNGResetAcknowledge(amf, nil, nil)
 	case ngapType.ResetTypePresentPartOfNGInterface:
 		ngapLog.Trace("ResetType Present: Part of NG Interface")
