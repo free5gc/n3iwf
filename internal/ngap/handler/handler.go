@@ -337,7 +337,9 @@ func HandleNGReset(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {
 				continue
 			}
 			// TODO: Release Uu Interface (IPSec)
-			ue.Remove()
+			if err := ue.Remove(); err != nil {
+				ngapLog.Errorf("Remove UE Context error : %+v", err)
+			}
 		}
 		ngap_message.SendNGResetAcknowledge(amf, partOfNGInterface, nil)
 	default:
@@ -1153,7 +1155,7 @@ func HandleUEContextReleaseCommand(amf *context.N3IWFAMF, message *ngapType.NGAP
 		printAndGetCause(cause)
 	}
 
-	handler.SendUEInformationExchange(n3iwfUe)
+	handler.SendUEInformationExchange(n3iwfUe, 1, 0, 0, nil)
 
 	// TODO: release pdu session and gtp info for ue
 }

@@ -1615,6 +1615,7 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	responseIKEMessage := new(ike_message.IKEMessage)
 	responderSPI := message.ResponderSPI
 	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(responderSPI)
+	var encryptedPayload *ike_message.Encrypted
 
 	if !ok {
 		ikeLog.Warn("Unrecognized SPI")
@@ -1632,16 +1633,32 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	for _, ikePayload := range message.Payloads {
 		switch ikePayload.Type() {
 		case ike_message.TypeSK:
-			nextPayload := ikePayload.(*ike_message.Encrypted).NextPayload
+			encryptedPayload = ikePayload.(*ike_message.Encrypted)
+		default:
+			ikeLog.Warnf(
+				"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
+		}
+	}
 
-			// Check if UE is response to a request that delete the ike SA
-			if nextPayload == 42 {
-				n3iwfUe := ikeSecurityAssociation.ThisUE
-				amf := n3iwfUe.AMF
+	decryptedIKEPayload, err := DecryptProcedure(ikeSecurityAssociation, message, encryptedPayload)
+	if err != nil {
+		ikeLog.Errorf("Decrypt IKE message failed: %+v", err)
+		return
+	}
+
+	n3iwfUe := ikeSecurityAssociation.ThisUE
+	amf := n3iwfUe.AMF
+	for _, ikePayload := range decryptedIKEPayload {
+		switch ikePayload.Type() {
+		case ike_message.TypeD:
+			deletePayload := ikePayload.(*ike_message.Delete)
+			if deletePayload.NumberOfSPI != 0 {
+
+			} else { // Check if UE is response to a request that delete the ike SA
 				if err := n3iwfUe.Remove(); err != nil {
 					ikeLog.Errorf("Delete Ue Context error : %+v", err)
 				}
-
 				ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
 			}
 		default:
@@ -1650,6 +1667,7 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 				ikePayload.Type())
 		}
 	}
+	ikeSecurityAssociation.ResponderMessageID++
 }
 
 func is_supported(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) bool {
