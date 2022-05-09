@@ -1654,13 +1654,13 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		case ike_message.TypeD:
 			deletePayload := ikePayload.(*ike_message.Delete)
 			if deletePayload.NumberOfSPI != 0 {
-
 			} else { // Check if UE is response to a request that delete the ike SA
 				if err := n3iwfUe.Remove(); err != nil {
 					ikeLog.Errorf("Delete Ue Context error : %+v", err)
 				}
 				ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
 			}
+		case ike_message.NoNext: // DPD response
 		default:
 			ikeLog.Warnf(
 				"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
