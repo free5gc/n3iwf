@@ -1157,7 +1157,9 @@ func HandleUEContextReleaseCommand(amf *context.N3IWFAMF, message *ngapType.NGAP
 		printAndGetCause(cause)
 	}
 
-	handler.SendUEInformationExchange(n3iwfUe, 1, 0, 0, nil, false)
+	var deletePayload ike_message.IKEPayloadContainer
+	deletePayload.BuildDeletePayload(1, 0, 0, nil)
+	handler.SendUEInformationExchange(n3iwfUe, deletePayload)
 
 	// TODO: release pdu session and gtp info for ue
 }

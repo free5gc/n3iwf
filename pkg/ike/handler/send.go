@@ -35,18 +35,16 @@ func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, mes
 }
 
 func SendUEInformationExchange(
-	n3iwfUe *context.N3IWFUe, protocolID uint8, SPISize uint8, numberOfSPI uint16, SPIs []byte, isDPD bool) {
+	n3iwfUe *context.N3IWFUe, payload ike_message.IKEPayloadContainer) {
 	ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
 	responseIKEMessage := new(ike_message.IKEMessage)
-	var responseIKEPayload ike_message.IKEPayloadContainer
 
 	// Build IKE message
 	responseIKEMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
 		ikeSecurityAssociation.LocalSPI, ike_message.INFORMATIONAL, 0,
 		ikeSecurityAssociation.ResponderMessageID)
-	if !isDPD {
-		responseIKEPayload.BuildDeletePayload(protocolID, SPISize, numberOfSPI, SPIs)
-		if err := EncryptProcedure(ikeSecurityAssociation, responseIKEPayload, responseIKEMessage); err != nil {
+	if payload != nil { // This message isn't a DPD message
+		if err := EncryptProcedure(ikeSecurityAssociation, payload, responseIKEMessage); err != nil {
 			ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
 			return
 		}
