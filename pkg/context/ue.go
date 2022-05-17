@@ -72,6 +72,7 @@ type N3IWFUe struct {
 	CoreNetworkAssistanceInformation *ngapType.CoreNetworkAssistanceInformation // TS 38.413 9.3.1.15
 	IMSVoiceSupported                int32
 	RRCEstablishmentCause            int16
+	PduSessionReleaseList            ngapType.PDUSessionResourceReleasedListRelRes
 }
 
 type PDUSession struct {

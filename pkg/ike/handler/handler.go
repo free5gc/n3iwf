@@ -1659,6 +1659,7 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 				}
 				ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
 			} else if deletePayload.ProtocolID == ike_message.TypeESP {
+				ngap_message.SendPDUSessionResourceReleaseResponse(amf, n3iwfUe, n3iwfUe.PduSessionReleaseList, nil)
 			}
 		case ike_message.NoNext: // DPD response
 		default:
