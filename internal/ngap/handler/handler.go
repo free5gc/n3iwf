@@ -2187,10 +2187,11 @@ func HandlePDUSessionResourceReleaseCommand(amf *context.N3IWFAMF, message *ngap
 		releaseList.List = append(releaseList.List, releaseItem)
 	}
 
+	handler.SendChildSADeleteRequest(ue, releaseList.List)
+	ue.PduSessionReleaseList = releaseList
 	// if nASPDU != nil {
 	// TODO: Send NAS to UE
 	// }
-	ngap_message.SendPDUSessionResourceReleaseResponse(amf, ue, releaseList, nil)
 }
 
 func HandleErrorIndication(amf *context.N3IWFAMF, message *ngapType.NGAPPDU) {

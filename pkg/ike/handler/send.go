@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"encoding/binary"
 	"net"
 
 	"github.com/free5gc/n3iwf/pkg/context"
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
+	"github.com/free5gc/ngap/ngapType"
 )
 
 func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, message *ike_message.IKEMessage) {
@@ -55,6 +57,28 @@ func SendUEInformationExchange(
 
 func SendIKEDeleteRequest(n3iwfUe *context.N3IWFUe) {
 	var deletePayload ike_message.IKEPayloadContainer
-	deletePayload.BuildDeletePayload(1, 0, 0, nil)
+	deletePayload.BuildDeletePayload(ike_message.TypeIKE, 0, 0, nil)
+	SendUEInformationExchange(n3iwfUe, deletePayload)
+}
+
+func SendChildSADeleteRequest(n3iwfUe *context.N3IWFUe, relaseList []ngapType.PDUSessionResourceReleasedItemRelRes) {
+	var deleteSPIs []byte
+	spiLen := uint16(0)
+	for _, releaseItem := range relaseList {
+		for _, childSA := range n3iwfUe.N3IWFChildSecurityAssociation {
+			if childSA.PDUSessionIds[0] == releaseItem.PDUSessionID.Value {
+				spiByte := make([]byte, 4)
+				binary.BigEndian.PutUint32(spiByte, uint32(childSA.XfrmStateList[0].Spi))
+				deleteSPIs = append(deleteSPIs, spiByte...)
+				spiLen += 1
+				if err := n3iwfUe.DeleteChilSA(childSA); err != nil {
+					ikeLog.Errorf("Delete Child SA error : %+v", err)
+				}
+			}
+		}
+	}
+
+	var deletePayload ike_message.IKEPayloadContainer
+	deletePayload.BuildDeletePayload(ike_message.TypeESP, 4, spiLen, deleteSPIs)
 	SendUEInformationExchange(n3iwfUe, deletePayload)
 }
