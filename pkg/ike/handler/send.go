@@ -71,7 +71,7 @@ func SendChildSADeleteRequest(n3iwfUe *context.N3IWFUe, relaseList []ngapType.PD
 				binary.BigEndian.PutUint32(spiByte, uint32(childSA.XfrmStateList[0].Spi))
 				deleteSPIs = append(deleteSPIs, spiByte...)
 				spiLen += 1
-				if err := n3iwfUe.DeleteChilSA(childSA); err != nil {
+				if err := n3iwfUe.DeleteChildSA(childSA); err != nil {
 					ikeLog.Errorf("Delete Child SA error : %+v", err)
 				}
 			}

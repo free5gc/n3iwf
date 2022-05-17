@@ -236,7 +236,7 @@ func (ue *N3IWFUe) Remove() error {
 	n3iwfSelf.DeleteInternalUEIPAddr(ue.IPSecInnerIP.String())
 
 	for _, childSA := range ue.N3IWFChildSecurityAssociation {
-		if err := ue.DeleteChilSA(childSA); err != nil {
+		if err := ue.DeleteChildSA(childSA); err != nil {
 			return err
 		}
 	}
@@ -248,7 +248,7 @@ func (ue *N3IWFUe) Remove() error {
 	return nil
 }
 
-func (ue *N3IWFUe) DeleteChilSA(childSA *ChildSecurityAssociation) error {
+func (ue *N3IWFUe) DeleteChildSA(childSA *ChildSecurityAssociation) error {
 	n3iwfSelf := N3IWFSelf()
 	iface := childSA.XfrmIface
 
