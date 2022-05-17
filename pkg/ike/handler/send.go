@@ -52,3 +52,9 @@ func SendUEInformationExchange(
 	SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr,
 		n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
 }
+
+func SendIKEDeleteRequest(n3iwfUe *context.N3IWFUe) {
+	var deletePayload ike_message.IKEPayloadContainer
+	deletePayload.BuildDeletePayload(1, 0, 0, nil)
+	SendUEInformationExchange(n3iwfUe, deletePayload)
+}
