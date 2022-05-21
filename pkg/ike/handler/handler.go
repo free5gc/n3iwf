@@ -335,7 +335,7 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 		ikeLog.Error("Encode message failed.")
 		return
 	}
-	ikeSecurityAssociation.RemoteUnsignedAuthentication = append(receivedIKEMessageData, localNonce...)
+	ikeSecurityAssociation.InitiatorSignedOctets = append(receivedIKEMessageData, localNonce...)
 
 	// Prepare authentication data - ResponderSignedOctet
 	// ResponderSignedOctet = RealMessage2 | NonceIData | MACedIDForR
@@ -345,7 +345,7 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 		ikeLog.Error("Encoding IKE message failed")
 		return
 	}
-	ikeSecurityAssociation.LocalUnsignedAuthentication = append(responseIKEMessageData, nonce.NonceData...)
+	ikeSecurityAssociation.ResponderSignedOctets = append(responseIKEMessageData, nonce.NonceData...)
 	// MACedIDForR
 	var idPayload ike_message.IKEPayloadContainer
 	idPayload.BuildIdentificationResponder(ike_message.ID_FQDN, []byte(n3iwfSelf.FQDN))
@@ -365,10 +365,10 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 		ikeLog.Errorf("Pseudorandom function write error: %+v", err)
 		return
 	}
-	ikeSecurityAssociation.LocalUnsignedAuthentication = append(ikeSecurityAssociation.LocalUnsignedAuthentication,
+	ikeSecurityAssociation.ResponderSignedOctets = append(ikeSecurityAssociation.ResponderSignedOctets,
 		pseudorandomFunction.Sum(nil)...)
 
-	ikeLog.Tracef("Local unsigned authentication data:\n%s", hex.Dump(ikeSecurityAssociation.LocalUnsignedAuthentication))
+	ikeLog.Tracef("Local unsigned authentication data:\n%s", hex.Dump(ikeSecurityAssociation.ResponderSignedOctets))
 
 	// Send response to UE
 	SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
@@ -504,7 +504,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				ikeLog.Error("Encoding ID payload message failed.")
 				return
 			}
-			pseudorandomFunction, ok := NewPseudorandomFunction(ikeSecurityAssociation.SK_pr,
+			pseudorandomFunction, ok := NewPseudorandomFunction(ikeSecurityAssociation.SK_pi,
 				transformPseudorandomFunction.TransformID)
 			if !ok {
 				ikeLog.Error("Get an unsupported pseudorandom funcion. This may imply an unsupported transform is chosen.")
@@ -514,8 +514,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				ikeLog.Errorf("Pseudorandom function write error: %+v", err)
 				return
 			}
-			ikeSecurityAssociation.RemoteUnsignedAuthentication =
-				append(ikeSecurityAssociation.RemoteUnsignedAuthentication, pseudorandomFunction.Sum(nil)...)
+			ikeSecurityAssociation.InitiatorSignedOctets =
+				append(ikeSecurityAssociation.InitiatorSignedOctets, pseudorandomFunction.Sum(nil)...)
 		} else {
 			ikeLog.Error("The initiator identification field is nil")
 			// TODO: send error message to UE
@@ -690,9 +690,9 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		responseIKEPayload.BuildCertificate(ike_message.X509CertificateSignature, n3iwfSelf.N3IWFCertificate)
 
 		// Authentication Data
-		ikeLog.Tracef("Local authentication data:\n%s", hex.Dump(ikeSecurityAssociation.LocalUnsignedAuthentication))
+		ikeLog.Tracef("Local authentication data:\n%s", hex.Dump(ikeSecurityAssociation.ResponderSignedOctets))
 		sha1HashFunction := sha1.New()
-		if _, err := sha1HashFunction.Write(ikeSecurityAssociation.LocalUnsignedAuthentication); err != nil {
+		if _, err := sha1HashFunction.Write(ikeSecurityAssociation.ResponderSignedOctets); err != nil {
 			ikeLog.Errorf("Hash function write error: %+v", err)
 			return
 		}
@@ -929,36 +929,33 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		if authentication != nil {
 			// Verifying remote AUTH
 			pseudorandomFunction.Reset()
-			if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.RemoteUnsignedAuthentication); err != nil {
+			if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.InitiatorSignedOctets); err != nil {
 				ikeLog.Errorf("Pseudorandom function write error: %+v", err)
 				return
 			}
 			expectedAuthenticationData := pseudorandomFunction.Sum(nil)
 
 			ikeLog.Tracef("Expected Authentication Data:\n%s", hex.Dump(expectedAuthenticationData))
-			// TODO: Finish authentication test for UE and N3IWF
-			/*
-				if !bytes.Equal(authentication.AuthenticationData, expectedAuthenticationData) {
-					ikeLog.Warn("Peer authentication failed.")
-					// Inform UE the authentication has failed
-					// Build IKE message
-					responseIKEMessage.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
-						ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
-					responseIKEMessage.Payloads.Reset()
+			if !bytes.Equal(authentication.AuthenticationData, expectedAuthenticationData) {
+				ikeLog.Warn("Peer authentication failed.")
+				// Inform UE the authentication has failed
+				// Build IKE message
+				responseIKEMessage.BuildIKEHeader(message.InitiatorSPI, message.ResponderSPI,
+					ike_message.IKE_AUTH, ike_message.ResponseBitCheck, message.MessageID)
+				responseIKEMessage.Payloads.Reset()
 
-					// Notification
-					responseIKEPayload.BuildNotification(ike_message.TypeNone, ike_message.AUTHENTICATION_FAILED, nil, nil)
+				// Notification
+				responseIKEPayload.BuildNotification(ike_message.TypeNone, ike_message.AUTHENTICATION_FAILED, nil, nil)
 
-					if err := EncryptProcedure(ikeSecurityAssociation, responseIKEPayload, responseIKEMessage); err != nil {
-						ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
-						return
-					}
-
-					// Send IKE message to UE
-					SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
+				if err := EncryptProcedure(ikeSecurityAssociation, responseIKEPayload, responseIKEMessage); err != nil {
+					ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
 					return
 				}
-			*/
+
+				// Send IKE message to UE
+				SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
+				return
+			}
 		} else {
 			ikeLog.Warn("Peer authentication failed.")
 			// Inform UE the authentication has failed
@@ -1011,7 +1008,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 		// Calculate local AUTH
 		pseudorandomFunction.Reset()
-		if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.LocalUnsignedAuthentication); err != nil {
+		if _, err := pseudorandomFunction.Write(ikeSecurityAssociation.ResponderSignedOctets); err != nil {
 			ikeLog.Errorf("Pseudorandom function write error: %+v", err)
 			return
 		}
