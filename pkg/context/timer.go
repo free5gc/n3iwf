@@ -1,8 +1,6 @@
 package context
 
 import (
-	"fmt"
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 )
@@ -18,13 +16,6 @@ func NewDPDTimer(d time.Duration, maxRetryTimes int32, ikeSA *IKESecurityAssocia
 	t.ticker = time.NewTicker(d)
 
 	go func(ticker *time.Ticker) {
-		defer func() {
-			if p := recover(); p != nil {
-				// Print stack for panic to log. Fatalf() will let program exit.
-				fmt.Errorf("panic: %v\n%s", p, string(debug.Stack()))
-			}
-		}()
-
 		defer ticker.Stop()
 
 		for {
