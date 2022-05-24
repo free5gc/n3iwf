@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -1649,23 +1650,29 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 
 	n3iwfUe := ikeSecurityAssociation.ThisUE
 	amf := n3iwfUe.AMF
-	for _, ikePayload := range decryptedIKEPayload {
-		switch ikePayload.Type() {
-		case ike_message.TypeD:
-			deletePayload := ikePayload.(*ike_message.Delete)
-			if deletePayload.ProtocolID == ike_message.TypeIKE { // Check if UE is response to a request that delete the ike SA
-				if err := n3iwfUe.Remove(); err != nil {
-					ikeLog.Errorf("Delete Ue Context error : %+v", err)
+
+	if len(decryptedIKEPayload) == 0 { // Receive DPD message
+		n3iwfUe.N3IWFIKESecurityAssociation.DPDAckTimer.Stop()
+		n3iwfUe.N3IWFIKESecurityAssociation.DPDAckTimer = nil
+		atomic.StoreInt32(&n3iwfUe.N3IWFIKESecurityAssociation.CurrentRetryTimes, 0)
+	} else {
+		for _, ikePayload := range decryptedIKEPayload {
+			switch ikePayload.Type() {
+			case ike_message.TypeD:
+				deletePayload := ikePayload.(*ike_message.Delete)
+				if deletePayload.ProtocolID == ike_message.TypeIKE { // Check if UE is response to a request that delete the ike SA
+					if err := n3iwfUe.Remove(); err != nil {
+						ikeLog.Errorf("Delete Ue Context error : %+v", err)
+					}
+					ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
+				} else if deletePayload.ProtocolID == ike_message.TypeESP {
+					ngap_message.SendPDUSessionResourceReleaseResponse(amf, n3iwfUe, n3iwfUe.PduSessionReleaseList, nil)
 				}
-				ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
-			} else if deletePayload.ProtocolID == ike_message.TypeESP {
-				ngap_message.SendPDUSessionResourceReleaseResponse(amf, n3iwfUe, n3iwfUe.PduSessionReleaseList, nil)
+			default:
+				ikeLog.Warnf(
+					"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
+					ikePayload.Type())
 			}
-		case ike_message.NoNext: // DPD response
-		default:
-			ikeLog.Warnf(
-				"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
-				ikePayload.Type())
 		}
 	}
 	ikeSecurityAssociation.ResponderMessageID++
