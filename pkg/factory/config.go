@@ -6,6 +6,7 @@ package factory
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/asaskevich/govalidator"
 
@@ -60,17 +61,18 @@ type Configuration struct {
 	N3IWFInfo        context.N3IWFNFInfo        `yaml:"N3IWFInformation" valid:"required"`
 	AMFSCTPAddresses []context.AMFSCTPAddresses `yaml:"AMFSCTPAddresses" valid:"required"`
 
-	TCPPort              uint16 `yaml:"NASTCPPort" valid:"port,required"`
-	IKEBindAddr          string `yaml:"IKEBindAddress" valid:"host,required"`
-	IPSecGatewayAddr     string `yaml:"IPSecTunnelAddress" valid:"host,required"`
-	UEIPAddressRange     string `yaml:"UEIPAddressRange" valid:"cidr,required"`                // e.g. 10.0.1.0/24
-	XfrmIfaceName        string `yaml:"XFRMInterfaceName" valid:"stringlength(1|10),optional"` // must != 0
-	XfrmIfaceId          uint32 `yaml:"XFRMInterfaceID" valid:"numeric,optional"`              // must != 0
-	GTPBindAddr          string `yaml:"GTPBindAddress" valid:"host,required"`
-	FQDN                 string `yaml:"FQDN" valid:"url,required"` // e.g. n3iwf.free5gc.org
-	PrivateKey           string `yaml:"PrivateKey" valid:"type(string),minstringlength(1),optional"`
-	CertificateAuthority string `yaml:"CertificateAuthority" valid:"type(string),minstringlength(1),optional"`
-	Certificate          string `yaml:"Certificate" valid:"type(string),minstringlength(1),optional"`
+	TCPPort              uint16     `yaml:"NASTCPPort" valid:"port,required"`
+	IKEBindAddr          string     `yaml:"IKEBindAddress" valid:"host,required"`
+	IPSecGatewayAddr     string     `yaml:"IPSecTunnelAddress" valid:"host,required"`
+	UEIPAddressRange     string     `yaml:"UEIPAddressRange" valid:"cidr,required"`                // e.g. 10.0.1.0/24
+	XfrmIfaceName        string     `yaml:"XFRMInterfaceName" valid:"stringlength(1|10),optional"` // must != 0
+	XfrmIfaceId          uint32     `yaml:"XFRMInterfaceID" valid:"numeric,optional"`              // must != 0
+	GTPBindAddr          string     `yaml:"GTPBindAddress" valid:"host,required"`
+	FQDN                 string     `yaml:"FQDN" valid:"url,required"` // e.g. n3iwf.free5gc.org
+	PrivateKey           string     `yaml:"PrivateKey" valid:"type(string),minstringlength(1),optional"`
+	CertificateAuthority string     `yaml:"CertificateAuthority" valid:"type(string),minstringlength(1),optional"`
+	Certificate          string     `yaml:"Certificate" valid:"type(string),minstringlength(1),optional"`
+	LivenessCheck        TimerValue `yaml:"LivenessCheck" valid:"required"`
 }
 
 func (c *Configuration) validate() (bool, error) {
@@ -83,6 +85,10 @@ func (c *Configuration) validate() (bool, error) {
 	govalidator.TagMap["cidr"] = govalidator.Validator(func(str string) bool {
 		return govalidator.IsCIDR(str)
 	})
+
+	if _, err := c.LivenessCheck.validate(); err != nil {
+		return false, err
+	}
 
 	result, err := govalidator.ValidateStruct(c)
 	return result, appendInvalid(err)
@@ -108,4 +114,18 @@ func (c *Config) GetVersion() string {
 		return c.Info.Version
 	}
 	return ""
+}
+
+type TimerValue struct {
+	Enable        bool          `yaml:"enable" valid:"type(bool)"`
+	TransFreq     time.Duration `yaml:"transFreq" valid:"type(time.Duration)"`
+	MaxRetryTimes int32         `yaml:"maxRetryTimes,omitempty" valid:"type(int32)"`
+}
+
+func (t *TimerValue) validate() (bool, error) {
+	if _, err := govalidator.ValidateStruct(t); err != nil {
+		return false, appendInvalid(err)
+	}
+
+	return true, nil
 }

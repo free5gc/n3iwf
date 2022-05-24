@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"math/rand"
 	"net"
+	"runtime/debug"
 	"time"
 
 	"git.cs.nctu.edu.tw/calee/sctp"
@@ -14,6 +15,7 @@ import (
 	"github.com/free5gc/n3iwf/internal/logger"
 	ngap_message "github.com/free5gc/n3iwf/internal/ngap/message"
 	"github.com/free5gc/n3iwf/pkg/context"
+	"github.com/free5gc/n3iwf/pkg/factory"
 	"github.com/free5gc/n3iwf/pkg/ike/handler"
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
 	"github.com/free5gc/ngap/ngapConvert"
@@ -739,6 +741,8 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 	// Send IKE message to UE
 	handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr,
 		n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
+
+	go StartDPD(n3iwfUe)
 }
 
 // handlePDUSessionResourceSetupRequestTransfer parse and store needed information from NGAP
@@ -2799,4 +2803,37 @@ func getPDUSessionResourceReleaseResponseTransfer() []byte {
 		ngapLog.Errorf("aper MarshalWithParams error in getPDUSessionResourceReleaseResponseTransfer: %d", err)
 	}
 	return encodeData
+}
+
+func StartDPD(n3iwfUe *context.N3IWFUe) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			ngapLog.Errorf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
+	n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose = make(chan bool)
+
+	liveness := factory.N3iwfConfig.Configuration.LivenessCheck
+	if liveness.Enable {
+		timer := time.NewTicker(liveness.TransFreq)
+		for {
+			select {
+			case <-n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose:
+				close(n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose)
+				timer.Stop()
+				return
+			case <-timer.C:
+				handler.SendUEInformationExchange(n3iwfUe, nil)
+				n3iwfUe.N3IWFIKESecurityAssociation.DPDAckTimer = context.NewDPDTimer(liveness.TransFreq, liveness.MaxRetryTimes,
+					n3iwfUe.N3IWFIKESecurityAssociation, func() {
+						ngapLog.Errorf("UE is down")
+						cause := buildCause(ngapType.CausePresentRadioNetwork, ngapType.CauseRadioNetworkPresentRadioConnectionWithUeLost)
+						ngap_message.SendUEContextReleaseRequest(n3iwfUe.AMF, n3iwfUe, *cause)
+						timer.Stop()
+					})
+			}
+		}
+	}
 }
