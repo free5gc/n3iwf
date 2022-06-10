@@ -1818,3 +1818,29 @@ func BuildPDUSessionResourceModifyUnsuccessfulTransfer(cause ngapType.Cause,
 
 	return aper.MarshalWithParams(transfer, "valueExt")
 }
+
+func BuildCause(present int, value aper.Enumerated) (cause *ngapType.Cause) {
+	cause = new(ngapType.Cause)
+	cause.Present = present
+
+	switch present {
+	case ngapType.CausePresentRadioNetwork:
+		cause.RadioNetwork = new(ngapType.CauseRadioNetwork)
+		cause.RadioNetwork.Value = value
+	case ngapType.CausePresentTransport:
+		cause.Transport = new(ngapType.CauseTransport)
+		cause.Transport.Value = value
+	case ngapType.CausePresentNas:
+		cause.Nas = new(ngapType.CauseNas)
+		cause.Nas.Value = value
+	case ngapType.CausePresentProtocol:
+		cause.Protocol = new(ngapType.CauseProtocol)
+		cause.Protocol.Value = value
+	case ngapType.CausePresentMisc:
+		cause.Misc = new(ngapType.CauseMisc)
+		cause.Misc.Value = value
+	case ngapType.CausePresentNothing:
+	}
+
+	return
+}

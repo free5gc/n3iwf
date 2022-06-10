@@ -1241,6 +1241,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 			// Send Initial Context Setup Response to AMF
 			ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE, nil, nil, nil)
 		}
+		go StartDPD(thisUE)
 	}
 }
 

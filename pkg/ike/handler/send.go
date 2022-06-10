@@ -3,8 +3,12 @@ package handler
 import (
 	"encoding/binary"
 	"net"
+	"runtime/debug"
+	"time"
 
+	ngap_message "github.com/free5gc/n3iwf/internal/ngap/message"
 	"github.com/free5gc/n3iwf/pkg/context"
+	"github.com/free5gc/n3iwf/pkg/factory"
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
 	"github.com/free5gc/ngap/ngapType"
 )
@@ -81,4 +85,38 @@ func SendChildSADeleteRequest(n3iwfUe *context.N3IWFUe, relaseList []ngapType.PD
 	var deletePayload ike_message.IKEPayloadContainer
 	deletePayload.BuildDeletePayload(ike_message.TypeESP, 4, spiLen, deleteSPIs)
 	SendUEInformationExchange(n3iwfUe, deletePayload)
+}
+
+func StartDPD(n3iwfUe *context.N3IWFUe) {
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			ikeLog.Errorf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
+	n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose = make(chan bool)
+
+	liveness := factory.N3iwfConfig.Configuration.LivenessCheck
+	if liveness.Enable {
+		timer := time.NewTicker(liveness.TransFreq)
+		for {
+			select {
+			case <-n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose:
+				close(n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose)
+				timer.Stop()
+				return
+			case <-timer.C:
+				SendUEInformationExchange(n3iwfUe, nil)
+				n3iwfUe.N3IWFIKESecurityAssociation.DPDAckTimer = context.NewDPDTimer(liveness.TransFreq, liveness.MaxRetryTimes,
+					n3iwfUe.N3IWFIKESecurityAssociation, func() {
+						ikeLog.Errorf("UE is down")
+						cause := ngap_message.BuildCause(ngapType.CausePresentRadioNetwork,
+							ngapType.CauseRadioNetworkPresentRadioConnectionWithUeLost)
+						ngap_message.SendUEContextReleaseRequest(n3iwfUe.AMF, n3iwfUe, *cause)
+						timer.Stop()
+					})
+			}
+		}
+	}
 }
