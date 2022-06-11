@@ -740,8 +740,6 @@ func HandleInitialContextSetupRequest(amf *context.N3IWFAMF, message *ngapType.N
 	// Send IKE message to UE
 	handler.SendIKEMessageToUE(n3iwfUe.IKEConnection.Conn, n3iwfUe.IKEConnection.N3IWFAddr,
 		n3iwfUe.IKEConnection.UEAddr, responseIKEMessage)
-
-	//go StartDPD(n3iwfUe)
 }
 
 // handlePDUSessionResourceSetupRequestTransfer parse and store needed information from NGAP
