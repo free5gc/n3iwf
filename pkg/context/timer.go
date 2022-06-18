@@ -24,7 +24,7 @@ func NewDPDTimer(d time.Duration, maxRetryTimes int32, ikeSA *IKESecurityAssocia
 				return
 			case <-ticker.C:
 				atomic.AddInt32(&ikeSA.CurrentRetryTimes, 1)
-				if atomic.LoadInt32(&ikeSA.CurrentRetryTimes) == maxRetryTimes {
+				if atomic.LoadInt32(&ikeSA.CurrentRetryTimes) > 0 {
 					cancelFunc()
 					return
 				}
