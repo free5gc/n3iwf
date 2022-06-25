@@ -10,7 +10,7 @@ type Timer struct {
 	done   chan bool
 }
 
-func NewDPDTimer(d time.Duration, maxRetryTimes int32, ikeSA *IKESecurityAssociation, cancelFunc func()) *Timer {
+func NewDPDPeriodicTimer(d time.Duration, maxRetryTimes int32, ikeSA *IKESecurityAssociation, cancelFunc func()) *Timer {
 	t := &Timer{}
 	t.done = make(chan bool, 1)
 	t.ticker = time.NewTicker(d)

@@ -95,20 +95,20 @@ func StartDPD(n3iwfUe *context.N3IWFUe) {
 		}
 	}()
 
-	n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose = make(chan bool)
+	n3iwfUe.N3IWFIKESecurityAssociation.IKESAClosedCh = make(chan struct{})
 
 	liveness := factory.N3iwfConfig.Configuration.LivenessCheck
 	if liveness.Enable {
 		timer := time.NewTicker(liveness.TransFreq)
 		for {
 			select {
-			case <-n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose:
-				close(n3iwfUe.N3IWFIKESecurityAssociation.DPDTimerIsClose)
+			case <-n3iwfUe.N3IWFIKESecurityAssociation.IKESAClosedCh:
+				close(n3iwfUe.N3IWFIKESecurityAssociation.IKESAClosedCh)
 				timer.Stop()
 				return
 			case <-timer.C:
 				SendUEInformationExchange(n3iwfUe, nil)
-				n3iwfUe.N3IWFIKESecurityAssociation.DPDAckTimer = context.NewDPDTimer(liveness.TransFreq, liveness.MaxRetryTimes,
+				n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = context.NewDPDPeriodicTimer(liveness.TransFreq, liveness.MaxRetryTimes,
 					n3iwfUe.N3IWFIKESecurityAssociation, func() {
 						ikeLog.Errorf("UE is down")
 						cause := ngap_message.BuildCause(ngapType.CausePresentRadioNetwork,

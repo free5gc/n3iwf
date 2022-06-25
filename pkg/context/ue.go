@@ -170,9 +170,9 @@ type IKESecurityAssociation struct {
 	// UE context
 	ThisUE *N3IWFUe
 
-	DPDAckTimer       *Timer // The time from sending the DPD request to receiving the response
-	CurrentRetryTimes int32  // Accumulate the number of times the DPD response wasn't received
-	DPDTimerIsClose   chan bool
+	DPDReqRetransTimer *Timer // The time from sending the DPD request to receiving the response
+	CurrentRetryTimes  int32  // Accumulate the number of times the DPD response wasn't received
+	IKESAClosedCh      chan struct{}
 }
 
 type ChildSecurityAssociation struct {
@@ -233,7 +233,7 @@ func (ue *N3IWFUe) init(ranUeNgapId int64) {
 func (ue *N3IWFUe) Remove() error {
 	// remove from AMF context
 	ue.DetachAMF()
-	ue.N3IWFIKESecurityAssociation.DPDTimerIsClose <- true
+	ue.N3IWFIKESecurityAssociation.IKESAClosedCh <- struct{}{}
 	// remove from N3IWF context
 	n3iwfSelf := N3IWFSelf()
 	n3iwfSelf.DeleteN3iwfUe(ue.RanUeNgapId)
