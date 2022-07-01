@@ -1652,10 +1652,14 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	n3iwfUe := ikeSecurityAssociation.ThisUE
 	amf := n3iwfUe.AMF
 
-	if len(decryptedIKEPayload) == 0 { // Receive DPD message
+	if n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer != nil {
 		n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer.Stop()
 		n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = nil
 		atomic.StoreInt32(&n3iwfUe.N3IWFIKESecurityAssociation.CurrentRetryTimes, 0)
+	}
+
+	if len(decryptedIKEPayload) == 0 { // Receive DPD message
+		return
 	} else {
 		for _, ikePayload := range decryptedIKEPayload {
 			switch ikePayload.Type() {
