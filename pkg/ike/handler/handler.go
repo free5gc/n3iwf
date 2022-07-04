@@ -31,7 +31,7 @@ func init() {
 	ikeLog = logger.IKELog
 }
 
-func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage) {
+func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage, realMessage1 []byte) {
 	ikeLog.Infoln("Handle IKE_SA_INIT")
 
 	// Used to receive value from peer
@@ -329,13 +329,7 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 	// Prepare authentication data - InitatorSignedOctet
 	// InitatorSignedOctet = RealMessage1 | NonceRData | MACedIDForI
 	// MACedIDForI is acquired in IKE_AUTH exchange
-	receivedIKEMessageData, err := message.Encode()
-	if err != nil {
-		ikeLog.Errorln(err)
-		ikeLog.Error("Encode message failed.")
-		return
-	}
-	ikeSecurityAssociation.InitiatorSignedOctets = append(receivedIKEMessageData, localNonce...)
+	ikeSecurityAssociation.InitiatorSignedOctets = append(realMessage1, localNonce...)
 
 	// Prepare authentication data - ResponderSignedOctet
 	// ResponderSignedOctet = RealMessage2 | NonceIData | MACedIDForR
@@ -955,6 +949,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				// Send IKE message to UE
 				SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
 				return
+			} else {
+				ikeLog.Tracef("Peer authentication success")
 			}
 		} else {
 			ikeLog.Warn("Peer authentication failed.")

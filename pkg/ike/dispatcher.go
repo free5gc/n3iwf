@@ -49,7 +49,7 @@ func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []by
 
 	switch ikeMessage.ExchangeType {
 	case ike_message.IKE_SA_INIT:
-		handler.HandleIKESAINIT(udpConn, localAddr, remoteAddr, ikeMessage)
+		handler.HandleIKESAINIT(udpConn, localAddr, remoteAddr, ikeMessage, msg)
 	case ike_message.IKE_AUTH:
 		handler.HandleIKEAUTH(udpConn, localAddr, remoteAddr, ikeMessage)
 	case ike_message.CREATE_CHILD_SA:
