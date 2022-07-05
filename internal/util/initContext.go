@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"regexp"
 	"io/ioutil"
 	"net"
 	"strings"
@@ -313,14 +312,11 @@ func GetInterfaceName(IPAddress string) (interfaceName string, err error) {
 		return "nil", err
 	}
 
-	re := regexp.MustCompile(`[a-z]`)
-	if (re.MatchString(IPAddress) == true) {
-		res, err := net.ResolveIPAddr("ip4", IPAddress)
-		if err != nil {
-			return "", fmt.Errorf("Error resolving address '%s': %v", IPAddress, err)
-		}
-		IPAddress = res.String()
+	res, err := net.ResolveIPAddr("ip4", IPAddress)
+	if err != nil {
+		return "", fmt.Errorf("Error resolving address '%s': %v", IPAddress, err)
 	}
+	IPAddress = res.String()
 
 	for _, inter := range interfaces {
 		addrs, err := inter.Addrs()
