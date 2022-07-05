@@ -31,7 +31,8 @@ func init() {
 	ikeLog = logger.IKELog
 }
 
-func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage, realMessage1 []byte) {
+func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage,
+	realMessage1 []byte) {
 	ikeLog.Infoln("Handle IKE_SA_INIT")
 
 	// Used to receive value from peer
