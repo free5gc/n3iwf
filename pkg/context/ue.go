@@ -156,8 +156,8 @@ type IKESecurityAssociation struct {
 	LastEAPIdentifier        uint8
 
 	// Authentication data
-	LocalUnsignedAuthentication  []byte
-	RemoteUnsignedAuthentication []byte
+	ResponderSignedOctets []byte
+	InitiatorSignedOctets []byte
 
 	// NAT detection
 	// If UEIsBehindNAT == true, N3IWF should enable NAT traversal and
