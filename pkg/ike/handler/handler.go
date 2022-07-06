@@ -1660,24 +1660,24 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 
 	if len(decryptedIKEPayload) == 0 { // Receive DPD message
 		return
-	} else {
-		for _, ikePayload := range decryptedIKEPayload {
-			switch ikePayload.Type() {
-			case ike_message.TypeD:
-				deletePayload := ikePayload.(*ike_message.Delete)
-				if deletePayload.ProtocolID == ike_message.TypeIKE { // Check if UE is response to a request that delete the ike SA
-					if err := n3iwfUe.Remove(); err != nil {
-						ikeLog.Errorf("Delete Ue Context error : %+v", err)
-					}
-					ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
-				} else if deletePayload.ProtocolID == ike_message.TypeESP {
-					ngap_message.SendPDUSessionResourceReleaseResponse(amf, n3iwfUe, n3iwfUe.PduSessionReleaseList, nil)
+	}
+
+	for _, ikePayload := range decryptedIKEPayload {
+		switch ikePayload.Type() {
+		case ike_message.TypeD:
+			deletePayload := ikePayload.(*ike_message.Delete)
+			if deletePayload.ProtocolID == ike_message.TypeIKE { // Check if UE is response to a request that delete the ike SA
+				if err := n3iwfUe.Remove(); err != nil {
+					ikeLog.Errorf("Delete Ue Context error : %+v", err)
 				}
-			default:
-				ikeLog.Warnf(
-					"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
-					ikePayload.Type())
+				ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
+			} else if deletePayload.ProtocolID == ike_message.TypeESP {
+				ngap_message.SendPDUSessionResourceReleaseResponse(amf, n3iwfUe, n3iwfUe.PduSessionReleaseList, nil)
 			}
+		default:
+			ikeLog.Warnf(
+				"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
 		}
 	}
 	ikeSecurityAssociation.ResponderMessageID++
