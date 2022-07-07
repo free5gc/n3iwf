@@ -114,6 +114,7 @@ func StartDPD(n3iwfUe *context.N3IWFUe) {
 						cause := ngap_message.BuildCause(ngapType.CausePresentRadioNetwork,
 							ngapType.CauseRadioNetworkPresentRadioConnectionWithUeLost)
 						ngap_message.SendUEContextReleaseRequest(n3iwfUe.AMF, n3iwfUe, *cause)
+						n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer.Stop()
 						timer.Stop()
 					})
 			}
