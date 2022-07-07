@@ -108,13 +108,14 @@ func StartDPD(n3iwfUe *context.N3IWFUe) {
 				return
 			case <-timer.C:
 				SendUEInformationExchange(n3iwfUe, nil)
-				n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = context.NewDPDPeriodicTimer(liveness.TransFreq,
+				var DPDReqRetransTime time.Duration = 2 * time.Second
+				n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = context.NewDPDPeriodicTimer(DPDReqRetransTime,
 					liveness.MaxRetryTimes, n3iwfUe.N3IWFIKESecurityAssociation, func() {
 						ikeLog.Errorf("UE is down")
 						cause := ngap_message.BuildCause(ngapType.CausePresentRadioNetwork,
 							ngapType.CauseRadioNetworkPresentRadioConnectionWithUeLost)
 						ngap_message.SendUEContextReleaseRequest(n3iwfUe.AMF, n3iwfUe, *cause)
-						n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer.Stop()
+						n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = nil
 						timer.Stop()
 					})
 			}
