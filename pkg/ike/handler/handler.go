@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -1240,6 +1241,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 			// Send Initial Context Setup Response to AMF
 			ngap_message.SendInitialContextSetupResponse(thisUE.AMF, thisUE, nil, nil, nil)
 		}
+		go StartDPD(thisUE)
 	}
 }
 
@@ -1601,6 +1603,84 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 			break
 		}
 	}
+}
+
+func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage) {
+	ikeLog.Infoln("Handle Informational")
+
+	if message == nil {
+		ikeLog.Error("IKE Message is nil")
+		return
+	}
+
+	n3iwfSelf := context.N3IWFSelf()
+	responseIKEMessage := new(ike_message.IKEMessage)
+	responderSPI := message.ResponderSPI
+	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(responderSPI)
+	var encryptedPayload *ike_message.Encrypted
+
+	if !ok {
+		ikeLog.Warn("Unrecognized SPI")
+		// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
+		responseIKEMessage.BuildIKEHeader(0, message.ResponderSPI, ike_message.INFORMATIONAL,
+			ike_message.ResponseBitCheck, message.MessageID)
+		responseIKEMessage.Payloads.Reset()
+		responseIKEMessage.Payloads.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
+
+		SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage)
+
+		return
+	}
+
+	for _, ikePayload := range message.Payloads {
+		switch ikePayload.Type() {
+		case ike_message.TypeSK:
+			encryptedPayload = ikePayload.(*ike_message.Encrypted)
+		default:
+			ikeLog.Warnf(
+				"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
+		}
+	}
+
+	decryptedIKEPayload, err := DecryptProcedure(ikeSecurityAssociation, message, encryptedPayload)
+	if err != nil {
+		ikeLog.Errorf("Decrypt IKE message failed: %+v", err)
+		return
+	}
+
+	n3iwfUe := ikeSecurityAssociation.ThisUE
+	amf := n3iwfUe.AMF
+
+	if n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer != nil {
+		n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer.Stop()
+		n3iwfUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = nil
+		atomic.StoreInt32(&n3iwfUe.N3IWFIKESecurityAssociation.CurrentRetryTimes, 0)
+	}
+
+	if len(decryptedIKEPayload) == 0 { // Receive DPD message
+		return
+	}
+
+	for _, ikePayload := range decryptedIKEPayload {
+		switch ikePayload.Type() {
+		case ike_message.TypeD:
+			deletePayload := ikePayload.(*ike_message.Delete)
+			if deletePayload.ProtocolID == ike_message.TypeIKE { // Check if UE is response to a request that delete the ike SA
+				if err := n3iwfUe.Remove(); err != nil {
+					ikeLog.Errorf("Delete Ue Context error : %+v", err)
+				}
+				ngap_message.SendUEContextReleaseComplete(amf, n3iwfUe, nil)
+			} else if deletePayload.ProtocolID == ike_message.TypeESP {
+				ngap_message.SendPDUSessionResourceReleaseResponse(amf, n3iwfUe, n3iwfUe.PduSessionReleaseList, nil)
+			}
+		default:
+			ikeLog.Warnf(
+				"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",
+				ikePayload.Type())
+		}
+	}
+	ikeSecurityAssociation.ResponderMessageID++
 }
 
 func is_supported(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) bool {

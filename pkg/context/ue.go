@@ -72,6 +72,7 @@ type N3IWFUe struct {
 	CoreNetworkAssistanceInformation *ngapType.CoreNetworkAssistanceInformation // TS 38.413 9.3.1.15
 	IMSVoiceSupported                int32
 	RRCEstablishmentCause            int16
+	PduSessionReleaseList            ngapType.PDUSessionResourceReleasedListRelRes
 }
 
 type PDUSession struct {
@@ -168,6 +169,10 @@ type IKESecurityAssociation struct {
 
 	// UE context
 	ThisUE *N3IWFUe
+
+	DPDReqRetransTimer *Timer // The time from sending the DPD request to receiving the response
+	CurrentRetryTimes  int32  // Accumulate the number of times the DPD response wasn't received
+	IKESAClosedCh      chan struct{}
 }
 
 type ChildSecurityAssociation struct {
@@ -177,6 +182,9 @@ type ChildSecurityAssociation struct {
 
 	// Associated XFRM interface
 	XfrmIface netlink.Link
+
+	XfrmStateList  []netlink.XfrmState
+	XfrmPolicyList []netlink.XfrmPolicy
 
 	// IP address
 	PeerPublicIPAddr  net.IP
@@ -222,17 +230,56 @@ func (ue *N3IWFUe) init(ranUeNgapId int64) {
 	ue.TemporaryExchangeMsgIDChildSAMapping = make(map[uint32]*ChildSecurityAssociation)
 }
 
-func (ue *N3IWFUe) Remove() {
+func (ue *N3IWFUe) Remove() error {
 	// remove from AMF context
 	ue.DetachAMF()
+	ue.N3IWFIKESecurityAssociation.IKESAClosedCh <- struct{}{}
 	// remove from N3IWF context
 	n3iwfSelf := N3IWFSelf()
 	n3iwfSelf.DeleteN3iwfUe(ue.RanUeNgapId)
 	n3iwfSelf.DeleteIKESecurityAssociation(ue.N3IWFIKESecurityAssociation.LocalSPI)
 	n3iwfSelf.DeleteInternalUEIPAddr(ue.IPSecInnerIP.String())
+
+	for _, childSA := range ue.N3IWFChildSecurityAssociation {
+		if err := ue.DeleteChildSA(childSA); err != nil {
+			return err
+		}
+	}
+
 	for _, pduSession := range ue.PduSessionList {
 		n3iwfSelf.DeleteTEID(pduSession.GTPConnection.IncomingTEID)
 	}
+
+	return nil
+}
+
+func (ue *N3IWFUe) DeleteChildSA(childSA *ChildSecurityAssociation) error {
+	n3iwfSelf := N3IWFSelf()
+	iface := childSA.XfrmIface
+
+	// Delete child SA xfrmState
+	for _, xfrmState := range childSA.XfrmStateList {
+		if err := netlink.XfrmStateDel(&xfrmState); err != nil {
+			return fmt.Errorf("Delete xfrmstate error : %+v", err)
+		}
+	}
+	// Delete child SA xfrmPolicy
+	for _, xfrmPolicy := range childSA.XfrmPolicyList {
+		if err := netlink.XfrmPolicyDel(&xfrmPolicy); err != nil {
+			return fmt.Errorf("Delete xfrmPolicy error : %+v", err)
+		}
+	}
+
+	if iface == nil || iface.Attrs().Name == "xfrmi-default" {
+	} else if err := netlink.LinkDel(iface); err != nil {
+		return fmt.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
+	} else {
+		n3iwfSelf.XfrmIfaces.Delete(uint32(childSA.XfrmStateList[0].Ifid))
+	}
+
+	delete(ue.N3IWFChildSecurityAssociation, childSA.InboundSPI)
+
+	return nil
 }
 
 func (ue *N3IWFUe) FindPDUSession(pduSessionID int64) *PDUSession {

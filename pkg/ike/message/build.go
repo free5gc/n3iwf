@@ -157,6 +157,16 @@ func (container *ProposalContainer) BuildProposal(proposalNumber uint8, protocol
 	return proposal
 }
 
+func (container *IKEPayloadContainer) BuildDeletePayload(
+	protocolID uint8, SPISize uint8, numberOfSPI uint16, SPIs []byte) {
+	deletePayload := new(Delete)
+	deletePayload.ProtocolID = protocolID
+	deletePayload.SPISize = SPISize
+	deletePayload.NumberOfSPI = numberOfSPI
+	deletePayload.SPIs = SPIs
+	*container = append(*container, deletePayload)
+}
+
 func (container *TransformContainer) Reset() {
 	*container = nil
 }

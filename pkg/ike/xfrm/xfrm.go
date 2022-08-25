@@ -116,6 +116,8 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 		return errors.New("Set XFRM state rule failed")
 	}
 
+	childSecurityAssociation.XfrmStateList = append(childSecurityAssociation.XfrmStateList, *xfrmState)
+
 	// Policy
 	xfrmPolicyTemplate := netlink.XfrmPolicyTmpl{
 		Src:   xfrmState.Src,
@@ -141,6 +143,8 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
 		return errors.New("Set XFRM policy rule failed")
 	}
+
+	childSecurityAssociation.XfrmPolicyList = append(childSecurityAssociation.XfrmPolicyList, *xfrmPolicy)
 
 	// Direction: this_server -> {private_network}
 	// State
@@ -168,6 +172,8 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 		return errors.New("Set XFRM state rule failed")
 	}
 
+	childSecurityAssociation.XfrmStateList = append(childSecurityAssociation.XfrmStateList, *xfrmState)
+
 	// Policy
 	xfrmPolicyTemplate.Spi = int(childSecurityAssociation.OutboundSPI)
 	xfrmPolicyTemplate.Src, xfrmPolicyTemplate.Dst = xfrmPolicyTemplate.Dst, xfrmPolicyTemplate.Src
@@ -183,6 +189,8 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
 		return errors.New("Set XFRM policy rule failed")
 	}
+
+	childSecurityAssociation.XfrmPolicyList = append(childSecurityAssociation.XfrmPolicyList, *xfrmPolicy)
 
 	printSAInfo(n3iwf_is_initiator, xfrmiId, childSecurityAssociation)
 

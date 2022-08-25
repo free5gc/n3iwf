@@ -2,6 +2,7 @@ package context
 
 import (
 	"bytes"
+	"fmt"
 
 	"git.cs.nctu.edu.tw/calee/sctp"
 
@@ -59,10 +60,13 @@ func (amf *N3IWFAMF) FindUeByAmfUeNgapID(id int64) *N3IWFUe {
 	return nil
 }
 
-func (amf *N3IWFAMF) RemoveAllRelatedUe() {
+func (amf *N3IWFAMF) RemoveAllRelatedUe() error {
 	for _, ue := range amf.N3iwfUeList {
-		ue.Remove()
+		if err := ue.Remove(); err != nil {
+			return fmt.Errorf("RemoveAllRelatedUe error : %+v", err)
+		}
 	}
+	return nil
 }
 
 func (amf *N3IWFAMF) AddAMFTNLAssociationItem(info ngapType.CPTransportLayerInformation) *AMFTNLAssociationItem {
