@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 	gtp "github.com/wmnsk/go-gtp/gtpv1"
 	gtpMsg "github.com/wmnsk/go-gtp/gtpv1/message"
+	"golang.org/x/net/ipv4"
 
 	"github.com/free5gc/n3iwf/internal/gre"
 	gtpQoSMsg "github.com/free5gc/n3iwf/internal/gtp/message"
@@ -46,6 +47,9 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 	// Nwu connection in IPv4
 	NWuConn := self.NWuIPv4PacketConn
 
+	pktTEID := packet.GetTEID()
+	gtpLog.Tracef("pkt teid : %d", pktTEID)
+
 	// Find UE information
 	ue, ok := self.AllocatedUETEIDLoad(packet.GetTEID())
 	if !ok {
@@ -55,6 +59,18 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 
 	// UE inner IP in IPSec
 	ueInnerIPAddr := ue.IPSecInnerIPAddr
+
+	var cm *ipv4.ControlMessage
+
+	for _, childSA := range ue.N3IWFChildSecurityAssociation {
+		pdusession := ue.FindPDUSession(childSA.PDUSessionIds[0])
+		if pdusession != nil && pdusession.GTPConnection.IncomingTEID == pktTEID {
+			gtpLog.Tracef("forwarding IPSec xfrm interfaceid : %d", childSA.XfrmIface.Attrs().Index)
+			cm = &ipv4.ControlMessage{
+				IfIndex: childSA.XfrmIface.Attrs().Index,
+			}
+		}
+	}
 
 	var (
 		qfi uint8
@@ -76,7 +92,7 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 	forwardData := grePacket.Marshal()
 
 	// Send to UE through Nwu
-	if n, err := NWuConn.WriteTo(forwardData, nil, ueInnerIPAddr); err != nil {
+	if n, err := NWuConn.WriteTo(forwardData, cm, ueInnerIPAddr); err != nil {
 		gtpLog.Errorf("Write to UE failed: %+v", err)
 		return
 	} else {
