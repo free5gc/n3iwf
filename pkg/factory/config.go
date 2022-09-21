@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	N3iwfExpectedConfigVersion = "1.0.3"
+	N3iwfExpectedConfigVersion = "1.0.4"
 )
 
 type Config struct {
