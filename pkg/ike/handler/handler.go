@@ -33,7 +33,8 @@ func init() {
 }
 
 func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message *ike_message.IKEMessage,
-	realMessage1 []byte) {
+	realMessage1 []byte,
+) {
 	ikeLog.Infoln("Handle IKE_SA_INIT")
 
 	// Used to receive value from peer
@@ -510,8 +511,9 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				ikeLog.Errorf("Pseudorandom function write error: %+v", err)
 				return
 			}
-			ikeSecurityAssociation.InitiatorSignedOctets =
-				append(ikeSecurityAssociation.InitiatorSignedOctets, pseudorandomFunction.Sum(nil)...)
+			ikeSecurityAssociation.InitiatorSignedOctets = append(
+				ikeSecurityAssociation.InitiatorSignedOctets,
+				pseudorandomFunction.Sum(nil)...)
 		} else {
 			ikeLog.Error("The initiator identification field is nil")
 			// TODO: send error message to UE
@@ -1079,8 +1081,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 		// Consider 0x01 as the speicified index for IKE_AUTH exchange
 		thisUE.CreateHalfChildSA(0x01, inboundSPI, -1)
-		childSecurityAssociationContext, err :=
-			thisUE.CompleteChildSA(0x01, outboundSPI, ikeSecurityAssociation.IKEAuthResponseSA)
+		childSecurityAssociationContext, err := thisUE.CompleteChildSA(
+			0x01, outboundSPI, ikeSecurityAssociation.IKEAuthResponseSA)
 		if err != nil {
 			ikeLog.Errorf("Create child security association context failed: %+v", err)
 			return
@@ -1209,8 +1211,8 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 					if err := EncryptProcedure(
 						thisUE.N3IWFIKESecurityAssociation, ikePayload, ikeMessage); err != nil {
 						ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
-						thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession =
-							thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
+						thisUE.TemporaryPDUSessionSetupData.UnactivatedPDUSession = thisUE.
+							TemporaryPDUSessionSetupData.UnactivatedPDUSession[1:]
 						cause := ngapType.Cause{
 							Present: ngapType.CausePresentTransport,
 							Transport: &ngapType.CauseTransport{
@@ -1784,7 +1786,8 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 }
 
 func is_Kernel_Supported(
-	transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) bool {
+	transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16,
+) bool {
 	switch transformType {
 	case ike_message.TypeEncryptionAlgorithm:
 		switch transformID {
@@ -1910,7 +1913,8 @@ func parseIPAddressInformationToChildSecurityAssociation(
 	childSecurityAssociation *context.ChildSecurityAssociation,
 	uePublicIPAddr net.IP,
 	trafficSelectorLocal *ike_message.IndividualTrafficSelector,
-	trafficSelectorRemote *ike_message.IndividualTrafficSelector) error {
+	trafficSelectorRemote *ike_message.IndividualTrafficSelector,
+) error {
 	if childSecurityAssociation == nil {
 		return errors.New("childSecurityAssociation is nil")
 	}

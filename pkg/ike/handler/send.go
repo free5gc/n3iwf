@@ -41,7 +41,8 @@ func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, mes
 }
 
 func SendUEInformationExchange(
-	n3iwfUe *context.N3IWFUe, payload ike_message.IKEPayloadContainer) {
+	n3iwfUe *context.N3IWFUe, payload ike_message.IKEPayloadContainer,
+) {
 	ikeSecurityAssociation := n3iwfUe.N3IWFIKESecurityAssociation
 	responseIKEMessage := new(ike_message.IKEMessage)
 
