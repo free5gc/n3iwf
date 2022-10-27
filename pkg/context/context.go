@@ -262,7 +262,8 @@ func (context *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (*N3IWFUe, bool) {
 }
 
 func (context *N3IWFContext) AMFSelection(ueSpecifiedGUAMI *ngapType.GUAMI,
-	ueSpecifiedPLMNId *ngapType.PLMNIdentity) *N3IWFAMF {
+	ueSpecifiedPLMNId *ngapType.PLMNIdentity,
+) *N3IWFAMF {
 	var availableAMF *N3IWFAMF
 	context.AMFPool.Range(func(key, value interface{}) bool {
 		amf := value.(*N3IWFAMF)

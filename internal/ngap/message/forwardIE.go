@@ -6,7 +6,8 @@ import (
 )
 
 func AppendPDUSessionResourceSetupListCxtRes(
-	list *ngapType.PDUSessionResourceSetupListCxtRes, pduSessionID int64, transfer []byte) {
+	list *ngapType.PDUSessionResourceSetupListCxtRes, pduSessionID int64, transfer []byte,
+) {
 	item := ngapType.PDUSessionResourceSetupItemCxtRes{}
 	item.PDUSessionID.Value = pduSessionID
 	item.PDUSessionResourceSetupResponseTransfer = transfer
@@ -14,7 +15,8 @@ func AppendPDUSessionResourceSetupListCxtRes(
 }
 
 func AppendPDUSessionResourceFailedToSetupListCxtRes(
-	list *ngapType.PDUSessionResourceFailedToSetupListCxtRes, pduSessionID int64, transfer []byte) {
+	list *ngapType.PDUSessionResourceFailedToSetupListCxtRes, pduSessionID int64, transfer []byte,
+) {
 	item := ngapType.PDUSessionResourceFailedToSetupItemCxtRes{}
 	item.PDUSessionID.Value = pduSessionID
 	item.PDUSessionResourceSetupUnsuccessfulTransfer = transfer
@@ -22,7 +24,8 @@ func AppendPDUSessionResourceFailedToSetupListCxtRes(
 }
 
 func AppendPDUSessionResourceFailedToSetupListCxtfail(
-	list *ngapType.PDUSessionResourceFailedToSetupListCxtFail, pduSessionID int64, transfer []byte) {
+	list *ngapType.PDUSessionResourceFailedToSetupListCxtFail, pduSessionID int64, transfer []byte,
+) {
 	item := ngapType.PDUSessionResourceFailedToSetupItemCxtFail{}
 	item.PDUSessionID.Value = pduSessionID
 	item.PDUSessionResourceSetupUnsuccessfulTransfer = transfer
@@ -30,7 +33,8 @@ func AppendPDUSessionResourceFailedToSetupListCxtfail(
 }
 
 func AppendPDUSessionResourceSetupListSURes(
-	list *ngapType.PDUSessionResourceSetupListSURes, pduSessionID int64, transfer []byte) {
+	list *ngapType.PDUSessionResourceSetupListSURes, pduSessionID int64, transfer []byte,
+) {
 	item := ngapType.PDUSessionResourceSetupItemSURes{}
 	item.PDUSessionID.Value = pduSessionID
 	item.PDUSessionResourceSetupResponseTransfer = transfer
@@ -38,7 +42,8 @@ func AppendPDUSessionResourceSetupListSURes(
 }
 
 func AppendPDUSessionResourceFailedToSetupListSURes(
-	list *ngapType.PDUSessionResourceFailedToSetupListSURes, pduSessionID int64, transfer []byte) {
+	list *ngapType.PDUSessionResourceFailedToSetupListSURes, pduSessionID int64, transfer []byte,
+) {
 	item := ngapType.PDUSessionResourceFailedToSetupItemSURes{}
 	item.PDUSessionID.Value = pduSessionID
 	item.PDUSessionResourceSetupUnsuccessfulTransfer = transfer
@@ -46,7 +51,8 @@ func AppendPDUSessionResourceFailedToSetupListSURes(
 }
 
 func AppendPDUSessionResourceModifyListModRes(
-	list *ngapType.PDUSessionResourceModifyListModRes, pduSessionID int64, transfer []byte) {
+	list *ngapType.PDUSessionResourceModifyListModRes, pduSessionID int64, transfer []byte,
+) {
 	var pduSessionResourceModifyResponseTransfer aper.OctetString = transfer
 	item := ngapType.PDUSessionResourceModifyItemModRes{}
 	item.PDUSessionID.Value = pduSessionID
@@ -55,7 +61,8 @@ func AppendPDUSessionResourceModifyListModRes(
 }
 
 func AppendPDUSessionResourceFailedToModifyListModRes(
-	list *ngapType.PDUSessionResourceFailedToModifyListModRes, pduSessionID int64, transfer []byte) {
+	list *ngapType.PDUSessionResourceFailedToModifyListModRes, pduSessionID int64, transfer []byte,
+) {
 	item := ngapType.PDUSessionResourceFailedToModifyItemModRes{}
 	item.PDUSessionID.Value = pduSessionID
 	item.PDUSessionResourceModifyUnsuccessfulTransfer = transfer

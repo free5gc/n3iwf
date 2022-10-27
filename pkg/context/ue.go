@@ -316,7 +316,8 @@ func (ue *N3IWFUe) CreateHalfChildSA(msgID, inboundSPI uint32, pduSessionID int6
 }
 
 func (ue *N3IWFUe) CompleteChildSA(msgID uint32, outboundSPI uint32,
-	chosenSecurityAssociation *ike_message.SecurityAssociation) (*ChildSecurityAssociation, error) {
+	chosenSecurityAssociation *ike_message.SecurityAssociation,
+) (*ChildSecurityAssociation, error) {
 	childSA, ok := ue.TemporaryExchangeMsgIDChildSAMapping[msgID]
 
 	if !ok {
