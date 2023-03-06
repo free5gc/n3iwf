@@ -13,7 +13,7 @@ require (
 	github.com/urfave/cli v1.22.5
 	github.com/vishvananda/netlink v1.1.0
 	github.com/wmnsk/go-gtp v0.8.0
-	golang.org/x/net v0.0.0-20211008194852-3b03d305991f
-	golang.org/x/sys v0.1.0
+	golang.org/x/net v0.7.0
+	golang.org/x/sys v0.5.0
 	gopkg.in/yaml.v2 v2.4.0
 )
