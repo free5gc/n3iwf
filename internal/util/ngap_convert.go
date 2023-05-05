@@ -7,11 +7,11 @@ import (
 
 	"github.com/free5gc/aper"
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/context"
+	"github.com/free5gc/n3iwf/pkg/factory"
 	"github.com/free5gc/ngap/ngapType"
 )
 
-func PlmnIdToNgap(plmnId context.PLMNID) (ngapPlmnId ngapType.PLMNIdentity) {
+func PlmnIdToNgap(plmnId factory.PLMNID) (ngapPlmnId ngapType.PLMNIdentity) {
 	var hexString string
 	mcc := strings.Split(plmnId.Mcc, "")
 	mnc := strings.Split(plmnId.Mnc, "")
