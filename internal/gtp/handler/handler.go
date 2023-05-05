@@ -4,7 +4,6 @@ import (
 	"net"
 	"runtime/debug"
 
-	"github.com/sirupsen/logrus"
 	gtp "github.com/wmnsk/go-gtp/gtpv1"
 	gtpMsg "github.com/wmnsk/go-gtp/gtpv1/message"
 	"golang.org/x/net/ipv4"
@@ -14,12 +13,6 @@ import (
 	"github.com/free5gc/n3iwf/internal/logger"
 	n3iwfContext "github.com/free5gc/n3iwf/pkg/context"
 )
-
-var gtpLog *logrus.Entry
-
-func init() {
-	gtpLog = logger.GTPLog
-}
 
 // Parse the fields not supported by go-gtp and forward data to UE.
 func HandleQoSTPDU(c gtp.Conn, senderAddr net.Addr, msg gtpMsg.Message) error {
@@ -37,7 +30,7 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			gtpLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			logger.GTPLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 	}()
 
@@ -48,27 +41,34 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 	NWuConn := self.NWuIPv4PacketConn
 
 	pktTEID := packet.GetTEID()
-	gtpLog.Tracef("pkt teid : %d", pktTEID)
+	logger.GTPLog.Tracef("pkt teid : %d", pktTEID)
 
 	// Find UE information
-	ue, ok := self.AllocatedUETEIDLoad(packet.GetTEID())
+	ranUe, ok := self.AllocatedUETEIDLoad(pktTEID)
 	if !ok {
-		gtpLog.Error("UE context not found")
+		logger.GTPLog.Errorf("Cannot find RanUE context from QosPacket TEID : %+v", pktTEID)
+		return
+	}
+
+	ikeUe, err := self.IkeUeLoadFromNgapId(ranUe.RanUeNgapId)
+	if err != nil {
+		logger.GTPLog.Errorf("Cannot find IkeUe context from RanUe , NgapID : %+v", ranUe.RanUeNgapId)
 		return
 	}
 
 	// UE inner IP in IPSec
-	ueInnerIPAddr := ue.IPSecInnerIPAddr
+	ueInnerIPAddr := ikeUe.IPSecInnerIPAddr
 
 	var cm *ipv4.ControlMessage
 
-	for _, childSA := range ue.N3IWFChildSecurityAssociation {
-		pdusession := ue.FindPDUSession(childSA.PDUSessionIds[0])
+	for _, childSA := range ikeUe.N3IWFChildSecurityAssociation {
+		pdusession := ranUe.FindPDUSession(childSA.PDUSessionIds[0])
 		if pdusession != nil && pdusession.GTPConnection.IncomingTEID == pktTEID {
-			gtpLog.Tracef("forwarding IPSec xfrm interfaceid : %d", childSA.XfrmIface.Attrs().Index)
+			logger.GTPLog.Tracef("forwarding IPSec xfrm interfaceid : %d", childSA.XfrmIface.Attrs().Index)
 			cm = &ipv4.ControlMessage{
 				IfIndex: childSA.XfrmIface.Attrs().Index,
 			}
+			break
 		}
 	}
 
@@ -80,7 +80,7 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 	// QoS Related Parameter
 	if packet.HasQoS() {
 		qfi, rqi = packet.GetQoSParameters()
-		gtpLog.Tracef("QFI: %v, RQI: %v", qfi, rqi)
+		logger.GTPLog.Tracef("QFI: %v, RQI: %v", qfi, rqi)
 	}
 
 	// Encasulate IPv4 packet with GRE header before forward to UE through IPsec
@@ -93,10 +93,10 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 
 	// Send to UE through Nwu
 	if n, err := NWuConn.WriteTo(forwardData, cm, ueInnerIPAddr); err != nil {
-		gtpLog.Errorf("Write to UE failed: %+v", err)
+		logger.GTPLog.Errorf("Write to UE failed: %+v", err)
 		return
 	} else {
-		gtpLog.Trace("Forward NWu <- N3")
-		gtpLog.Tracef("Wrote %d bytes", n)
+		logger.GTPLog.Trace("Forward NWu <- N3")
+		logger.GTPLog.Tracef("Wrote %d bytes", n)
 	}
 }

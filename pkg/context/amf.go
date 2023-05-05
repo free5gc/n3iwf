@@ -22,7 +22,7 @@ type N3IWFAMF struct {
 	// Overload related
 	AMFOverloadContent *AMFOverloadContent
 	// Relative Context
-	N3iwfUeList map[int64]*N3IWFUe // ranUeNgapId as key
+	N3iwfRanUeList map[int64]*N3IWFRanUe // ranUeNgapId as key
 }
 
 type AMFTNLAssociationItem struct {
@@ -48,21 +48,21 @@ func (amf *N3IWFAMF) init(sctpAddr string, conn *sctp.SCTPConn) {
 	amf.SCTPAddr = sctpAddr
 	amf.SCTPConn = conn
 	amf.AMFTNLAssociationList = make(map[string]*AMFTNLAssociationItem)
-	amf.N3iwfUeList = make(map[int64]*N3IWFUe)
+	amf.N3iwfRanUeList = make(map[int64]*N3IWFRanUe)
 }
 
-func (amf *N3IWFAMF) FindUeByAmfUeNgapID(id int64) *N3IWFUe {
-	for _, n3iwfUe := range amf.N3iwfUeList {
-		if n3iwfUe.AmfUeNgapId == id {
-			return n3iwfUe
+func (amf *N3IWFAMF) FindUeByAmfUeNgapID(id int64) *N3IWFRanUe {
+	for _, ranUe := range amf.N3iwfRanUeList {
+		if ranUe.AmfUeNgapId == id {
+			return ranUe
 		}
 	}
 	return nil
 }
 
 func (amf *N3IWFAMF) RemoveAllRelatedUe() error {
-	for _, ue := range amf.N3iwfUeList {
-		if err := ue.Remove(); err != nil {
+	for _, ranUe := range amf.N3iwfRanUeList {
+		if err := ranUe.Remove(); err != nil {
 			return fmt.Errorf("RemoveAllRelatedUe error : %+v", err)
 		}
 	}
