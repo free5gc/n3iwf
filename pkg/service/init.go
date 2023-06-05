@@ -161,7 +161,6 @@ func (a *N3iwfApp) WaitRoutineStopped(n3iwfContext *n3iwf_context.N3IWFContext) 
 	// Waiting for negotiatioon with netlink for deleting interfaces
 	a.Terminate(n3iwfContext)
 	time.Sleep(2 * time.Second)
-	os.Exit(0)
 }
 
 func (a *N3iwfApp) InitDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFContext) error {
