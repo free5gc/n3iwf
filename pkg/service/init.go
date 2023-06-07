@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"syscall"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
@@ -160,8 +159,6 @@ func (a *N3iwfApp) WaitRoutineStopped(n3iwfContext *n3iwf_context.N3IWFContext) 
 	n3iwfContext.Wg.Wait()
 	// Waiting for negotiatioon with netlink for deleting interfaces
 	a.Terminate(n3iwfContext)
-	time.Sleep(2 * time.Second)
-	os.Exit(0)
 }
 
 func (a *N3iwfApp) InitDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFContext) error {
