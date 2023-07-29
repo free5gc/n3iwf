@@ -33,7 +33,7 @@ func InitConfigFactory(f string, cfg *Config) error {
 		}
 	}
 
-	//change sd to lowercase
+	// change sd to lowercase
 	SupportedTAList := cfg.Configuration.N3IWFInfo.SupportedTAList
 	for i := range SupportedTAList {
 		BroadcastPLMNList := SupportedTAList[i].BroadcastPLMNList
