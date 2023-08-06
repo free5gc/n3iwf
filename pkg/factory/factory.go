@@ -7,7 +7,6 @@ package factory
 import (
 	"fmt"
 	"io/ioutil"
-	"strings"
 
 	"github.com/asaskevich/govalidator"
 	yaml "gopkg.in/yaml.v2"
@@ -30,18 +29,6 @@ func InitConfigFactory(f string, cfg *Config) error {
 		logger.CfgLog.Infof("Read config from [%s]", f)
 		if yamlErr := yaml.Unmarshal(content, cfg); yamlErr != nil {
 			return fmt.Errorf("[Factory] %+v", yamlErr)
-		}
-	}
-
-	// change sd to lowercase
-	SupportedTAList := cfg.Configuration.N3IWFInfo.SupportedTAList
-	for i := range SupportedTAList {
-		BroadcastPLMNList := SupportedTAList[i].BroadcastPLMNList
-		for j := range BroadcastPLMNList {
-			TAISliceSupportList := BroadcastPLMNList[j].TAISliceSupportList
-			for k := range TAISliceSupportList {
-				TAISliceSupportList[k].SNSSAI.SD = strings.ToLower(TAISliceSupportList[k].SNSSAI.SD)
-			}
 		}
 	}
 
