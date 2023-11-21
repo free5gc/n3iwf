@@ -7,14 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/free5gc/sctp"
-
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap"
 	"github.com/free5gc/n3iwf/internal/ngap/handler"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
 	"github.com/free5gc/n3iwf/pkg/context"
 	lib_ngap "github.com/free5gc/ngap"
+	"github.com/free5gc/sctp"
 )
 
 var (

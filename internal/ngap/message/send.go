@@ -3,11 +3,10 @@ package message
 import (
 	"runtime/debug"
 
-	"github.com/free5gc/sctp"
-
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/sctp"
 )
 
 func SendToAmf(amf *context.N3IWFAMF, pkt []byte) {

@@ -3,13 +3,12 @@ package ngap
 import (
 	"runtime/debug"
 
-	"github.com/free5gc/sctp"
-
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/handler"
 	"github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/ngap"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/sctp"
 )
 
 func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
