@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"git.cs.nctu.edu.tw/calee/sctp"
+	"github.com/free5gc/sctp"
 
 	"github.com/free5gc/aper"
 	"github.com/free5gc/ngap/ngapConvert"

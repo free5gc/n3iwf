@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"git.cs.nctu.edu.tw/calee/sctp"
+	"github.com/free5gc/sctp"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 	"golang.org/x/net/ipv4"
 

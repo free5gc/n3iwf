@@ -3,7 +3,7 @@ package message
 import (
 	"runtime/debug"
 
-	"git.cs.nctu.edu.tw/calee/sctp"
+	"github.com/free5gc/sctp"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/context"

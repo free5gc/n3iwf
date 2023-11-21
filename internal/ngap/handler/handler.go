@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"git.cs.nctu.edu.tw/calee/sctp"
+	"github.com/free5gc/sctp"
 
 	"github.com/free5gc/aper"
 	gtp_service "github.com/free5gc/n3iwf/internal/gtp/service"
