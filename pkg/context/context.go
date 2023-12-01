@@ -15,13 +15,13 @@ import (
 	"strings"
 	"sync"
 
-	"git.cs.nctu.edu.tw/calee/sctp"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 	"golang.org/x/net/ipv4"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/factory"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/sctp"
 	"github.com/free5gc/util/idgenerator"
 )
 

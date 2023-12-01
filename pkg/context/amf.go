@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"fmt"
 
-	"git.cs.nctu.edu.tw/calee/sctp"
-
 	"github.com/free5gc/aper"
 	"github.com/free5gc/ngap/ngapConvert"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/sctp"
 )
 
 type N3IWFAMF struct {
