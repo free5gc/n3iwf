@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net"
 	"runtime/debug"
 
@@ -14,15 +15,38 @@ import (
 	n3iwfContext "github.com/free5gc/n3iwf/pkg/context"
 )
 
-// Parse the fields not supported by go-gtp and forward data to UE.
-func HandleQoSTPDU(c gtp.Conn, senderAddr net.Addr, msg gtpMsg.Message) error {
-	pdu := gtpQoSMsg.QoSTPDUPacket{}
-	if err := pdu.Unmarshal(msg.(*gtpMsg.TPDU)); err != nil {
-		return err
+func worker(ctx context.Context, queue chan gtpMsg.Message) {
+	for {
+		select {
+		case m := <-queue:
+			pdu := gtpQoSMsg.QoSTPDUPacket{}
+			if err := pdu.Unmarshal(m.(*gtpMsg.TPDU)); err != nil {
+				logger.GTPLog.Errorf("Unmarshal QoSTPDU failed: %+v", err)
+				continue
+			}
+			forward(pdu)
+		case <-ctx.Done():
+			return
+		}
 	}
+}
 
-	forward(pdu)
-	return nil
+func NewPool(workerNum int) (chan gtpMsg.Message, context.CancelFunc) {
+	var queue chan gtpMsg.Message = make(chan gtpMsg.Message, 100)
+	ctx, cancel := context.WithCancel(context.Background())
+	for i := 0; i < workerNum; i++ {
+		go worker(ctx, queue)
+	}
+	return queue, cancel
+}
+
+// Parse the fields not supported by go-gtp and forward data to UE.
+func HandleQoSTPDU(q chan gtpMsg.Message) func(c gtp.Conn, senderAddr net.Addr,
+	msg gtpMsg.Message) error {
+	return func(c gtp.Conn, senderAddr net.Addr, msg gtpMsg.Message) error {
+		q <- msg
+		return nil
+	}
 }
 
 // Forward user plane packets from N3 to UE with GRE header and new IP header encapsulated

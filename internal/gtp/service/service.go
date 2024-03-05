@@ -44,8 +44,9 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) 
 		return nil, nil, errors.New("Dial failed")
 	}
 
+	q, _ := handler.NewPool(10)
 	// Overwrite T-PDU handler for supporting extension header containing QoS parameters
-	userPlaneConnection.AddHandler(gtpMsg.MsgTypeTPDU, handler.HandleQoSTPDU)
+	userPlaneConnection.AddHandler(gtpMsg.MsgTypeTPDU, handler.HandleQoSTPDU(q))
 
 	return userPlaneConnection, remoteUDPAddr, nil
 }
