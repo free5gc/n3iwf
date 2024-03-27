@@ -5,9 +5,9 @@ go 1.17
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/free5gc/aper v1.0.5
-	github.com/free5gc/ngap v1.0.7
+	github.com/free5gc/ngap v1.0.8
 	github.com/free5gc/sctp v1.0.0
-	github.com/free5gc/util v1.0.5
+	github.com/free5gc/util v1.0.6
 	github.com/sirupsen/logrus v1.8.1
 	github.com/urfave/cli v1.22.5
 	github.com/vishvananda/netlink v1.1.0
@@ -22,7 +22,7 @@ require (
 	github.com/bytedance/sonic v1.9.1 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d // indirect
-	github.com/free5gc/openapi v1.0.6 // indirect
+	github.com/free5gc/openapi v1.0.8 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/gin-gonic/gin v1.9.1 // indirect
