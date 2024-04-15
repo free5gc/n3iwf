@@ -76,7 +76,7 @@ func UnmarshalEAP5GData(codedData []byte) (anParameters *ANParameters, nasPDU []
 							guamiField = append(guamiField, parameterValue...)
 							// Decode GUAMI using aper
 							ngapGUAMI := new(ngapType.GUAMI)
-							err := aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
+							err = aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
 							if err != nil {
 								logger.NgapLog.Errorf("APER unmarshal with parameter failed: %+v", err)
 								return nil, nil, errors.New("Unmarshal failed when decoding GUAMI")
@@ -109,7 +109,7 @@ func UnmarshalEAP5GData(codedData []byte) (anParameters *ANParameters, nasPDU []
 							plmnField = append(plmnField, parameterValue...)
 							// Decode PLMN using aper
 							ngapPLMN := new(ngapType.PLMNIdentity)
-							err := aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
+							err = aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
 							if err != nil {
 								logger.NgapLog.Errorf("APER unmarshal with parameter failed: %v", err)
 								return nil, nil, errors.New("Unmarshal failed when decoding PLMN")
@@ -275,7 +275,7 @@ func UnmarshalEAP5GData(codedData []byte) (anParameters *ANParameters, nasPDU []
 			return nil, nil, errors.New("Error formatting")
 		}
 
-		return
+		return anParameters, nasPDU, err
 	} else {
 		return nil, nil, errors.New("No data to decode")
 	}

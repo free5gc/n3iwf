@@ -116,7 +116,7 @@ func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte,
 		}
 	default:
 		logger.IKELog.Errorf("Unsupported Diffie-Hellman group: %d", diffieHellmanGroupNumber)
-		return
+		return localPublicValue, sharedKey
 	}
 
 	localPublicValue = new(big.Int).Exp(generator, secret, factor).Bytes()
