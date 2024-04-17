@@ -27,7 +27,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 		eap5GMessageID = codedData[0]
 		logger.IKELog.Debugf("Message-Id: %d", eap5GMessageID)
 		if eap5GMessageID == message.EAP5GType5GStop {
-			return
+			return eap5GMessageID, anParameters, nasPDU, err
 		}
 
 		codedData = codedData[2:]
@@ -83,7 +83,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							guamiField = append(guamiField, parameterValue...)
 							// Decode GUAMI using aper
 							ngapGUAMI := new(ngapType.GUAMI)
-							err := aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
+							err = aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
 							if err != nil {
 								logger.IKELog.Errorf("APER unmarshal with parameter failed: %+v", err)
 								return 0, nil, nil, errors.New("Unmarshal failed when decoding GUAMI")
@@ -116,7 +116,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 							plmnField = append(plmnField, parameterValue...)
 							// Decode PLMN using aper
 							ngapPLMN := new(ngapType.PLMNIdentity)
-							err := aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
+							err = aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
 							if err != nil {
 								logger.IKELog.Errorf("APER unmarshal with parameter failed: %v", err)
 								return 0, nil, nil, errors.New("Unmarshal failed when decoding PLMN")
@@ -281,8 +281,7 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 			logger.IKELog.Error("No NASPDU length specified")
 			return 0, nil, nil, errors.New("Error formatting")
 		}
-
-		return
+		return eap5GMessageID, anParameters, nasPDU, err
 	} else {
 		return 0, nil, nil, errors.New("No data to decode")
 	}

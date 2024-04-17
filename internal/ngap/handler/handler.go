@@ -1715,7 +1715,7 @@ func handlePDUSessionResourceModifyRequestTransfer(
 		}
 
 		responseTransfer = unsuccessfulTransfer
-		return
+		return success, responseTransfer
 	}
 
 	if ulNGUUPTNLModifyList != nil {
