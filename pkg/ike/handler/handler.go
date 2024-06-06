@@ -1777,6 +1777,7 @@ func CreatePDUSessionChildSA(ikeUe *context.N3IWFIkeUe,
 
 			// Notify-Qos
 			ikePayload.BuildNotify5G_QOS_INFO(uint8(pduSessionID), pduSession.QFIList, true, false, 0)
+			logger.IKELog.Infoln("pduSession", pduSessionID, "QFIList:", pduSession.QFIList)
 
 			// Notify-UP_IP_ADDRESS
 			ikePayload.BuildNotifyUP_IP4_ADDRESS(n3iwfSelf.IPSecGatewayAddress)

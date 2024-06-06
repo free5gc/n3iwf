@@ -431,3 +431,11 @@ func (ranUe *N3IWFRanUe) DetachAMF() {
 	}
 	delete(ranUe.AMF.N3iwfRanUeList, ranUe.RanUeNgapId)
 }
+
+func (pdusession PDUSession) MaxQFI() uint8 {
+	var maxQfi uint8 = 0
+	for _, qfi := range pdusession.QFIList {
+		maxQfi = max(maxQfi, qfi)
+	}
+	return maxQfi
+}

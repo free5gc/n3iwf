@@ -56,6 +56,10 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 		return
 	}
 
+	// The QFI field of the GRE header is set to the QFI associated with the user data packet
+	// [Implement] we use the largest QFI in this PDU session as key
+	var tunnelKey uint8 = 0
+
 	// UE inner IP in IPSec
 	ueInnerIPAddr := ikeUe.IPSecInnerIPAddr
 
@@ -68,6 +72,7 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 			cm = &ipv4.ControlMessage{
 				IfIndex: childSA.XfrmIface.Attrs().Index,
 			}
+			tunnelKey = pdusession.MaxQFI()
 			break
 		}
 	}
@@ -81,6 +86,11 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 	if packet.HasQoS() {
 		qfi, rqi = packet.GetQoSParameters()
 		logger.GTPLog.Tracef("QFI: %v, RQI: %v", qfi, rqi)
+	}
+
+	if tunnelKey != uint8(0) {
+		// [Implement] we use the largest QFI in this PDU session as tunnel key
+		qfi = tunnelKey
 	}
 
 	// Encasulate IPv4 packet with GRE header before forward to UE through IPsec
