@@ -80,6 +80,7 @@ const (
 	PRF_HMAC_MD5 = iota + 1
 	PRF_HMAC_SHA1
 	PRF_HMAC_TIGER
+	PRF_HMAC_SHA2_256 = 5
 )
 
 const (
@@ -89,6 +90,7 @@ const (
 	AUTH_DES_MAC
 	AUTH_KPDK_MD5
 	AUTH_AES_XCBC_96
+	AUTH_HMAC_SHA2_256_128 = 12
 )
 
 const (

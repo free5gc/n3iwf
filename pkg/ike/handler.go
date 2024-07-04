@@ -103,7 +103,7 @@ func (s *Server) HandleIKESAINIT(
 
 			if len(proposal.EncryptionAlgorithm) > 0 {
 				for _, transform := range proposal.EncryptionAlgorithm {
-					if is_supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID,
+					if isTransformSupported(ike_message.TypeEncryptionAlgorithm, transform.TransformID,
 						transform.AttributePresent, transform.AttributeValue) {
 						encryptionAlgorithmTransform = transform
 						break
@@ -117,7 +117,7 @@ func (s *Server) HandleIKESAINIT(
 			}
 			if len(proposal.PseudorandomFunction) > 0 {
 				for _, transform := range proposal.PseudorandomFunction {
-					if is_supported(ike_message.TypePseudorandomFunction, transform.TransformID,
+					if isTransformSupported(ike_message.TypePseudorandomFunction, transform.TransformID,
 						transform.AttributePresent, transform.AttributeValue) {
 						pseudorandomFunctionTransform = transform
 						break
@@ -131,7 +131,7 @@ func (s *Server) HandleIKESAINIT(
 			}
 			if len(proposal.IntegrityAlgorithm) > 0 {
 				for _, transform := range proposal.IntegrityAlgorithm {
-					if is_supported(ike_message.TypeIntegrityAlgorithm, transform.TransformID,
+					if isTransformSupported(ike_message.TypeIntegrityAlgorithm, transform.TransformID,
 						transform.AttributePresent, transform.AttributeValue) {
 						integrityAlgorithmTransform = transform
 						break
@@ -145,7 +145,7 @@ func (s *Server) HandleIKESAINIT(
 			}
 			if len(proposal.DiffieHellmanGroup) > 0 {
 				for _, transform := range proposal.DiffieHellmanGroup {
-					if is_supported(ike_message.TypeDiffieHellmanGroup, transform.TransformID,
+					if isTransformSupported(ike_message.TypeDiffieHellmanGroup, transform.TransformID,
 						transform.AttributePresent, transform.AttributeValue) {
 						diffieHellmanGroupTransform = transform
 						break
@@ -572,7 +572,7 @@ func (s *Server) HandleIKEAUTH(
 
 				if len(proposal.EncryptionAlgorithm) > 0 {
 					for _, transform := range proposal.EncryptionAlgorithm {
-						if is_Kernel_Supported(ike_message.TypeEncryptionAlgorithm, transform.TransformID,
+						if isTransformKernelSupported(ike_message.TypeEncryptionAlgorithm, transform.TransformID,
 							transform.AttributePresent, transform.AttributeValue) {
 							encryptionAlgorithmTransform = transform
 							break
@@ -589,7 +589,7 @@ func (s *Server) HandleIKEAUTH(
 				}
 				if len(proposal.IntegrityAlgorithm) > 0 {
 					for _, transform := range proposal.IntegrityAlgorithm {
-						if is_Kernel_Supported(ike_message.TypeIntegrityAlgorithm, transform.TransformID,
+						if isTransformKernelSupported(ike_message.TypeIntegrityAlgorithm, transform.TransformID,
 							transform.AttributePresent, transform.AttributeValue) {
 							integrityAlgorithmTransform = transform
 							break
@@ -601,7 +601,7 @@ func (s *Server) HandleIKEAUTH(
 				} // Optional
 				if len(proposal.DiffieHellmanGroup) > 0 {
 					for _, transform := range proposal.DiffieHellmanGroup {
-						if is_Kernel_Supported(ike_message.TypeDiffieHellmanGroup, transform.TransformID,
+						if isTransformKernelSupported(ike_message.TypeDiffieHellmanGroup, transform.TransformID,
 							transform.AttributePresent, transform.AttributeValue) {
 							diffieHellmanGroupTransform = transform
 							break
@@ -613,7 +613,7 @@ func (s *Server) HandleIKEAUTH(
 				} // Optional
 				if len(proposal.ExtendedSequenceNumbers) > 0 {
 					for _, transform := range proposal.ExtendedSequenceNumbers {
-						if is_Kernel_Supported(ike_message.TypeExtendedSequenceNumbers, transform.TransformID,
+						if isTransformKernelSupported(ike_message.TypeExtendedSequenceNumbers, transform.TransformID,
 							transform.AttributePresent, transform.AttributeValue) {
 							extendedSequenceNumbersTransform = transform
 							break
@@ -1835,7 +1835,7 @@ func (s *Server) CreatePDUSessionChildSA(
 			// Integrity transform
 			if pduSession.SecurityIntegrity {
 				proposal.IntegrityAlgorithm.BuildTransform(ike_message.TypeIntegrityAlgorithm,
-					ike_message.AUTH_HMAC_SHA1_96, nil, nil, nil)
+					ikeUe.N3IWFIKESecurityAssociation.IntegrityAlgorithm.TransformID, nil, nil, nil)
 			}
 
 			// RFC 7296
@@ -1952,7 +1952,12 @@ func (s *Server) StartDPD(ikeUe *n3iwf_context.N3IWFIkeUe) {
 	}
 }
 
-func is_supported(transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16) bool {
+func isTransformSupported(
+	transformType uint8,
+	transformID uint16,
+	attributePresent bool,
+	attributeValue uint16,
+) bool {
 	switch transformType {
 	case ike_message.TypeEncryptionAlgorithm:
 		switch transformID {
@@ -2004,6 +2009,8 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 			return true
 		case ike_message.PRF_HMAC_TIGER:
 			return false
+		case ike_message.PRF_HMAC_SHA2_256:
+			return true
 		default:
 			return false
 		}
@@ -2021,6 +2028,8 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 			return false
 		case ike_message.AUTH_AES_XCBC_96:
 			return false
+		case ike_message.AUTH_HMAC_SHA2_256_128:
+			return true
 		default:
 			return false
 		}
@@ -2052,8 +2061,11 @@ func is_supported(transformType uint8, transformID uint16, attributePresent bool
 	}
 }
 
-func is_Kernel_Supported(
-	transformType uint8, transformID uint16, attributePresent bool, attributeValue uint16,
+func isTransformKernelSupported(
+	transformType uint8,
+	transformID uint16,
+	attributePresent bool,
+	attributeValue uint16,
 ) bool {
 	switch transformType {
 	case ike_message.TypeEncryptionAlgorithm:
@@ -2135,6 +2147,8 @@ func is_Kernel_Supported(
 		case ike_message.AUTH_KPDK_MD5:
 			return false
 		case ike_message.AUTH_AES_XCBC_96:
+			return true
+		case ike_message.AUTH_HMAC_SHA2_256_128:
 			return true
 		default:
 			return false

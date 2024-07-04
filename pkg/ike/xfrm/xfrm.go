@@ -45,6 +45,8 @@ func (xfrmIntegrityAlgorithmType XFRMIntegrityAlgorithmType) String() string {
 		return "hmac(sha1)"
 	case message.AUTH_AES_XCBC_96:
 		return "xcbc(aes)"
+	case message.AUTH_HMAC_SHA2_256_128:
+		return "hmac(sha256)"
 	default:
 		return ""
 	}
@@ -66,8 +68,9 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 		}
 		if childSecurityAssociation.IntegrityAlgorithm != 0 {
 			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
-				Name: XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
-				Key:  childSecurityAssociation.ResponderToInitiatorIntegrityKey,
+				Name:        XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
+				Key:         childSecurityAssociation.ResponderToInitiatorIntegrityKey,
+				TruncateLen: getTruncateLength(childSecurityAssociation.IntegrityAlgorithm),
 			}
 		}
 	} else {
@@ -77,8 +80,9 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 		}
 		if childSecurityAssociation.IntegrityAlgorithm != 0 {
 			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
-				Name: XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
-				Key:  childSecurityAssociation.InitiatorToResponderIntegrityKey,
+				Name:        XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
+				Key:         childSecurityAssociation.InitiatorToResponderIntegrityKey,
+				TruncateLen: getTruncateLength(childSecurityAssociation.IntegrityAlgorithm),
 			}
 		}
 	}
@@ -275,4 +279,17 @@ func SetupIPsecXfrmi(xfrmIfaceName, parentIfaceName string, xfrmIfaceId uint32,
 	}
 
 	return xfrmi, nil
+}
+
+func getTruncateLength(transformID uint16) int {
+	switch transformID {
+	case message.AUTH_HMAC_MD5_96:
+		return 96
+	case message.AUTH_HMAC_SHA1_96:
+		return 96
+	case message.AUTH_HMAC_SHA2_256_128:
+		return 128
+	default:
+		return 96
+	}
 }
