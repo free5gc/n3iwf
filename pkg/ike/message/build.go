@@ -243,8 +243,9 @@ func (container *IKEPayloadContainer) BuildEAP5GStart(identifier uint8) {
 }
 
 func (container *IKEPayloadContainer) BuildEAP5GNAS(identifier uint8, nasPDU []byte) {
+	ikeLog := logger.IKELog
 	if len(nasPDU) == 0 {
-		logger.IKELog.Error("BuildEAP5GNAS(): NASPDU is nil")
+		ikeLog.Error("BuildEAP5GNAS(): NASPDU is nil")
 		return
 	}
 

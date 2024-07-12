@@ -13,11 +13,12 @@ import (
 )
 
 func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, message *ike_message.IKEMessage) {
-	logger.IKELog.Trace("Send IKE message to UE")
-	logger.IKELog.Trace("Encoding...")
+	ikeLog := logger.IKELog
+	ikeLog.Trace("Send IKE message to UE")
+	ikeLog.Trace("Encoding...")
 	pkt, err := message.Encode()
 	if err != nil {
-		logger.IKELog.Errorln(err)
+		ikeLog.Errorln(err)
 		return
 	}
 	// As specified in RFC 7296 section 3.1, the IKE message send from/to UDP port 4500
@@ -27,14 +28,14 @@ func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, mes
 		pkt = append(prependZero, pkt...)
 	}
 
-	logger.IKELog.Trace("Sending...")
+	ikeLog.Trace("Sending...")
 	n, err := udpConn.WriteToUDP(pkt, dstAddr)
 	if err != nil {
-		logger.IKELog.Error(err)
+		ikeLog.Error(err)
 		return
 	}
 	if n != len(pkt) {
-		logger.IKELog.Errorf("Not all of the data is sent. Total length: %d. Sent: %d.", len(pkt), n)
+		ikeLog.Errorf("Not all of the data is sent. Total length: %d. Sent: %d.", len(pkt), n)
 		return
 	}
 }
@@ -42,6 +43,7 @@ func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, mes
 func SendUEInformationExchange(
 	ikeUe *context.N3IWFIkeUe, payload ike_message.IKEPayloadContainer,
 ) {
+	ikeLog := logger.IKELog
 	ikeSecurityAssociation := ikeUe.N3IWFIKESecurityAssociation
 	responseIKEMessage := new(ike_message.IKEMessage)
 
@@ -51,7 +53,7 @@ func SendUEInformationExchange(
 		ikeSecurityAssociation.ResponderMessageID)
 	if payload != nil { // This message isn't a DPD message
 		if err := EncryptProcedure(ikeSecurityAssociation, payload, responseIKEMessage); err != nil {
-			logger.IKELog.Errorf("Encrypting IKE message failed: %+v", err)
+			ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
 			return
 		}
 	}
@@ -60,9 +62,10 @@ func SendUEInformationExchange(
 }
 
 func SendIKEDeleteRequest(localSPI uint64) {
+	ikeLog := logger.IKELog
 	ikeUe, ok := context.N3IWFSelf().IkeUePoolLoad(localSPI)
 	if !ok {
-		logger.IKELog.Errorf("Cannot get IkeUE from SPI : %+v", localSPI)
+		ikeLog.Errorf("Cannot get IkeUE from SPI : %+v", localSPI)
 		return
 	}
 
@@ -72,6 +75,7 @@ func SendIKEDeleteRequest(localSPI uint64) {
 }
 
 func SendChildSADeleteRequest(ikeUe *context.N3IWFIkeUe, relaseList []int64) {
+	ikeLog := logger.IKELog
 	var deleteSPIs []byte
 	spiLen := uint16(0)
 	for _, releaseItem := range relaseList {
@@ -82,7 +86,7 @@ func SendChildSADeleteRequest(ikeUe *context.N3IWFIkeUe, relaseList []int64) {
 				deleteSPIs = append(deleteSPIs, spiByte...)
 				spiLen += 1
 				if err := ikeUe.DeleteChildSA(childSA); err != nil {
-					logger.IKELog.Errorf("Delete Child SA error : %+v", err)
+					ikeLog.Errorf("Delete Child SA error : %+v", err)
 				}
 			}
 		}
@@ -94,10 +98,11 @@ func SendChildSADeleteRequest(ikeUe *context.N3IWFIkeUe, relaseList []int64) {
 }
 
 func StartDPD(ikeUe *context.N3IWFIkeUe) {
+	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.IKELog.Errorf("panic: %v\n%s", p, string(debug.Stack()))
+			ikeLog.Errorf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 	}()
 
@@ -120,10 +125,10 @@ func StartDPD(ikeUe *context.N3IWFIkeUe) {
 				var DPDReqRetransTime time.Duration = 2 * time.Second
 				ikeUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = context.NewDPDPeriodicTimer(DPDReqRetransTime,
 					liveness.MaxRetryTimes, ikeUe.N3IWFIKESecurityAssociation, func() {
-						logger.IKELog.Errorf("UE is down")
+						ikeLog.Errorf("UE is down")
 						ranNgapId, ok := n3iwfSelf.NgapIdLoad(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
 						if !ok {
-							logger.IKELog.Infof("Cannot find ranNgapId form SPI : %+v", ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
+							ikeLog.Infof("Cannot find ranNgapId form SPI : %+v", ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
 							return
 						}
 

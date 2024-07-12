@@ -65,13 +65,14 @@ func BuildNGSetupRequest() ([]byte, error) {
 
 	supportedTAList := ie.Value.SupportedTAList
 
+	ngapLog := logger.NgapLog
 	for _, supportedTAItemLocal := range n3iwfSelf.NFInfo.SupportedTAList {
 		// SupportedTAItem in SupportedTAList
 		supportedTAItem := ngapType.SupportedTAItem{}
 		var err error
 		supportedTAItem.TAC.Value, err = hex.DecodeString(supportedTAItemLocal.TAC)
 		if err != nil {
-			logger.NgapLog.Errorf("DecodeString error: %+v", err)
+			ngapLog.Errorf("DecodeString error: %+v", err)
 		}
 
 		broadcastPLMNList := &supportedTAItem.BroadcastPLMNList
@@ -88,14 +89,14 @@ func BuildNGSetupRequest() ([]byte, error) {
 				sliceSupportItem := ngapType.SliceSupportItem{}
 				sliceSupportItem.SNSSAI.SST.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SST)
 				if err != nil {
-					logger.NgapLog.Errorf("DecodeString error: %+v", err)
+					ngapLog.Errorf("DecodeString error: %+v", err)
 				}
 
 				if sliceSupportItemLocal.SNSSAI.SD != "" {
 					sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
 					sliceSupportItem.SNSSAI.SD.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SD)
 					if err != nil {
-						logger.NgapLog.Errorf("DecodeString error: %+v", err)
+						ngapLog.Errorf("DecodeString error: %+v", err)
 					}
 				}
 
@@ -655,6 +656,8 @@ func BuildUEContextReleaseRequest(ranUe *context.N3IWFRanUe, cause ngapType.Caus
 func BuildInitialUEMessage(ranUe *context.N3IWFRanUe, nasPdu []byte,
 	allowedNSSAI *ngapType.AllowedNSSAI,
 ) ([]byte, error) {
+	ngapLog := logger.NgapLog
+
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -749,7 +752,7 @@ func BuildInitialUEMessage(ranUe *context.N3IWFRanUe, nasPdu []byte,
 		var err error
 		fiveGSTMSI.FiveGTMSI.Value, err = hex.DecodeString(tmsi)
 		if err != nil {
-			logger.NgapLog.Errorf("DecodeString error: %+v", err)
+			ngapLog.Errorf("DecodeString error: %+v", err)
 		}
 		initialUEMessageIEs.List = append(initialUEMessageIEs.List, ie)
 	}
@@ -1613,6 +1616,8 @@ func BuildAMFConfigurationUpdateFailure(
 }
 
 func BuildRANConfigurationUpdate() ([]byte, error) {
+	ngapLog := logger.NgapLog
+
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -1658,7 +1663,7 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 			var err error
 			supportedTAItem.TAC.Value, err = hex.DecodeString(supportedTAItemLocal.TAC)
 			if err != nil {
-				logger.NgapLog.Errorf("DecodeString error: %+v", err)
+				ngapLog.Errorf("DecodeString error: %+v", err)
 			}
 
 			broadcastPLMNList := &supportedTAItem.BroadcastPLMNList
@@ -1675,14 +1680,14 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 					sliceSupportItem := ngapType.SliceSupportItem{}
 					sliceSupportItem.SNSSAI.SST.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SST)
 					if err != nil {
-						logger.NgapLog.Errorf("DecodeString error: %+v", err)
+						ngapLog.Errorf("DecodeString error: %+v", err)
 					}
 
 					if sliceSupportItemLocal.SNSSAI.SD != "" {
 						sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
 						sliceSupportItem.SNSSAI.SD.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SD)
 						if err != nil {
-							logger.NgapLog.Errorf("DecodeString error: %+v", err)
+							ngapLog.Errorf("DecodeString error: %+v", err)
 						}
 					}
 

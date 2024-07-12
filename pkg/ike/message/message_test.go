@@ -275,11 +275,11 @@ func TestEncodeDecode(t *testing.T) {
 	testEAP.Code = 1
 	testEAP.Identifier = 123
 
-	testEAPExpanded := new(EAPExpanded)
-
-	testEAPExpanded.VendorID = 26838
-	testEAPExpanded.VendorType = 1
-	testEAPExpanded.VendorData = []byte{9, 4, 8, 7}
+	// testEAPExpanded := &EAPExpanded{
+	// 	VendorID:   26838,
+	// 	VendorType: 1,
+	// 	VendorData: []byte{9, 4, 8, 7},
+	// }
 
 	testEAPNotification := new(EAPNotification)
 

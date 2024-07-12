@@ -18,18 +18,19 @@ var (
 )
 
 func Run(wg *sync.WaitGroup) error {
+	ikeLog := logger.IKELog
 	n3iwfSelf := context.N3IWFSelf()
 
 	// Resolve UDP addresses
 	ip := n3iwfSelf.IKEBindAddress
 	udpAddrPort500, err := net.ResolveUDPAddr("udp", ip+":500")
 	if err != nil {
-		logger.IKELog.Errorf("Resolve UDP address failed: %+v", err)
+		ikeLog.Errorf("Resolve UDP address failed: %+v", err)
 		return errors.New("IKE service run failed")
 	}
 	udpAddrPort4500, err := net.ResolveUDPAddr("udp", ip+":4500")
 	if err != nil {
-		logger.IKELog.Errorf("Resolve UDP address failed: %+v", err)
+		ikeLog.Errorf("Resolve UDP address failed: %+v", err)
 		return errors.New("IKE service run failed")
 	}
 
@@ -43,7 +44,7 @@ func Run(wg *sync.WaitGroup) error {
 	errChan = make(chan error)
 	go Receiver(udpAddrPort500, n3iwfSelf.IKEServer, errChan, wg)
 	if err, ok := <-errChan; ok {
-		logger.IKELog.Errorln(err)
+		ikeLog.Errorln(err)
 		return errors.New("IKE service run failed")
 	}
 
@@ -52,7 +53,7 @@ func Run(wg *sync.WaitGroup) error {
 	errChan = make(chan error)
 	go Receiver(udpAddrPort4500, n3iwfSelf.IKEServer, errChan, wg)
 	if err, ok := <-errChan; ok {
-		logger.IKELog.Errorln(err)
+		ikeLog.Errorln(err)
 		return errors.New("IKE service run failed")
 	}
 
@@ -72,12 +73,13 @@ func NewIKEServer() *context.IkeServer {
 }
 
 func server(ikeServer *context.IkeServer, wg *sync.WaitGroup) {
+	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.IKELog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			ikeLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
-		logger.IKELog.Infof("Ike server stopped")
+		ikeLog.Infof("Ike server stopped")
 		close(ikeServer.RcvIkePktCh)
 		close(ikeServer.StopServer)
 		wg.Done()
@@ -86,7 +88,7 @@ func server(ikeServer *context.IkeServer, wg *sync.WaitGroup) {
 	for {
 		select {
 		case rcvPkt := <-ikeServer.RcvIkePktCh:
-			logger.IKELog.Tracef("Receive IKE packet")
+			ikeLog.Tracef("Receive IKE packet")
 			ike.IkeDispatch(&rcvPkt.Listener, &rcvPkt.LocalAddr, &rcvPkt.RemoteAddr, rcvPkt.Msg)
 		case rcvIkeEvent := <-ikeServer.RcvEventCh:
 			handler.HandleEvent(rcvIkeEvent)
@@ -97,18 +99,19 @@ func server(ikeServer *context.IkeServer, wg *sync.WaitGroup) {
 }
 
 func Receiver(localAddr *net.UDPAddr, ikeServer *context.IkeServer, errChan chan<- error, wg *sync.WaitGroup) {
+	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.IKELog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			ikeLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
-		logger.IKELog.Infof("Ike receiver stopped")
+		ikeLog.Infof("Ike receiver stopped")
 		wg.Done()
 	}()
 
 	listener, err := net.ListenUDP("udp", localAddr)
 	if err != nil {
-		logger.IKELog.Errorf("Listen UDP failed: %+v", err)
+		ikeLog.Errorf("Listen UDP failed: %+v", err)
 		errChan <- errors.New("listenAndServe failed")
 		return
 	}
@@ -122,7 +125,7 @@ func Receiver(localAddr *net.UDPAddr, ikeServer *context.IkeServer, errChan chan
 	for {
 		n, remoteAddr, err := listener.ReadFromUDP(data)
 		if err != nil {
-			logger.IKELog.Errorf("ReadFromUDP failed: %+v", err)
+			ikeLog.Errorf("ReadFromUDP failed: %+v", err)
 			return
 		}
 
@@ -138,11 +141,12 @@ func Receiver(localAddr *net.UDPAddr, ikeServer *context.IkeServer, errChan chan
 }
 
 func Stop(n3iwfContext *context.N3IWFContext) {
-	logger.IKELog.Infof("Close Ike server...")
+	ikeLog := logger.IKELog
+	ikeLog.Infof("Close Ike server...")
 
 	for _, ikeServerListener := range n3iwfContext.IKEServer.Listener {
 		if err := ikeServerListener.Close(); err != nil {
-			logger.IKELog.Errorf("Stop ike server : %s error : %+v", err, ikeServerListener.LocalAddr().String())
+			ikeLog.Errorf("Stop ike server : %s error : %+v", err, ikeServerListener.LocalAddr().String())
 		}
 	}
 

@@ -12,10 +12,12 @@ import (
 )
 
 func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
+	ngapLog := logger.NgapLog
+
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.NgapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			ngapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 	}()
 
@@ -26,7 +28,7 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 	// Decode
 	pdu, err := ngap.Decoder(msg)
 	if err != nil {
-		logger.NgapLog.Errorf("NGAP decode error: %+v\n", err)
+		ngapLog.Errorf("NGAP decode error: %+v\n", err)
 		return
 	}
 
@@ -34,7 +36,7 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 	case ngapType.NGAPPDUPresentInitiatingMessage:
 		initiatingMessage := pdu.InitiatingMessage
 		if initiatingMessage == nil {
-			logger.NgapLog.Errorln("Initiating Message is nil")
+			ngapLog.Errorln("Initiating Message is nil")
 			return
 		}
 
@@ -76,13 +78,13 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 		case ngapType.ProcedureCodeOverloadStop:
 			handler.HandleOverloadStop(amf, pdu)
 		default:
-			logger.NgapLog.Warnf("Not implemented NGAP message(initiatingMessage), procedureCode:%d]\n",
+			ngapLog.Warnf("Not implemented NGAP message(initiatingMessage), procedureCode:%d]\n",
 				initiatingMessage.ProcedureCode.Value)
 		}
 	case ngapType.NGAPPDUPresentSuccessfulOutcome:
 		successfulOutcome := pdu.SuccessfulOutcome
 		if successfulOutcome == nil {
-			logger.NgapLog.Errorln("Successful Outcome is nil")
+			ngapLog.Errorln("Successful Outcome is nil")
 			return
 		}
 
@@ -96,13 +98,13 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 		case ngapType.ProcedureCodeRANConfigurationUpdate:
 			handler.HandleRANConfigurationUpdateAcknowledge(amf, pdu)
 		default:
-			logger.NgapLog.Warnf("Not implemented NGAP message(successfulOutcome), procedureCode:%d]\n",
+			ngapLog.Warnf("Not implemented NGAP message(successfulOutcome), procedureCode:%d]\n",
 				successfulOutcome.ProcedureCode.Value)
 		}
 	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
 		unsuccessfulOutcome := pdu.UnsuccessfulOutcome
 		if unsuccessfulOutcome == nil {
-			logger.NgapLog.Errorln("Unsuccessful Outcome is nil")
+			ngapLog.Errorln("Unsuccessful Outcome is nil")
 			return
 		}
 
@@ -112,7 +114,7 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 		case ngapType.ProcedureCodeRANConfigurationUpdate:
 			handler.HandleRANConfigurationUpdateFailure(amf, pdu)
 		default:
-			logger.NgapLog.Warnf("Not implemented NGAP message(unsuccessfulOutcome), procedureCode:%d]\n",
+			ngapLog.Warnf("Not implemented NGAP message(unsuccessfulOutcome), procedureCode:%d]\n",
 				unsuccessfulOutcome.ProcedureCode.Value)
 		}
 	}

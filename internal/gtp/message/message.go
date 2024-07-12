@@ -58,16 +58,18 @@ func (p *QoSTPDUPacket) Unmarshal(pdu *gtpMessage.TPDU) error {
 // [TS 38.415]
 // Define PDU Session User Plane protocol
 func (p *QoSTPDUPacket) unmarshalExtensionHeader() error {
+	gtpLog := logger.GTPLog
+
 	for _, eh := range p.tPDU.ExtensionHeaders {
 		switch eh.Type {
 		case gtpMessage.ExtHeaderTypePDUSessionContainer:
 			p.qos = true
 			p.rqi = ((int(eh.Content[1]) >> 6) & 0x1) == 1
 			p.qfi = eh.Content[1] & 0x3F
-			logger.GTPLog.Tracef("Parsed Extension Header: Len=%d, Next Type=%d, Content Dump:\n%s",
+			gtpLog.Tracef("Parsed Extension Header: Len=%d, Next Type=%d, Content Dump:\n%s",
 				eh.Length, eh.NextType, hex.Dump(eh.Content))
 		default:
-			logger.GTPLog.Warningf("Unsupported Extension Header Field Value: %x", eh.Type)
+			gtpLog.Warningf("Unsupported Extension Header Field Value: %x", eh.Type)
 		}
 	}
 

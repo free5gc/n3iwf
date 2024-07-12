@@ -20,6 +20,7 @@ import (
 // with UP_IP_ADDRESS, catching GRE encapsulated packets and forward
 // to N3 interface.
 func Run(wg *sync.WaitGroup) error {
+	nwuupLog := logger.NWuUPLog
 	// Local IPSec address
 	n3iwfSelf := context.N3IWFSelf()
 	listenAddr := n3iwfSelf.IPSecGatewayAddress
@@ -28,12 +29,12 @@ func Run(wg *sync.WaitGroup) error {
 	// This socket will only capture GRE encapsulated packet
 	connection, err := net.ListenPacket("ip4:gre", listenAddr)
 	if err != nil {
-		logger.NWuUPLog.Errorf("Error setting listen socket on %s: %+v", listenAddr, err)
+		nwuupLog.Errorf("Error setting listen socket on %s: %+v", listenAddr, err)
 		return errors.New("ListenPacket failed")
 	}
 	ipv4PacketConn := ipv4.NewPacketConn(connection)
-	if err != nil {
-		logger.NWuUPLog.Errorf("Error opening IPv4 packet connection socket on %s: %+v", listenAddr, err)
+	if ipv4PacketConn != nil {
+		nwuupLog.Errorf("Error opening IPv4 packet connection socket on %s", listenAddr)
 		return errors.New("NewPacketConn failed")
 	}
 
@@ -48,15 +49,16 @@ func Run(wg *sync.WaitGroup) error {
 // listenAndServe read from socket and call forward() to
 // forward packet.
 func listenAndServe(ipv4PacketConn *ipv4.PacketConn, wg *sync.WaitGroup) {
+	nwuupLog := logger.NWuUPLog
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.NWuUPLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			nwuupLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 
 		err := ipv4PacketConn.Close()
 		if err != nil {
-			logger.NWuUPLog.Errorf("Error closing raw socket: %+v", err)
+			nwuupLog.Errorf("Error closing raw socket: %+v", err)
 		}
 		wg.Done()
 	}()
@@ -64,15 +66,15 @@ func listenAndServe(ipv4PacketConn *ipv4.PacketConn, wg *sync.WaitGroup) {
 	buffer := make([]byte, 65535)
 
 	if err := ipv4PacketConn.SetControlMessage(ipv4.FlagInterface|ipv4.FlagTTL, true); err != nil {
-		logger.NWuUPLog.Errorf("Set control message visibility for IPv4 packet connection fail: %+v", err)
+		nwuupLog.Errorf("Set control message visibility for IPv4 packet connection fail: %+v", err)
 		return
 	}
 
 	for {
 		n, cm, src, err := ipv4PacketConn.ReadFrom(buffer)
-		logger.NWuUPLog.Tracef("Read %d bytes, %s", n, cm)
+		nwuupLog.Tracef("Read %d bytes, %s", n, cm)
 		if err != nil {
-			logger.NWuUPLog.Errorf("Error read from IPv4 packet connection: %+v", err)
+			nwuupLog.Errorf("Error read from IPv4 packet connection: %+v", err)
 			return
 		}
 
@@ -87,10 +89,11 @@ func listenAndServe(ipv4PacketConn *ipv4.PacketConn, wg *sync.WaitGroup) {
 // forward forwards user plane packets from NWu to UPF
 // with GTP header encapsulated
 func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) {
+	nwuupLog := logger.NWuUPLog
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.NWuUPLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			nwuupLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 		wg.Done()
 	}()
@@ -99,13 +102,13 @@ func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) 
 	self := context.N3IWFSelf()
 	ikeUe, ok := self.AllocatedUEIPAddressLoad(ueInnerIP)
 	if !ok {
-		logger.NWuUPLog.Error("Ike UE context not found")
+		nwuupLog.Error("Ike UE context not found")
 		return
 	}
 
 	ranUe, err := self.RanUeLoadFromIkeSPI(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
 	if err != nil {
-		logger.NWuUPLog.Error("ranUe not found")
+		nwuupLog.Error("ranUe not found")
 		return
 	}
 
@@ -121,7 +124,7 @@ func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) 
 	}
 
 	if pduSession == nil {
-		logger.NWuUPLog.Error("This UE doesn't have any available PDU session")
+		nwuupLog.Error("This UE doesn't have any available PDU session")
 		return
 	}
 
@@ -132,7 +135,7 @@ func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) 
 	// Decapsulate GRE header and extract QoS Parameters if exist
 	grePacket := gre.GREPacket{}
 	if err := grePacket.Unmarshal(rawData); err != nil {
-		logger.NWuUPLog.Errorf("gre Unmarshal err: %+v", err)
+		nwuupLog.Errorf("gre Unmarshal err: %+v", err)
 		return
 	}
 
@@ -148,31 +151,30 @@ func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) 
 		qfi := grePacket.GetQFI()
 		gtpPacket, err := buildQoSGTPPacket(gtpConnection.OutgoingTEID, qfi, payload)
 		if err != nil {
-			logger.NWuUPLog.Errorf("buildQoSGTPPacket err: %+v", err)
+			nwuupLog.Errorf("buildQoSGTPPacket err: %+v", err)
 			return
 		}
 
 		n, writeErr = userPlaneConnection.WriteTo(gtpPacket, gtpConnection.UPFUDPAddr)
 	} else {
-		logger.NWuUPLog.Warnf("Receive GRE header without key field specifying QFI and RQI.")
+		nwuupLog.Warnf("Receive GRE header without key field specifying QFI and RQI.")
 		n, writeErr = userPlaneConnection.WriteToGTP(gtpConnection.OutgoingTEID, payload, gtpConnection.UPFUDPAddr)
 	}
 
 	if writeErr != nil {
-		logger.NWuUPLog.Errorf("Write to UPF failed: %+v", writeErr)
+		nwuupLog.Errorf("Write to UPF failed: %+v", writeErr)
 		if writeErr == gtpv1.ErrConnNotOpened {
-			logger.NWuUPLog.Error("The connection has been closed")
+			nwuupLog.Error("The connection has been closed")
 			// TODO: Release the GTP resource
 		}
 		return
-	} else {
-		logger.NWuUPLog.Trace("Forward NWu -> N3")
-		logger.NWuUPLog.Tracef("Wrote %d bytes", n)
-		return
 	}
+	nwuupLog.Trace("Forward NWu -> N3")
+	nwuupLog.Tracef("Wrote %d bytes", n)
 }
 
 func buildQoSGTPPacket(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
+	nwuupLog := logger.NWuUPLog
 	header := gtpMsg.NewHeader(0x34, gtpMsg.MsgTypeTPDU, teid, 0x00, payload).WithExtensionHeaders(
 		gtpMsg.NewExtensionHeader(
 			gtpMsg.ExtHeaderTypePDUSessionContainer,
@@ -184,7 +186,7 @@ func buildQoSGTPPacket(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
 	b := make([]byte, header.MarshalLen())
 
 	if err := header.MarshalTo(b); err != nil {
-		logger.NWuUPLog.Errorf("go-gtp MarshalTo err: %+v", err)
+		nwuupLog.Errorf("go-gtp MarshalTo err: %+v", err)
 		return nil, err
 	}
 
@@ -192,9 +194,10 @@ func buildQoSGTPPacket(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
 }
 
 func Stop(n3iwfContext *context.N3IWFContext) {
-	logger.NWuUPLog.Infof("Close Nwuup server...")
+	nwuupLog := logger.NWuUPLog
+	nwuupLog.Infof("Close Nwuup server...")
 
 	if err := n3iwfContext.NWuIPv4PacketConn.Close(); err != nil {
-		logger.NWuUPLog.Errorf("Stop nwuup server error : %+v", err)
+		nwuupLog.Errorf("Stop nwuup server error : %+v", err)
 	}
 }

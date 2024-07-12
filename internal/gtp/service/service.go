@@ -18,6 +18,7 @@ var gtpContext context.Context = context.TODO()
 // SetupGTPTunnelWithUPF set up GTP connection with UPF
 // return *gtp.UPlaneConn, net.Addr and error
 func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) {
+	gtpLog := logger.GTPLog
 	n3iwfSelf := n3iwfContext.N3IWFSelf()
 
 	// Set up GTP connection
@@ -25,7 +26,7 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) 
 
 	remoteUDPAddr, err := net.ResolveUDPAddr("udp", upfUDPAddr)
 	if err != nil {
-		logger.GTPLog.Errorf("Resolve UDP address %s failed: %+v", upfUDPAddr, err)
+		gtpLog.Errorf("Resolve UDP address %s failed: %+v", upfUDPAddr, err)
 		return nil, nil, errors.New("Resolve Address Failed")
 	}
 
@@ -33,14 +34,14 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) 
 
 	localUDPAddr, err := net.ResolveUDPAddr("udp", n3iwfUDPAddr)
 	if err != nil {
-		logger.GTPLog.Errorf("Resolve UDP address %s failed: %+v", n3iwfUDPAddr, err)
+		gtpLog.Errorf("Resolve UDP address %s failed: %+v", n3iwfUDPAddr, err)
 		return nil, nil, errors.New("Resolve Address Failed")
 	}
 
 	// Dial to UPF
 	userPlaneConnection, err := gtp.DialUPlane(gtpContext, localUDPAddr, remoteUDPAddr)
 	if err != nil {
-		logger.GTPLog.Errorf("Dial to UPF failed: %+v", err)
+		gtpLog.Errorf("Dial to UPF failed: %+v", err)
 		return nil, nil, errors.New("Dial failed")
 	}
 
