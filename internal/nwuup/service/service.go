@@ -33,7 +33,7 @@ func Run(wg *sync.WaitGroup) error {
 		return errors.New("ListenPacket failed")
 	}
 	ipv4PacketConn := ipv4.NewPacketConn(connection)
-	if ipv4PacketConn != nil {
+	if ipv4PacketConn == nil {
 		nwuupLog.Errorf("Error opening IPv4 packet connection socket on %s", listenAddr)
 		return errors.New("NewPacketConn failed")
 	}
