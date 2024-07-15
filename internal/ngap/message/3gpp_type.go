@@ -246,7 +246,7 @@ func UnmarshalEAP5GData(codedData []byte) (anParameters *ANParameters, nasPDU []
 	// shift codedData
 	codedData = codedData[2+anParameterLength:]
 
-	if len(codedData) > 2 {
+	if len(codedData) < 2 {
 		ngapLog.Error("No NASPDU length specified")
 		return nil, nil, errors.New("Error formatting")
 	}
