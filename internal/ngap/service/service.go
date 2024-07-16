@@ -23,8 +23,6 @@ var (
 
 // Run start the N3IWF SCTP process.
 func Run(wg *sync.WaitGroup) error {
-	ngapLog := logger.NgapLog
-
 	// n3iwf context
 	n3iwfSelf := context.N3IWFSelf()
 	// load amf SCTP address slice
@@ -38,8 +36,7 @@ func Run(wg *sync.WaitGroup) error {
 		wg.Add(1)
 		go Receiver(localAddr, remoteAddr, errChan, n3iwfSelf.NGAPServer, wg)
 		if err, ok := <-errChan; ok {
-			ngapLog.Errorln(err)
-			return errors.New("NGAP service run failed")
+			return err
 		}
 	}
 

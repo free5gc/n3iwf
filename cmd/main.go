@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime/debug"
+	"syscall"
 
+	"github.com/gin-contrib/pprof"
+	"github.com/gin-gonic/gin"
 	"github.com/urfave/cli"
 
 	"github.com/free5gc/n3iwf/internal/logger"
@@ -37,33 +42,91 @@ func main() {
 			Name:  "log, l",
 			Usage: "Output NF log to `FILE`",
 		},
+		cli.BoolFlag{
+			Name:  "nolog, nl",
+			Usage: "Disable log to stdout/stderr",
+		},
+		cli.StringFlag{
+			Name:  "loglevel, ll",
+			Usage: "Override logger level",
+		},
+		cli.BoolFlag{
+			Name:  "reportcaller, rc",
+			Usage: "Enable logger report caller",
+		},
+		cli.BoolFlag{
+			Name:  "debug, deb",
+			Usage: "Enable pprof debug",
+		},
 	}
 	if err := app.Run(os.Args); err != nil {
 		logger.MainLog.Errorf("N3IWF Run Error: %v\n", err)
 	}
 }
 
+func runPProfServer() {
+	r := gin.Default()
+	pprof.Register(r)
+	// Listen and Server in 0.0.0.0:6061
+	err := r.Run(":6061")
+	if err != nil {
+		logger.MainLog.Errorf("runPProfServer(): %v", err)
+	}
+}
+
 func action(cliCtx *cli.Context) error {
-	tlsKeyLogPath, err := initLogFile(cliCtx.StringSlice("log"))
+	debug := cliCtx.Bool("debug")
+	if debug {
+		go runPProfServer()
+	}
+	logPathSlice := cliCtx.StringSlice("log")
+	cfgPath := cliCtx.String("config")
+	noLog := cliCtx.Bool("nolog")
+	logLevel := cliCtx.String("loglevel")
+	reportCaller := cliCtx.Bool("reportcaller")
+
+	tlsKeyLogPath, err := initLogFile(logPathSlice)
 	if err != nil {
 		return err
 	}
 
 	logger.MainLog.Infoln("N3IWF version: ", version.GetVersion())
 
-	cfg, err := factory.ReadConfig(cliCtx.String("config"))
+	ctx, cancel := context.WithCancel(context.Background())
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigCh  // Wait for interrupt signal to gracefully shutdown
+		cancel() // Notify each goroutine and wait them stopped
+	}()
+
+	cfg, err := factory.ReadConfig(cfgPath)
 	if err != nil {
+		close(sigCh)
 		return err
 	}
 	factory.N3iwfConfig = cfg
 
-	n3iwf, err := service.NewApp(cfg)
+	// Replace logger config with cli parameters
+	if noLog {
+		cfg.SetLogEnable(false)
+	}
+	if logLevel != "" {
+		cfg.SetLogLevel(logLevel)
+	}
+	if reportCaller {
+		cfg.SetLogReportCaller(true)
+	}
+
+	n3iwf, err := service.NewApp(ctx, cfg, tlsKeyLogPath)
 	if err != nil {
+		close(sigCh)
 		return err
 	}
 	N3IWF = n3iwf
 
-	n3iwf.Start(tlsKeyLogPath)
+	n3iwf.Start()
 
 	return nil
 }

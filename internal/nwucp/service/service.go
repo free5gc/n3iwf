@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"net"
 	"runtime/debug"
@@ -20,20 +19,16 @@ var tcpListener net.Listener
 // Run setup N3IWF NAS for UE to forward NAS message
 // to AMF
 func Run(wg *sync.WaitGroup) error {
-	nwucpLog := logger.NWuCPLog
 	// N3IWF context
 	n3iwfSelf := context.N3IWFSelf()
 	tcpAddr := fmt.Sprintf("%s:%d", n3iwfSelf.IPSecGatewayAddress, n3iwfSelf.TCPPort)
 
 	listener, err := net.Listen("tcp", tcpAddr)
 	if err != nil {
-		nwucpLog.Errorf("Listen TCP address failed: %+v", err)
-		return errors.New("Listen failed")
+		return err
 	}
 
 	tcpListener = listener
-
-	nwucpLog.Tracef("Successfully listen %+v", tcpAddr)
 
 	wg.Add(1)
 	go listenAndServe(tcpListener, wg)

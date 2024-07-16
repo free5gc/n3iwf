@@ -1,10 +1,11 @@
 package service
 
 import (
-	"errors"
 	"net"
 	"runtime/debug"
 	"sync"
+
+	"github.com/pkg/errors"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/context"
@@ -18,20 +19,17 @@ var (
 )
 
 func Run(wg *sync.WaitGroup) error {
-	ikeLog := logger.IKELog
 	n3iwfSelf := context.N3IWFSelf()
 
 	// Resolve UDP addresses
 	ip := n3iwfSelf.IKEBindAddress
 	udpAddrPort500, err := net.ResolveUDPAddr("udp", ip+":500")
 	if err != nil {
-		ikeLog.Errorf("Resolve UDP address failed: %+v", err)
-		return errors.New("IKE service run failed")
+		return errors.Wrapf(err, "ResolveUDPAddr (%s:500)", ip)
 	}
 	udpAddrPort4500, err := net.ResolveUDPAddr("udp", ip+":4500")
 	if err != nil {
-		ikeLog.Errorf("Resolve UDP address failed: %+v", err)
-		return errors.New("IKE service run failed")
+		return errors.Wrapf(err, "ResolveUDPAddr (%s:4500)", ip)
 	}
 
 	n3iwfSelf.IKEServer = NewIKEServer()
@@ -44,8 +42,7 @@ func Run(wg *sync.WaitGroup) error {
 	errChan = make(chan error)
 	go Receiver(udpAddrPort500, n3iwfSelf.IKEServer, errChan, wg)
 	if err, ok := <-errChan; ok {
-		ikeLog.Errorln(err)
-		return errors.New("IKE service run failed")
+		return errors.Wrapf(err, "udp 500")
 	}
 
 	// Port 4500
@@ -53,8 +50,7 @@ func Run(wg *sync.WaitGroup) error {
 	errChan = make(chan error)
 	go Receiver(udpAddrPort4500, n3iwfSelf.IKEServer, errChan, wg)
 	if err, ok := <-errChan; ok {
-		ikeLog.Errorln(err)
-		return errors.New("IKE service run failed")
+		return errors.Wrapf(err, "udp 4500")
 	}
 
 	wg.Add(1)

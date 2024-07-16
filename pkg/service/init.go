@@ -6,10 +6,10 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/signal"
 	"runtime/debug"
-	"syscall"
+	"sync"
 
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 
@@ -17,26 +17,56 @@ import (
 	ngap_service "github.com/free5gc/n3iwf/internal/ngap/service"
 	nwucp_service "github.com/free5gc/n3iwf/internal/nwucp/service"
 	nwuup_service "github.com/free5gc/n3iwf/internal/nwuup/service"
+	"github.com/free5gc/n3iwf/pkg/app"
 	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 	ike_service "github.com/free5gc/n3iwf/pkg/ike/service"
 	"github.com/free5gc/n3iwf/pkg/ike/xfrm"
 )
 
+var N3IWF *N3iwfApp
+
+var _ app.App = &N3iwfApp{}
+
 type N3iwfApp struct {
-	cfg      *factory.Config
 	n3iwfCtx *n3iwf_context.N3IWFContext
+	cfg      *factory.Config
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
-func NewApp(cfg *factory.Config) (*N3iwfApp, error) {
-	n3iwf := &N3iwfApp{cfg: cfg}
+func NewApp(
+	ctx context.Context,
+	cfg *factory.Config,
+	tlsKeyLogPath string,
+) (*N3iwfApp, error) {
+	n3iwf := &N3iwfApp{
+		cfg: cfg,
+		wg:  sync.WaitGroup{},
+	}
+	n3iwf.ctx, n3iwf.cancel = context.WithCancel(ctx)
+
 	n3iwf.SetLogEnable(cfg.GetLogEnable())
 	n3iwf.SetLogLevel(cfg.GetLogLevel())
 	n3iwf.SetReportCaller(cfg.GetLogReportCaller())
 
-	// n3iwf_context.Init()
 	n3iwf.n3iwfCtx = n3iwf_context.N3IWFSelf()
+	N3IWF = n3iwf
 	return n3iwf, nil
+}
+
+func (a *N3iwfApp) CancelContext() context.Context {
+	return a.ctx
+}
+
+func (a *N3iwfApp) Context() *n3iwf_context.N3IWFContext {
+	return a.n3iwfCtx
+}
+
+func (a *N3iwfApp) Config() *factory.Config {
+	return a.cfg
 }
 
 func (a *N3iwfApp) SetLogEnable(enable bool) {
@@ -81,87 +111,76 @@ func (a *N3iwfApp) SetReportCaller(reportCaller bool) {
 	logger.Log.SetReportCaller(reportCaller)
 }
 
-func (a *N3iwfApp) Start(tlsKeyLogPath string) {
-	logger.InitLog.Infoln("Server started")
-
-	var cancel context.CancelFunc
-	n3iwfContext := n3iwf_context.N3IWFSelf()
-	n3iwfContext.Ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
-
+func (a *N3iwfApp) Run() error {
 	if !n3iwf_context.InitN3IWFContext() {
-		logger.InitLog.Error("Initicating context failed")
-		return
+		return errors.Errorf("Initicating context failed")
 	}
 
-	if err := a.InitDefaultXfrmInterface(n3iwfContext); err != nil {
-		logger.InitLog.Errorf("Initicating XFRM interface for control plane failed: %+v", err)
-		return
+	if err := a.initDefaultXfrmInterface(a.n3iwfCtx); err != nil {
+		return err
 	}
 
-	n3iwfContext.Wg.Add(1)
-	// Graceful Shutdown
-	go a.ListenShutdownEvent(n3iwfContext)
+	a.wg.Add(1)
+	go a.listenShutdownEvent()
 
 	// NGAP
-	if err := ngap_service.Run(&n3iwfContext.Wg); err != nil {
-		logger.InitLog.Errorf("Start NGAP service failed: %+v", err)
-		return
+	if err := ngap_service.Run(&a.wg); err != nil {
+		return errors.Wrapf(err, "Start NGAP service failed")
 	}
-	logger.InitLog.Info("NGAP service running.")
+	logger.MainLog.Infof("NGAP service running.")
 
 	// Relay listeners
 	// Control plane
-	if err := nwucp_service.Run(&n3iwfContext.Wg); err != nil {
-		logger.InitLog.Errorf("Listen NWu control plane traffic failed: %+v", err)
-		return
+	if err := nwucp_service.Run(&a.wg); err != nil {
+		return errors.Wrapf(err, "Listen NWu control plane traffic failed")
 	}
-	logger.InitLog.Info("NAS TCP server successfully started.")
+	logger.MainLog.Infof("NAS TCP server successfully started.")
 
 	// User plane
-	if err := nwuup_service.Run(&n3iwfContext.Wg); err != nil {
-		logger.InitLog.Errorf("Listen NWu user plane traffic failed: %+v", err)
-		return
+	if err := nwuup_service.Run(&a.wg); err != nil {
+		return errors.Wrapf(err, "Listen NWu user plane traffic failed")
 	}
-	logger.InitLog.Info("Listening NWu user plane traffic")
+	logger.MainLog.Infof("Listening NWu user plane traffic")
 
 	// IKE
-	if err := ike_service.Run(&n3iwfContext.Wg); err != nil {
-		logger.InitLog.Errorf("Start IKE service failed: %+v", err)
-		return
+	if err := ike_service.Run(&a.wg); err != nil {
+		return errors.Wrapf(err, "Start IKE service failed")
 	}
-	logger.InitLog.Info("IKE service running.")
+	logger.MainLog.Infof("IKE service running")
 
-	logger.InitLog.Info("N3IWF running...")
+	logger.MainLog.Infof("N3IWF started")
 
-	signalChannel := make(chan os.Signal, 1)
-	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
-	<-signalChannel
-
-	cancel()
-	a.WaitRoutineStopped(n3iwfContext)
+	a.WaitRoutineStopped()
+	return nil
 }
 
-func (a *N3iwfApp) ListenShutdownEvent(n3iwfContext *n3iwf_context.N3IWFContext) {
+func (a *N3iwfApp) Start() {
+	if err := a.Run(); err != nil {
+		logger.MainLog.Errorf("N3IWF Run err: %v", err)
+	}
+}
+
+func (a *N3iwfApp) listenShutdownEvent() {
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.InitLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			logger.MainLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
-		n3iwfContext.Wg.Done()
+		a.wg.Done()
 	}()
 
-	<-n3iwfContext.Ctx.Done()
-	StopServiceConn(n3iwfContext)
+	<-a.ctx.Done()
+	a.terminateProcedure()
 }
 
-func (a *N3iwfApp) WaitRoutineStopped(n3iwfContext *n3iwf_context.N3IWFContext) {
-	n3iwfContext.Wg.Wait()
+func (a *N3iwfApp) WaitRoutineStopped() {
+	a.wg.Wait()
 	// Waiting for negotiatioon with netlink for deleting interfaces
-	a.Terminate(n3iwfContext)
+	a.removeIPsecInterfaces()
+	logger.MainLog.Infof("N3IWF App is terminated")
 }
 
-func (a *N3iwfApp) InitDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFContext) error {
+func (a *N3iwfApp) initDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFContext) error {
 	// Setup default IPsec interface for Control Plane
 	var linkIPSec netlink.Link
 	var err error
@@ -171,7 +190,7 @@ func (a *N3iwfApp) InitDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFCon
 
 	if linkIPSec, err = xfrm.SetupIPsecXfrmi(newXfrmiName, n3iwfContext.XfrmParentIfaceName,
 		n3iwfContext.XfrmIfaceId, n3iwfIPAddrAndSubnet); err != nil {
-		logger.InitLog.Errorf("Setup XFRM interface %s fail: %+v", newXfrmiName, err)
+		logger.MainLog.Errorf("Setup XFRM interface %s fail: %+v", newXfrmiName, err)
 		return err
 	}
 
@@ -181,10 +200,10 @@ func (a *N3iwfApp) InitDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFCon
 	}
 
 	if err := netlink.RouteAdd(route); err != nil {
-		logger.InitLog.Warnf("netlink.RouteAdd: %+v", err)
+		logger.MainLog.Warnf("netlink.RouteAdd: %+v", err)
 	}
 
-	logger.InitLog.Infof("Setup XFRM interface %s ", newXfrmiName)
+	logger.MainLog.Infof("Setup XFRM interface %s ", newXfrmiName)
 
 	n3iwfContext.XfrmIfaces.LoadOrStore(n3iwfContext.XfrmIfaceId, linkIPSec)
 	n3iwfContext.XfrmIfaceIdOffsetForUP = 1
@@ -192,34 +211,31 @@ func (a *N3iwfApp) InitDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFCon
 	return nil
 }
 
-func (a *N3iwfApp) RemoveIPsecInterfaces(n3iwfContext *n3iwf_context.N3IWFContext) {
-	n3iwfContext.XfrmIfaces.Range(
+func (a *N3iwfApp) removeIPsecInterfaces() {
+	a.n3iwfCtx.XfrmIfaces.Range(
 		func(key, value interface{}) bool {
 			iface := value.(netlink.Link)
 			if err := netlink.LinkDel(iface); err != nil {
-				logger.InitLog.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
+				logger.MainLog.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
 			} else {
-				logger.InitLog.Infof("Delete interface: %s", iface.Attrs().Name)
+				logger.MainLog.Infof("Delete interface: %s", iface.Attrs().Name)
 			}
 			return true
 		})
 }
 
-func (a *N3iwfApp) Terminate(n3iwfContext *n3iwf_context.N3IWFContext) {
-	logger.InitLog.Info("Terminating N3IWF...")
-	logger.InitLog.Info("Deleting interfaces created by N3IWF")
-	a.RemoveIPsecInterfaces(n3iwfContext)
-	logger.InitLog.Info("N3IWF terminated")
+func (a *N3iwfApp) Terminate() {
+	a.cancel()
 }
 
-func StopServiceConn(n3iwfContext *n3iwf_context.N3IWFContext) {
-	logger.InitLog.Info("Stopping service created by N3IWF")
+func (a *N3iwfApp) terminateProcedure() {
+	logger.MainLog.Info("Stopping service created by N3IWF")
 
-	ngap_service.Stop(n3iwfContext)
+	ngap_service.Stop(a.n3iwfCtx)
 
-	nwucp_service.Stop(n3iwfContext)
+	nwucp_service.Stop(a.n3iwfCtx)
 
-	nwuup_service.Stop(n3iwfContext)
+	nwuup_service.Stop(a.n3iwfCtx)
 
-	ike_service.Stop(n3iwfContext)
+	ike_service.Stop(a.n3iwfCtx)
 }

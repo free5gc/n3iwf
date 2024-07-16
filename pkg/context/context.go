@@ -1,7 +1,6 @@
 package context
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -76,9 +75,6 @@ type N3IWFContext struct {
 
 	// N3IWF NWu interface IPv4 packet connection
 	NWuIPv4PacketConn *ipv4.PacketConn
-
-	Ctx context.Context
-	Wg  sync.WaitGroup
 
 	NGAPServer *NGAPServer
 	IKEServer  *IkeServer
@@ -377,7 +373,7 @@ func GetInterfaceName(IPAddress string) (interfaceName string, err error) {
 
 	res, err := net.ResolveIPAddr("ip4", IPAddress)
 	if err != nil {
-		return "", fmt.Errorf("Error resolving address '%s': %v", IPAddress, err)
+		return "", fmt.Errorf("Error resolving address [%s]: %v", IPAddress, err)
 	}
 	IPAddress = res.String()
 
@@ -392,7 +388,7 @@ func GetInterfaceName(IPAddress string) (interfaceName string, err error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("Cannot find interface name")
+	return "", fmt.Errorf("Cannot find interface name for IP[%s]", IPAddress)
 }
 
 func init() {

@@ -1,11 +1,11 @@
 package service
 
 import (
-	"errors"
 	"net"
 	"runtime/debug"
 	"sync"
 
+	"github.com/pkg/errors"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 	gtpMsg "github.com/wmnsk/go-gtp/gtpv1/message"
 	"golang.org/x/net/ipv4"
@@ -20,7 +20,6 @@ import (
 // with UP_IP_ADDRESS, catching GRE encapsulated packets and forward
 // to N3 interface.
 func Run(wg *sync.WaitGroup) error {
-	nwuupLog := logger.NWuUPLog
 	// Local IPSec address
 	n3iwfSelf := context.N3IWFSelf()
 	listenAddr := n3iwfSelf.IPSecGatewayAddress
@@ -29,13 +28,11 @@ func Run(wg *sync.WaitGroup) error {
 	// This socket will only capture GRE encapsulated packet
 	connection, err := net.ListenPacket("ip4:gre", listenAddr)
 	if err != nil {
-		nwuupLog.Errorf("Error setting listen socket on %s: %+v", listenAddr, err)
-		return errors.New("ListenPacket failed")
+		return errors.Wrapf(err, "Error setting listen socket on %s", listenAddr)
 	}
 	ipv4PacketConn := ipv4.NewPacketConn(connection)
 	if ipv4PacketConn == nil {
-		nwuupLog.Errorf("Error opening IPv4 packet connection socket on %s", listenAddr)
-		return errors.New("NewPacketConn failed")
+		return errors.Wrapf(err, "Error opening IPv4 packet connection socket on %s", listenAddr)
 	}
 
 	n3iwfSelf.NWuIPv4PacketConn = ipv4PacketConn

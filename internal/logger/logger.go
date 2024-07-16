@@ -23,14 +23,9 @@ var (
 	UtilLog  *logrus.Entry
 )
 
-func init() {
-	fieldsOrder := []string{
-		logger_util.FieldNF,
-		logger_util.FieldCategory,
-	}
-
-	Log = logger_util.New(fieldsOrder)
-	NfLog = Log.WithField(logger_util.FieldNF, "N3IWF")
+func UpdateNfLog(s string) {
+	NfLog = Log.WithField(logger_util.FieldNF, s)
+	// update logs created from NfLog
 	MainLog = NfLog.WithField(logger_util.FieldCategory, "Main")
 	InitLog = NfLog.WithField(logger_util.FieldCategory, "Init")
 	CfgLog = NfLog.WithField(logger_util.FieldCategory, "CFG")
@@ -43,4 +38,13 @@ func init() {
 	NWuUPLog = NfLog.WithField(logger_util.FieldCategory, "NWuUP")
 	RelayLog = NfLog.WithField(logger_util.FieldCategory, "Relay")
 	UtilLog = NfLog.WithField(logger_util.FieldCategory, "Util")
+}
+
+func init() {
+	fieldsOrder := []string{
+		logger_util.FieldNF,
+		logger_util.FieldCategory,
+	}
+	Log = logger_util.New(fieldsOrder)
+	UpdateNfLog("N3IWF")
 }
