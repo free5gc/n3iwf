@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"runtime/debug"
 	"strings"
@@ -11,7 +10,7 @@ import (
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 )
 
 var tcpListener net.Listener
@@ -20,10 +19,10 @@ var tcpListener net.Listener
 // to AMF
 func Run(wg *sync.WaitGroup) error {
 	// N3IWF context
-	n3iwfSelf := context.N3IWFSelf()
-	tcpAddr := fmt.Sprintf("%s:%d", n3iwfSelf.IPSecGatewayAddress, n3iwfSelf.TCPPort)
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
 
-	listener, err := net.Listen("tcp", tcpAddr)
+	listener, err := net.Listen("tcp", cfg.GetNasTcpAddr())
 	if err != nil {
 		return err
 	}
@@ -66,7 +65,7 @@ func listenAndServe(listener net.Listener, wg *sync.WaitGroup) {
 
 		// Find UE context and store this connection in to it, then check if
 		// there is any cached NAS message for this UE. If yes, send to it.
-		n3iwfSelf := context.N3IWFSelf()
+		n3iwfSelf := n3iwf_context.N3IWFSelf()
 
 		ueIP := strings.Split(connection.RemoteAddr().String(), ":")[0]
 		ikeUe, ok := n3iwfSelf.AllocatedUEIPAddressLoad(ueIP)
@@ -83,7 +82,7 @@ func listenAndServe(listener net.Listener, wg *sync.WaitGroup) {
 		// Store connection
 		ranUe.TCPConnection = connection
 
-		n3iwfSelf.NGAPServer.RcvEventCh <- context.NewNASTCPConnEstablishedCompleteEvt(
+		n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewNASTCPConnEstablishedCompleteEvt(
 			ranUe.RanUeNgapId,
 		)
 
@@ -107,7 +106,7 @@ func decapNasMsgFromEnvelope(envelop []byte) []byte {
 	return nasMsg
 }
 
-func Stop(n3iwfContext *context.N3IWFContext) {
+func Stop(n3iwfContext *n3iwf_context.N3IWFContext) {
 	nwucpLog := logger.NWuCPLog
 	nwucpLog.Infof("Close Nwucp server...")
 
@@ -117,7 +116,7 @@ func Stop(n3iwfContext *context.N3IWFContext) {
 
 	n3iwfContext.RANUePool.Range(
 		func(key, value interface{}) bool {
-			ranUe := value.(*context.N3IWFRanUe)
+			ranUe := value.(*n3iwf_context.N3IWFRanUe)
 			if ranUe.TCPConnection != nil {
 				if err := ranUe.TCPConnection.Close(); err != nil {
 					logger.InitLog.Errorf("Stop nwucp server error : %+v", err)
@@ -130,7 +129,7 @@ func Stop(n3iwfContext *context.N3IWFContext) {
 // serveConn handle accepted TCP connection. It reads NAS packets
 // from the connection and call forward() to forward NAS messages
 // to AMF
-func serveConn(ranUe *context.N3IWFRanUe, connection net.Conn, wg *sync.WaitGroup) {
+func serveConn(ranUe *n3iwf_context.N3IWFRanUe, connection net.Conn, wg *sync.WaitGroup) {
 	nwucpLog := logger.NWuCPLog
 	defer func() {
 		if p := recover(); p != nil {
@@ -165,7 +164,7 @@ func serveConn(ranUe *context.N3IWFRanUe, connection net.Conn, wg *sync.WaitGrou
 
 // forward forwards NAS messages sent from UE to the
 // associated AMF
-func forward(ranUe *context.N3IWFRanUe, packet []byte, wg *sync.WaitGroup) {
+func forward(ranUe *n3iwf_context.N3IWFRanUe, packet []byte, wg *sync.WaitGroup) {
 	nwucpLog := logger.NWuCPLog
 	defer func() {
 		if p := recover(); p != nil {

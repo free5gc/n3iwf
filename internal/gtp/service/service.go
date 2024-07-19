@@ -10,7 +10,7 @@ import (
 
 	"github.com/free5gc/n3iwf/internal/gtp/handler"
 	"github.com/free5gc/n3iwf/internal/logger"
-	n3iwfContext "github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 )
 
 var gtpContext context.Context = context.TODO()
@@ -19,7 +19,8 @@ var gtpContext context.Context = context.TODO()
 // return *gtp.UPlaneConn, net.Addr and error
 func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) {
 	gtpLog := logger.GTPLog
-	n3iwfSelf := n3iwfContext.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
 
 	// Set up GTP connection
 	upfUDPAddr := upfIPAddr + gtp.GTPUPort
@@ -30,7 +31,7 @@ func SetupGTPTunnelWithUPF(upfIPAddr string) (*gtp.UPlaneConn, net.Addr, error) 
 		return nil, nil, errors.New("Resolve Address Failed")
 	}
 
-	n3iwfUDPAddr := n3iwfSelf.GTPBindAddress + gtp.GTPUPort
+	n3iwfUDPAddr := cfg.GetGTPBindAddr() + gtp.GTPUPort
 
 	localUDPAddr, err := net.ResolveUDPAddr("udp", n3iwfUDPAddr)
 	if err != nil {

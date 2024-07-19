@@ -11,7 +11,7 @@ import (
 	"github.com/free5gc/n3iwf/internal/ngap"
 	"github.com/free5gc/n3iwf/internal/ngap/handler"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	lib_ngap "github.com/free5gc/ngap"
 	"github.com/free5gc/sctp"
 )
@@ -24,14 +24,13 @@ var (
 // Run start the N3IWF SCTP process.
 func Run(wg *sync.WaitGroup) error {
 	// n3iwf context
-	n3iwfSelf := context.N3IWFSelf()
-	// load amf SCTP address slice
-	amfSCTPAddresses := n3iwfSelf.AMFSCTPAddresses
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
 
 	localAddr := new(sctp.SCTPAddr)
 
 	n3iwfSelf.NGAPServer = NewNGAPServer()
-	for _, remoteAddr := range amfSCTPAddresses {
+	for _, remoteAddr := range cfg.GetAmfSctpAddrs() {
 		errChan := make(chan error)
 		wg.Add(1)
 		go Receiver(localAddr, remoteAddr, errChan, n3iwfSelf.NGAPServer, wg)
@@ -46,14 +45,14 @@ func Run(wg *sync.WaitGroup) error {
 	return nil
 }
 
-func NewNGAPServer() *context.NGAPServer {
-	return &context.NGAPServer{
-		RcvNgapPktCh: make(chan context.ReceiveNGAPPacket, RECEIVE_NGAPPACKET_CHANNEL_LEN),
-		RcvEventCh:   make(chan context.NgapEvt, RECEIVE_NGAPEVENT_CHANNEL_LEN),
+func NewNGAPServer() *n3iwf_context.NGAPServer {
+	return &n3iwf_context.NGAPServer{
+		RcvNgapPktCh: make(chan n3iwf_context.ReceiveNGAPPacket, RECEIVE_NGAPPACKET_CHANNEL_LEN),
+		RcvEventCh:   make(chan n3iwf_context.NgapEvt, RECEIVE_NGAPEVENT_CHANNEL_LEN),
 	}
 }
 
-func server(ngapServer *context.NGAPServer, wg *sync.WaitGroup) {
+func server(ngapServer *n3iwf_context.NGAPServer, wg *sync.WaitGroup) {
 	ngapLog := logger.NgapLog
 	defer func() {
 		if p := recover(); p != nil {
@@ -79,7 +78,7 @@ func server(ngapServer *context.NGAPServer, wg *sync.WaitGroup) {
 	}
 }
 
-func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapServer *context.NGAPServer,
+func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapServer *n3iwf_context.NGAPServer,
 	wg *sync.WaitGroup,
 ) {
 	ngapLog := logger.NgapLog
@@ -167,7 +166,7 @@ func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapSe
 				if errConn != nil {
 					ngapLog.Errorf("conn close error: %+v", errConn)
 				}
-				ngapServer.RcvNgapPktCh <- context.ReceiveNGAPPacket{}
+				ngapServer.RcvNgapPktCh <- n3iwf_context.ReceiveNGAPPacket{}
 				return
 			}
 			ngapLog.Errorf("[SCTP] Read from SCTP connection failed: %+v", err)
@@ -182,7 +181,7 @@ func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapSe
 			forwardData := make([]byte, n)
 			copy(forwardData, data[:n])
 
-			ngapServer.RcvNgapPktCh <- context.ReceiveNGAPPacket{
+			ngapServer.RcvNgapPktCh <- n3iwf_context.ReceiveNGAPPacket{
 				Conn: conn,
 				Buf:  forwardData[:n],
 			}
@@ -190,7 +189,7 @@ func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapSe
 	}
 }
 
-func Stop(n3iwfContext *context.N3IWFContext) {
+func Stop(n3iwfContext *n3iwf_context.N3IWFContext) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infof("Close NGAP server....")
 

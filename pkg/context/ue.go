@@ -410,13 +410,13 @@ func (ikeUe *N3IWFIkeUe) CompleteChildSA(msgID uint32, outboundSPI uint32,
 	// Record to UE context with inbound SPI as key
 	ikeUe.N3IWFChildSecurityAssociation[childSA.InboundSPI] = childSA
 	// Record to N3IWF context with inbound SPI as key
-	n3iwfContext.ChildSA.Store(childSA.InboundSPI, childSA)
+	N3IWFSelf().ChildSA.Store(childSA.InboundSPI, childSA)
 
 	return childSA, nil
 }
 
 func (ranUe *N3IWFRanUe) AttachAMF(sctpAddr string) bool {
-	if amf, ok := n3iwfContext.AMFPoolLoad(sctpAddr); ok {
+	if amf, ok := N3IWFSelf().AMFPoolLoad(sctpAddr); ok {
 		amf.N3iwfRanUeList[ranUe.RanUeNgapId] = ranUe
 		ranUe.AMF = amf
 		return true

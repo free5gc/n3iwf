@@ -11,7 +11,7 @@ import (
 	"github.com/free5gc/n3iwf/internal/gre"
 	gtpQoSMsg "github.com/free5gc/n3iwf/internal/gtp/message"
 	"github.com/free5gc/n3iwf/internal/logger"
-	n3iwfContext "github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 )
 
 // Parse the fields not supported by go-gtp and forward data to UE.
@@ -37,7 +37,7 @@ func forward(packet gtpQoSMsg.QoSTPDUPacket) {
 	}()
 
 	// N3IWF context
-	self := n3iwfContext.N3IWFSelf()
+	self := n3iwf_context.N3IWFSelf()
 
 	// Nwu connection in IPv4
 	NWuConn := self.NWuIPv4PacketConn

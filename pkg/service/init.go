@@ -42,6 +42,7 @@ func NewApp(
 	cfg *factory.Config,
 	tlsKeyLogPath string,
 ) (*N3iwfApp, error) {
+	var err error
 	n3iwf := &N3iwfApp{
 		cfg: cfg,
 		wg:  sync.WaitGroup{},
@@ -52,7 +53,9 @@ func NewApp(
 	n3iwf.SetLogLevel(cfg.GetLogLevel())
 	n3iwf.SetReportCaller(cfg.GetLogReportCaller())
 
-	n3iwf.n3iwfCtx = n3iwf_context.N3IWFSelf()
+	if n3iwf.n3iwfCtx, err = n3iwf_context.NewContext(n3iwf); err != nil {
+		return nil, err
+	}
 	N3IWF = n3iwf
 	return n3iwf, nil
 }
@@ -112,11 +115,7 @@ func (a *N3iwfApp) SetReportCaller(reportCaller bool) {
 }
 
 func (a *N3iwfApp) Run() error {
-	if !n3iwf_context.InitN3IWFContext() {
-		return errors.Errorf("Initicating context failed")
-	}
-
-	if err := a.initDefaultXfrmInterface(a.n3iwfCtx); err != nil {
+	if err := a.initDefaultXfrmInterface(); err != nil {
 		return err
 	}
 
@@ -180,23 +179,25 @@ func (a *N3iwfApp) WaitRoutineStopped() {
 	logger.MainLog.Infof("N3IWF App is terminated")
 }
 
-func (a *N3iwfApp) initDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFContext) error {
+func (a *N3iwfApp) initDefaultXfrmInterface() error {
 	// Setup default IPsec interface for Control Plane
 	var linkIPSec netlink.Link
 	var err error
-	n3iwfIPAddr := net.ParseIP(n3iwfContext.IPSecGatewayAddress).To4()
-	n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfContext.Subnet.Mask}
-	newXfrmiName := fmt.Sprintf("%s-default", n3iwfContext.XfrmIfaceName)
+	n3iwfCtx := a.n3iwfCtx
+	cfg := a.Config()
+	n3iwfIPAddr := net.ParseIP(cfg.GetIPSecGatewayAddr()).To4()
+	n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfCtx.UeIPRange.Mask}
+	newXfrmiName := fmt.Sprintf("%s-default", cfg.GetXfrmIfaceName())
 
-	if linkIPSec, err = xfrm.SetupIPsecXfrmi(newXfrmiName, n3iwfContext.XfrmParentIfaceName,
-		n3iwfContext.XfrmIfaceId, n3iwfIPAddrAndSubnet); err != nil {
+	if linkIPSec, err = xfrm.SetupIPsecXfrmi(newXfrmiName, n3iwfCtx.XfrmParentIfaceName,
+		cfg.GetXfrmIfaceId(), n3iwfIPAddrAndSubnet); err != nil {
 		logger.MainLog.Errorf("Setup XFRM interface %s fail: %+v", newXfrmiName, err)
 		return err
 	}
 
 	route := &netlink.Route{
 		LinkIndex: linkIPSec.Attrs().Index,
-		Dst:       n3iwfContext.Subnet,
+		Dst:       n3iwfCtx.UeIPRange,
 	}
 
 	if err := netlink.RouteAdd(route); err != nil {
@@ -205,8 +206,8 @@ func (a *N3iwfApp) initDefaultXfrmInterface(n3iwfContext *n3iwf_context.N3IWFCon
 
 	logger.MainLog.Infof("Setup XFRM interface %s ", newXfrmiName)
 
-	n3iwfContext.XfrmIfaces.LoadOrStore(n3iwfContext.XfrmIfaceId, linkIPSec)
-	n3iwfContext.XfrmIfaceIdOffsetForUP = 1
+	n3iwfCtx.XfrmIfaces.LoadOrStore(cfg.GetXfrmIfaceId(), linkIPSec)
+	n3iwfCtx.XfrmIfaceIdOffsetForUP = 1
 
 	return nil
 }

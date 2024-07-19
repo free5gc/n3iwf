@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
 )
@@ -41,7 +41,7 @@ func SendIKEMessageToUE(udpConn *net.UDPConn, srcAddr, dstAddr *net.UDPAddr, mes
 }
 
 func SendUEInformationExchange(
-	ikeUe *context.N3IWFIkeUe, payload ike_message.IKEPayloadContainer,
+	ikeUe *n3iwf_context.N3IWFIkeUe, payload ike_message.IKEPayloadContainer,
 ) {
 	ikeLog := logger.IKELog
 	ikeSecurityAssociation := ikeUe.N3IWFIKESecurityAssociation
@@ -63,7 +63,7 @@ func SendUEInformationExchange(
 
 func SendIKEDeleteRequest(localSPI uint64) {
 	ikeLog := logger.IKELog
-	ikeUe, ok := context.N3IWFSelf().IkeUePoolLoad(localSPI)
+	ikeUe, ok := n3iwf_context.N3IWFSelf().IkeUePoolLoad(localSPI)
 	if !ok {
 		ikeLog.Errorf("Cannot get IkeUE from SPI : %+v", localSPI)
 		return
@@ -74,7 +74,7 @@ func SendIKEDeleteRequest(localSPI uint64) {
 	SendUEInformationExchange(ikeUe, deletePayload)
 }
 
-func SendChildSADeleteRequest(ikeUe *context.N3IWFIkeUe, relaseList []int64) {
+func SendChildSADeleteRequest(ikeUe *n3iwf_context.N3IWFIkeUe, relaseList []int64) {
 	ikeLog := logger.IKELog
 	var deleteSPIs []byte
 	spiLen := uint16(0)
@@ -97,7 +97,7 @@ func SendChildSADeleteRequest(ikeUe *context.N3IWFIkeUe, relaseList []int64) {
 	SendUEInformationExchange(ikeUe, deletePayload)
 }
 
-func StartDPD(ikeUe *context.N3IWFIkeUe) {
+func StartDPD(ikeUe *n3iwf_context.N3IWFIkeUe) {
 	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
@@ -108,7 +108,7 @@ func StartDPD(ikeUe *context.N3IWFIkeUe) {
 
 	ikeUe.N3IWFIKESecurityAssociation.IKESAClosedCh = make(chan struct{})
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 
 	liveness := factory.N3iwfConfig.Configuration.LivenessCheck
 	if liveness.Enable {
@@ -123,7 +123,7 @@ func StartDPD(ikeUe *context.N3IWFIkeUe) {
 			case <-timer.C:
 				SendUEInformationExchange(ikeUe, nil)
 				var DPDReqRetransTime time.Duration = 2 * time.Second
-				ikeUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = context.NewDPDPeriodicTimer(DPDReqRetransTime,
+				ikeUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = n3iwf_context.NewDPDPeriodicTimer(DPDReqRetransTime,
 					liveness.MaxRetryTimes, ikeUe.N3IWFIKESecurityAssociation, func() {
 						ikeLog.Errorf("UE is down")
 						ranNgapId, ok := n3iwfSelf.NgapIdLoad(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
@@ -132,8 +132,8 @@ func StartDPD(ikeUe *context.N3IWFIkeUe) {
 							return
 						}
 
-						n3iwfSelf.NGAPServer.RcvEventCh <- context.NewSendUEContextReleaseRequestEvt(
-							ranNgapId, context.ErrRadioConnWithUeLost,
+						n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewSendUEContextReleaseRequestEvt(
+							ranNgapId, n3iwf_context.ErrRadioConnWithUeLost,
 						)
 
 						ikeUe.N3IWFIKESecurityAssociation.DPDReqRetransTimer = nil

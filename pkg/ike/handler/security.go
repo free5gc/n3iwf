@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/ike/message"
 )
 
@@ -309,7 +309,7 @@ func CompareRootCertificate(certificateEncoding uint8, requestedCertificateAutho
 		return false
 	}
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 
 	if len(n3iwfSelf.CertificateAuthority) == 0 {
 		ikeLog.Error("Certificate authority in context is empty")
@@ -320,7 +320,7 @@ func CompareRootCertificate(certificateEncoding uint8, requestedCertificateAutho
 }
 
 // Key Gen for IKE SA
-func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation) error {
+func GenerateKeyForIKESA(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation) error {
 	ikeLog := logger.IKELog
 	// Check parameters
 	if ikeSecurityAssociation == nil {
@@ -451,8 +451,8 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation)
 }
 
 // Key Gen for child SA
-func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociation,
-	childSecurityAssociation *context.ChildSecurityAssociation,
+func GenerateKeyForChildSA(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation,
+	childSecurityAssociation *n3iwf_context.ChildSecurityAssociation,
 ) error {
 	ikeLog := logger.IKELog
 	// Check parameters
@@ -552,7 +552,7 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 }
 
 // Decrypt
-func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ikeMessage *message.IKEMessage,
+func DecryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation, ikeMessage *message.IKEMessage,
 	encryptedPayload *message.Encrypted,
 ) (message.IKEPayloadContainer, error) {
 	ikeLog := logger.IKELog
@@ -635,7 +635,7 @@ func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ik
 }
 
 // Encrypt
-func EncryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation,
+func EncryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation,
 	ikePayload message.IKEPayloadContainer, responseIKEMessage *message.IKEMessage,
 ) error {
 	ikeLog := logger.IKELog

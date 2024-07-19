@@ -4,12 +4,12 @@ import (
 	"runtime/debug"
 
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/sctp"
 )
 
-func SendToAmf(amf *context.N3IWFAMF, pkt []byte) {
+func SendToAmf(amf *n3iwf_context.N3IWFAMF, pkt []byte) {
 	ngapLog := logger.NgapLog
 	if amf == nil {
 		ngapLog.Errorf("[N3IWF] AMF Context is nil ")
@@ -35,7 +35,7 @@ func SendNGSetupRequest(conn *sctp.SCTPConn) {
 
 	sctpAddr := conn.RemoteAddr().String()
 
-	if available, _ := context.N3IWFSelf().AMFReInitAvailableListLoad(sctpAddr); !available {
+	if available, _ := n3iwf_context.N3IWFSelf().AMFReInitAvailableListLoad(sctpAddr); !available {
 		ngapLog.Warnf(
 			"[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
 			sctpAddr)
@@ -56,7 +56,7 @@ func SendNGSetupRequest(conn *sctp.SCTPConn) {
 
 // partOfNGInterface: if reset type is "reset all", set it to nil TS 38.413 9.2.6.11
 func SendNGReset(
-	amf *context.N3IWFAMF,
+	amf *n3iwf_context.N3IWFAMF,
 	cause ngapType.Cause,
 	partOfNGInterface *ngapType.UEAssociatedLogicalNGConnectionList,
 ) {
@@ -73,7 +73,7 @@ func SendNGReset(
 }
 
 func SendNGResetAcknowledge(
-	amf *context.N3IWFAMF,
+	amf *n3iwf_context.N3IWFAMF,
 	partOfNGInterface *ngapType.UEAssociatedLogicalNGConnectionList,
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) {
@@ -95,7 +95,7 @@ func SendNGResetAcknowledge(
 }
 
 func SendInitialContextSetupResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	responseList *ngapType.PDUSessionResourceSetupListCxtRes,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
@@ -103,12 +103,12 @@ func SendInitialContextSetupResponse(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("[N3IWF] Send Initial Context Setup Response")
 
-	if responseList != nil && len(responseList.List) > context.MaxNumOfPDUSessions {
+	if responseList != nil && len(responseList.List) > n3iwf_context.MaxNumOfPDUSessions {
 		ngapLog.Errorln("Pdu List out of range")
 		return
 	}
 
-	if failedList != nil && len(failedList.List) > context.MaxNumOfPDUSessions {
+	if failedList != nil && len(failedList.List) > n3iwf_context.MaxNumOfPDUSessions {
 		ngapLog.Errorln("Pdu List out of range")
 		return
 	}
@@ -123,7 +123,7 @@ func SendInitialContextSetupResponse(
 }
 
 func SendInitialContextSetupFailure(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	cause ngapType.Cause,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtFail,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
@@ -131,7 +131,7 @@ func SendInitialContextSetupFailure(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("[N3IWF] Send Initial Context Setup Failure")
 
-	if failedList != nil && len(failedList.List) > context.MaxNumOfPDUSessions {
+	if failedList != nil && len(failedList.List) > n3iwf_context.MaxNumOfPDUSessions {
 		ngapLog.Errorln("Pdu List out of range")
 		return
 	}
@@ -146,7 +146,7 @@ func SendInitialContextSetupFailure(
 }
 
 func SendUEContextModificationResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
@@ -162,7 +162,7 @@ func SendUEContextModificationResponse(
 }
 
 func SendUEContextModificationFailure(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	cause ngapType.Cause,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
@@ -179,7 +179,7 @@ func SendUEContextModificationFailure(
 }
 
 func SendUEContextReleaseComplete(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
@@ -195,7 +195,7 @@ func SendUEContextReleaseComplete(
 }
 
 func SendUEContextReleaseRequest(
-	ranUe *context.N3IWFRanUe, cause ngapType.Cause,
+	ranUe *n3iwf_context.N3IWFRanUe, cause ngapType.Cause,
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("[N3IWF] Send UE Context Release Request")
@@ -209,8 +209,8 @@ func SendUEContextReleaseRequest(
 	SendToAmf(ranUe.AMF, pkt)
 }
 
-func SendInitialUEMessage(amf *context.N3IWFAMF,
-	ranUe *context.N3IWFRanUe, nasPdu []byte,
+func SendInitialUEMessage(amf *n3iwf_context.N3IWFAMF,
+	ranUe *n3iwf_context.N3IWFRanUe, nasPdu []byte,
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("[N3IWF] Send Initial UE Message")
@@ -227,7 +227,7 @@ func SendInitialUEMessage(amf *context.N3IWFAMF,
 }
 
 func SendUplinkNASTransport(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	nasPdu []byte,
 ) {
 	ngapLog := logger.NgapLog
@@ -248,7 +248,7 @@ func SendUplinkNASTransport(
 }
 
 func SendNASNonDeliveryIndication(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	nasPdu []byte,
 	cause ngapType.Cause,
 ) {
@@ -275,7 +275,7 @@ func SendRerouteNASRequest() {
 }
 
 func SendPDUSessionResourceSetupResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	responseList *ngapType.PDUSessionResourceSetupListSURes,
 	failedListSURes *ngapType.PDUSessionResourceFailedToSetupListSURes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
@@ -298,7 +298,7 @@ func SendPDUSessionResourceSetupResponse(
 }
 
 func SendPDUSessionResourceModifyResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	responseList *ngapType.PDUSessionResourceModifyListModRes,
 	failedList *ngapType.PDUSessionResourceFailedToModifyListModRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
@@ -321,7 +321,7 @@ func SendPDUSessionResourceModifyResponse(
 }
 
 func SendPDUSessionResourceModifyIndication(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	modifyList []ngapType.PDUSessionResourceModifyItemModInd,
 ) {
 	ngapLog := logger.NgapLog
@@ -347,7 +347,7 @@ func SendPDUSessionResourceModifyIndication(
 }
 
 func SendPDUSessionResourceNotify(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	notiList *ngapType.PDUSessionResourceNotifyList,
 	relList *ngapType.PDUSessionResourceReleasedListNot,
 ) {
@@ -369,7 +369,7 @@ func SendPDUSessionResourceNotify(
 }
 
 func SendPDUSessionResourceReleaseResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	relList ngapType.PDUSessionResourceReleasedListRelRes,
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) {
@@ -396,7 +396,7 @@ func SendPDUSessionResourceReleaseResponse(
 }
 
 func SendErrorIndication(
-	amf *context.N3IWFAMF,
+	amf *n3iwf_context.N3IWFAMF,
 	amfUENGAPID *int64,
 	ranUENGAPID *int64,
 	cause *ngapType.Cause,
@@ -453,8 +453,8 @@ func SendUERadioCapabilityInfoIndication() {
 }
 
 func SendUERadioCapabilityCheckResponse(
-	amf *context.N3IWFAMF,
-	ranUe *context.N3IWFRanUe,
+	amf *n3iwf_context.N3IWFAMF,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
@@ -469,7 +469,7 @@ func SendUERadioCapabilityCheckResponse(
 }
 
 func SendAMFConfigurationUpdateAcknowledge(
-	amf *context.N3IWFAMF,
+	amf *n3iwf_context.N3IWFAMF,
 	setupList *ngapType.AMFTNLAssociationSetupList,
 	failList *ngapType.TNLAssociationList,
 	diagnostics *ngapType.CriticalityDiagnostics,
@@ -487,7 +487,7 @@ func SendAMFConfigurationUpdateAcknowledge(
 }
 
 func SendAMFConfigurationUpdateFailure(
-	amf *context.N3IWFAMF,
+	amf *n3iwf_context.N3IWFAMF,
 	ngCause ngapType.Cause,
 	time *ngapType.TimeToWait,
 	diagnostics *ngapType.CriticalityDiagnostics,
@@ -503,11 +503,11 @@ func SendAMFConfigurationUpdateFailure(
 	SendToAmf(amf, pkt)
 }
 
-func SendRANConfigurationUpdate(amf *context.N3IWFAMF) {
+func SendRANConfigurationUpdate(amf *n3iwf_context.N3IWFAMF) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("[N3IWF] Send RAN Configuration Update")
 
-	if available, _ := context.N3IWFSelf().AMFReInitAvailableListLoad(amf.SCTPAddr); !available {
+	if available, _ := n3iwf_context.N3IWFSelf().AMFReInitAvailableListLoad(amf.SCTPAddr); !available {
 		ngapLog.Warnf(
 			"[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
 			amf.SCTPAddr)

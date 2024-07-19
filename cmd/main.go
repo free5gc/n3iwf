@@ -19,8 +19,6 @@ import (
 	"github.com/free5gc/util/version"
 )
 
-var N3IWF *service.N3iwfApp
-
 func main() {
 	defer func() {
 		if p := recover(); p != nil {
@@ -119,14 +117,13 @@ func action(cliCtx *cli.Context) error {
 		cfg.SetLogReportCaller(true)
 	}
 
-	n3iwf, err := service.NewApp(ctx, cfg, tlsKeyLogPath)
+	n3iwfApp, err := service.NewApp(ctx, cfg, tlsKeyLogPath)
 	if err != nil {
 		close(sigCh)
 		return err
 	}
-	N3IWF = n3iwf
 
-	n3iwf.Start()
+	n3iwfApp.Start()
 
 	return nil
 }

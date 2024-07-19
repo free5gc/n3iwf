@@ -7,14 +7,16 @@ import (
 	"github.com/free5gc/aper"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/util"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/ngap"
 	"github.com/free5gc/ngap/ngapConvert"
 	"github.com/free5gc/ngap/ngapType"
 )
 
 func BuildNGSetupRequest() ([]byte, error) {
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
+
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -40,10 +42,11 @@ func BuildNGSetupRequest() ([]byte, error) {
 	globalRANNodeID.Present = ngapType.GlobalRANNodeIDPresentGlobalN3IWFID
 	globalRANNodeID.GlobalN3IWFID = new(ngapType.GlobalN3IWFID)
 
+	gN3iwfId := cfg.GetGlobalN3iwfId()
 	globalN3IWFID := globalRANNodeID.GlobalN3IWFID
-	globalN3IWFID.PLMNIdentity = util.PlmnIdToNgap(n3iwfSelf.NFInfo.GlobalN3IWFID.PLMNID)
+	globalN3IWFID.PLMNIdentity = util.PlmnIdToNgap(*gN3iwfId.PLMNID)
 	globalN3IWFID.N3IWFID.Present = ngapType.N3IWFIDPresentN3IWFID
-	globalN3IWFID.N3IWFID.N3IWFID = util.N3iwfIdToNgap(n3iwfSelf.NFInfo.GlobalN3IWFID.N3IWFID)
+	globalN3IWFID.N3IWFID.N3IWFID = util.N3iwfIdToNgap(gN3iwfId.N3IWFID)
 	nGSetupRequestIEs.List = append(nGSetupRequestIEs.List, ie)
 
 	// RANNodeName
@@ -54,7 +57,7 @@ func BuildNGSetupRequest() ([]byte, error) {
 	ie.Value.RANNodeName = new(ngapType.RANNodeName)
 
 	rANNodeName := ie.Value.RANNodeName
-	rANNodeName.Value = n3iwfSelf.NFInfo.RanNodeName
+	rANNodeName.Value = cfg.GetRanNodeName()
 	nGSetupRequestIEs.List = append(nGSetupRequestIEs.List, ie)
 	// SupportedTAList
 	ie = ngapType.NGSetupRequestIEs{}
@@ -66,13 +69,14 @@ func BuildNGSetupRequest() ([]byte, error) {
 	supportedTAList := ie.Value.SupportedTAList
 
 	ngapLog := logger.NgapLog
-	for _, supportedTAItemLocal := range n3iwfSelf.NFInfo.SupportedTAList {
+	suppTAList := cfg.GetSupportedTAList()
+	for _, supportedTAItemLocal := range suppTAList {
 		// SupportedTAItem in SupportedTAList
 		supportedTAItem := ngapType.SupportedTAItem{}
 		var err error
 		supportedTAItem.TAC.Value, err = hex.DecodeString(supportedTAItemLocal.TAC)
 		if err != nil {
-			ngapLog.Errorf("DecodeString error: %+v", err)
+			ngapLog.Errorf("TAC[%s] DecodeString error: %v", supportedTAItemLocal.TAC, err)
 		}
 
 		broadcastPLMNList := &supportedTAItem.BroadcastPLMNList
@@ -80,23 +84,19 @@ func BuildNGSetupRequest() ([]byte, error) {
 		for _, broadcastPLMNListLocal := range supportedTAItemLocal.BroadcastPLMNList {
 			// BroadcastPLMNItem in BroadcastPLMNList
 			broadcastPLMNItem := ngapType.BroadcastPLMNItem{}
-			broadcastPLMNItem.PLMNIdentity = util.PlmnIdToNgap(broadcastPLMNListLocal.PLMNID)
+			broadcastPLMNItem.PLMNIdentity = util.PlmnIdToNgap(*broadcastPLMNListLocal.PLMNID)
 
 			sliceSupportList := &broadcastPLMNItem.TAISliceSupportList
 
 			for _, sliceSupportItemLocal := range broadcastPLMNListLocal.TAISliceSupportList {
 				// SliceSupportItem in SliceSupportList
 				sliceSupportItem := ngapType.SliceSupportItem{}
-				sliceSupportItem.SNSSAI.SST.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SST)
-				if err != nil {
-					ngapLog.Errorf("DecodeString error: %+v", err)
-				}
-
+				sliceSupportItem.SNSSAI.SST.Value = aper.OctetString{byte(sliceSupportItemLocal.SNSSAI.SST)}
 				if sliceSupportItemLocal.SNSSAI.SD != "" {
 					sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
 					sliceSupportItem.SNSSAI.SD.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SD)
 					if err != nil {
-						ngapLog.Errorf("DecodeString error: %+v", err)
+						ngapLog.Errorf("SD[%s] DecodeString error: %v", sliceSupportItemLocal.SNSSAI.SD, err)
 					}
 				}
 
@@ -235,7 +235,7 @@ func BuildNGResetAcknowledge(
 }
 
 func BuildInitialContextSetupResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	responseList *ngapType.PDUSessionResourceSetupListCxtRes,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
@@ -311,7 +311,7 @@ func BuildInitialContextSetupResponse(
 }
 
 func BuildInitialContextSetupFailure(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	cause ngapType.Cause,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtFail,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
@@ -385,7 +385,7 @@ func BuildInitialContextSetupFailure(
 }
 
 func BuildUEContextModificationResponse(
-	ranUe *context.N3IWFRanUe, criticalityDiagnostics *ngapType.CriticalityDiagnostics,
+	ranUe *n3iwf_context.N3IWFRanUe, criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentSuccessfulOutcome
@@ -435,7 +435,7 @@ func BuildUEContextModificationResponse(
 	return ngap.Encoder(pdu)
 }
 
-func BuildUEContextModificationFailure(ranUe *context.N3IWFRanUe, cause ngapType.Cause,
+func BuildUEContextModificationFailure(ranUe *n3iwf_context.N3IWFRanUe, cause ngapType.Cause,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
@@ -494,7 +494,7 @@ func BuildUEContextModificationFailure(ranUe *context.N3IWFRanUe, cause ngapType
 	return ngap.Encoder(pdu)
 }
 
-func BuildUEContextReleaseComplete(ranUe *context.N3IWFRanUe,
+func BuildUEContextReleaseComplete(ranUe *n3iwf_context.N3IWFRanUe,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
@@ -585,7 +585,7 @@ func BuildUEContextReleaseComplete(ranUe *context.N3IWFRanUe,
 	return ngap.Encoder(pdu)
 }
 
-func BuildUEContextReleaseRequest(ranUe *context.N3IWFRanUe, cause ngapType.Cause) ([]byte, error) {
+func BuildUEContextReleaseRequest(ranUe *n3iwf_context.N3IWFRanUe, cause ngapType.Cause) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -653,7 +653,7 @@ func BuildUEContextReleaseRequest(ranUe *context.N3IWFRanUe, cause ngapType.Caus
 	return ngap.Encoder(pdu)
 }
 
-func BuildInitialUEMessage(ranUe *context.N3IWFRanUe, nasPdu []byte,
+func BuildInitialUEMessage(ranUe *n3iwf_context.N3IWFRanUe, nasPdu []byte,
 	allowedNSSAI *ngapType.AllowedNSSAI,
 ) ([]byte, error) {
 	ngapLog := logger.NgapLog
@@ -805,7 +805,7 @@ func BuildInitialUEMessage(ranUe *context.N3IWFRanUe, nasPdu []byte,
 	return ngap.Encoder(pdu)
 }
 
-func BuildUplinkNASTransport(ranUe *context.N3IWFRanUe, nasPdu []byte) ([]byte, error) {
+func BuildUplinkNASTransport(ranUe *n3iwf_context.N3IWFRanUe, nasPdu []byte) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -873,7 +873,10 @@ func BuildUplinkNASTransport(ranUe *context.N3IWFRanUe, nasPdu []byte) ([]byte, 
 	return ngap.Encoder(pdu)
 }
 
-func BuildNASNonDeliveryIndication(ranUe *context.N3IWFRanUe, nasPdu []byte, cause ngapType.Cause) ([]byte, error) {
+func BuildNASNonDeliveryIndication(
+	ranUe *n3iwf_context.N3IWFRanUe,
+	nasPdu []byte, cause ngapType.Cause,
+) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -947,7 +950,7 @@ func BuildRerouteNASRequest() ([]byte, error) {
 }
 
 func BuildPDUSessionResourceSetupResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	responseList *ngapType.PDUSessionResourceSetupListSURes,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListSURes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
@@ -1023,7 +1026,7 @@ func BuildPDUSessionResourceSetupResponse(
 }
 
 func BuildPDUSessionResourceModifyResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	responseList *ngapType.PDUSessionResourceModifyListModRes,
 	failedList *ngapType.PDUSessionResourceFailedToModifyListModRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
@@ -1112,7 +1115,7 @@ func BuildPDUSessionResourceModifyResponse(
 }
 
 func BuildPDUSessionResourceModifyIndication(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	modifyList []ngapType.PDUSessionResourceModifyItemModInd,
 ) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
@@ -1172,7 +1175,7 @@ func BuildPDUSessionResourceModifyIndication(
 }
 
 func BuildPDUSessionResourceNotify(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	notiList *ngapType.PDUSessionResourceNotifyList,
 	relList *ngapType.PDUSessionResourceReleasedListNot,
 ) ([]byte, error) {
@@ -1265,7 +1268,7 @@ func BuildPDUSessionResourceNotify(
 }
 
 func BuildPDUSessionResourceReleaseResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	relList ngapType.PDUSessionResourceReleasedListRelRes,
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) ([]byte, error) {
@@ -1424,7 +1427,7 @@ func BuildUERadioCapabilityInfoIndication() ([]byte, error) {
 }
 
 func BuildUERadioCapabilityCheckResponse(
-	ranUe *context.N3IWFRanUe,
+	ranUe *n3iwf_context.N3IWFRanUe,
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
@@ -1632,10 +1635,12 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 	rANConfigurationUpdate := initiatingMessage.Value.RANConfigurationUpdate
 	rANConfigurationUpdateIEs := &rANConfigurationUpdate.ProtocolIEs
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
 
 	// RANNodeName
-	if n3iwfSelf.NFInfo.RanNodeName != "" {
+	ranNodeName := cfg.GetRanNodeName()
+	if ranNodeName != "" {
 		ie := ngapType.RANConfigurationUpdateIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDRANNodeName
 		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
@@ -1643,12 +1648,13 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 		ie.Value.RANNodeName = new(ngapType.RANNodeName)
 
 		rANNodeName := ie.Value.RANNodeName
-		rANNodeName.Value = n3iwfSelf.NFInfo.RanNodeName
+		rANNodeName.Value = ranNodeName
 
 		rANConfigurationUpdateIEs.List = append(rANConfigurationUpdateIEs.List, ie)
 	}
 	// SupportedTAList
-	if len(n3iwfSelf.NFInfo.SupportedTAList) > 0 {
+	suppTAList := cfg.GetSupportedTAList()
+	if len(suppTAList) > 0 {
 		ie := ngapType.RANConfigurationUpdateIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDSupportedTAList
 		ie.Criticality.Value = ngapType.CriticalityPresentReject
@@ -1657,37 +1663,32 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 
 		supportedTAList := ie.Value.SupportedTAList
 
-		for _, supportedTAItemLocal := range n3iwfSelf.NFInfo.SupportedTAList {
+		for _, supportedTAItemLocal := range suppTAList {
 			// SupportedTAItem in SupportedTAList
 			supportedTAItem := ngapType.SupportedTAItem{}
 			var err error
 			supportedTAItem.TAC.Value, err = hex.DecodeString(supportedTAItemLocal.TAC)
 			if err != nil {
-				ngapLog.Errorf("DecodeString error: %+v", err)
+				ngapLog.Errorf("TAC[%s] DecodeString error: %+v", supportedTAItemLocal.TAC, err)
 			}
 
 			broadcastPLMNList := &supportedTAItem.BroadcastPLMNList
-
 			for _, broadcastPLMNListLocal := range supportedTAItemLocal.BroadcastPLMNList {
 				// BroadcastPLMNItem in BroadcastPLMNList
 				broadcastPLMNItem := ngapType.BroadcastPLMNItem{}
-				broadcastPLMNItem.PLMNIdentity = util.PlmnIdToNgap(broadcastPLMNListLocal.PLMNID)
+				broadcastPLMNItem.PLMNIdentity = util.PlmnIdToNgap(*broadcastPLMNListLocal.PLMNID)
 
 				sliceSupportList := &broadcastPLMNItem.TAISliceSupportList
 
 				for _, sliceSupportItemLocal := range broadcastPLMNListLocal.TAISliceSupportList {
 					// SliceSupportItem in SliceSupportList
 					sliceSupportItem := ngapType.SliceSupportItem{}
-					sliceSupportItem.SNSSAI.SST.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SST)
-					if err != nil {
-						ngapLog.Errorf("DecodeString error: %+v", err)
-					}
-
+					sliceSupportItem.SNSSAI.SST.Value = aper.OctetString{byte(sliceSupportItemLocal.SNSSAI.SST)}
 					if sliceSupportItemLocal.SNSSAI.SD != "" {
 						sliceSupportItem.SNSSAI.SD = new(ngapType.SD)
 						sliceSupportItem.SNSSAI.SD.Value, err = hex.DecodeString(sliceSupportItemLocal.SNSSAI.SD)
 						if err != nil {
-							ngapLog.Errorf("DecodeString error: %+v", err)
+							ngapLog.Errorf("SD[%s] DecodeString error: %v", sliceSupportItemLocal.SNSSAI.SD, err)
 						}
 					}
 
@@ -1743,9 +1744,10 @@ func BuildRRCInactiveTransitionReport() ([]byte, error) {
 	return ngap.Encoder(pdu)
 }
 
-func BuildPDUSessionResourceSetupResponseTransfer(pduSession *context.PDUSession) ([]byte, error) {
+func BuildPDUSessionResourceSetupResponseTransfer(pduSession *n3iwf_context.PDUSession) ([]byte, error) {
 	// N3IWF context
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
 
 	transfer := ngapType.PDUSessionResourceSetupResponseTransfer{}
 
@@ -1761,7 +1763,7 @@ func BuildPDUSessionResourceSetupResponseTransfer(pduSession *context.PDUSession
 	teid := make([]byte, 4)
 	binary.BigEndian.PutUint32(teid, pduSession.GTPConnection.IncomingTEID)
 	gtpTunnel.GTPTEID.Value = teid
-	gtpTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(n3iwfSelf.GTPBindAddress, "")
+	gtpTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(cfg.GetGTPBindAddr(), "")
 
 	// Associated Qos Flow List
 	for _, qfi := range pduSession.QFIList {

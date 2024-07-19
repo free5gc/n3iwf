@@ -13,7 +13,7 @@ import (
 	"github.com/free5gc/n3iwf/internal/gre"
 	gtpQoSMsg "github.com/free5gc/n3iwf/internal/gtp/message"
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 )
 
 // Run bind and listen IPv4 packet connection on N3IWF NWu interface
@@ -21,8 +21,9 @@ import (
 // to N3 interface.
 func Run(wg *sync.WaitGroup) error {
 	// Local IPSec address
-	n3iwfSelf := context.N3IWFSelf()
-	listenAddr := n3iwfSelf.IPSecGatewayAddress
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
+	listenAddr := cfg.GetIPSecGatewayAddr()
 
 	// Setup IPv4 packet connection socket
 	// This socket will only capture GRE encapsulated packet
@@ -96,7 +97,7 @@ func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) 
 	}()
 
 	// Find UE information
-	self := context.N3IWFSelf()
+	self := n3iwf_context.N3IWFSelf()
 	ikeUe, ok := self.AllocatedUEIPAddressLoad(ueInnerIP)
 	if !ok {
 		nwuupLog.Error("Ike UE context not found")
@@ -109,7 +110,7 @@ func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) 
 		return
 	}
 
-	var pduSession *context.PDUSession
+	var pduSession *n3iwf_context.PDUSession
 
 	for _, childSA := range ikeUe.N3IWFChildSecurityAssociation {
 		// Check which child SA the packet come from with interface index,
@@ -190,7 +191,7 @@ func buildQoSGTPPacket(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
 	return b, nil
 }
 
-func Stop(n3iwfContext *context.N3IWFContext) {
+func Stop(n3iwfContext *n3iwf_context.N3IWFContext) {
 	nwuupLog := logger.NWuUPLog
 	nwuupLog.Infof("Close Nwuup server...")
 

@@ -7,30 +7,36 @@ package factory
 import (
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/asaskevich/govalidator"
+	"github.com/mohae/deepcopy"
 
 	"github.com/free5gc/n3iwf/internal/logger"
+	"github.com/free5gc/sctp"
 )
 
 const (
-	N3iwfDefaultTLSKeyLogPath  = "./log/n3iwfsslkey.log"
-	N3iwfDefaultCertPemPath    = "./cert/n3iwf.pem"
-	N3iwfDefaultPrivateKeyPath = "./cert/n3iwf.key"
-	N3iwfDefaultConfigPath     = "./config/n3iwfcfg.yaml"
+	N3iwfDefaultTLSKeyLogPath string = "./log/n3iwfsslkey.log"
+	N3iwfDefaultCertPemPath   string = "./cert/n3iwf.pem"
+	N3iwfDefaultCertKeyPath   string = "./cert/n3iwf.key"
+	N3iwfDefaultConfigPath    string = "./config/n3iwfcfg.yaml"
+	N3iwfDefaultXfrmIfaceName string = "ipsec"
+	N3iwfDefaultXfrmIfaceId   uint32 = 7
 )
 
 type N3IWFNFInfo struct {
-	GlobalN3IWFID   GlobalN3IWFID     `yaml:"GlobalN3IWFID" valid:"required"`
+	GlobalN3IWFID   *GlobalN3IWFID    `yaml:"GlobalN3IWFID" valid:"required"`
 	RanNodeName     string            `yaml:"Name,omitempty" valid:"optional"`
 	SupportedTAList []SupportedTAItem `yaml:"SupportedTAList" valid:"required"`
 }
 
 type GlobalN3IWFID struct {
-	PLMNID  PLMNID `yaml:"PLMNID" valid:"required"`
-	N3IWFID uint16 `yaml:"N3IWFID" valid:"range(0|65535),required"` // with length 2 bytes
+	PLMNID  *PLMNID `yaml:"PLMNID" valid:"required"`
+	N3IWFID uint16  `yaml:"N3IWFID" valid:"range(0|65535),required"` // with length 2 bytes
 }
 
 type SupportedTAItem struct {
@@ -39,7 +45,7 @@ type SupportedTAItem struct {
 }
 
 type BroadcastPLMNItem struct {
-	PLMNID              PLMNID             `yaml:"PLMNID" valid:"required"`
+	PLMNID              *PLMNID            `yaml:"PLMNID" valid:"required"`
 	TAISliceSupportList []SliceSupportItem `yaml:"TAISliceSupportList" valid:"required"`
 }
 
@@ -53,8 +59,8 @@ type SliceSupportItem struct {
 }
 
 type SNSSAIItem struct {
-	SST string `yaml:"SST" valid:"hexadecimal,stringlength(1|1),required"`
-	SD  string `yaml:"SD,omitempty" valid:"hexadecimal,stringlength(6|6),required"`
+	SST int32  `yaml:"SST" valid:"required"`
+	SD  string `yaml:"SD,omitempty" valid:"required,hexadecimal,stringlength(6|6)"`
 }
 
 type AMFSCTPAddresses struct {
@@ -62,7 +68,7 @@ type AMFSCTPAddresses struct {
 	Port        int      `yaml:"Port,omitempty" valid:"port,optional"` // Default port is 38412 if not defined.
 }
 
-func (a *AMFSCTPAddresses) Validate() (bool, error) {
+func (a *AMFSCTPAddresses) validate() error {
 	var errs govalidator.Errors
 
 	for _, IPAddress := range a.IPAddresses {
@@ -73,10 +79,10 @@ func (a *AMFSCTPAddresses) Validate() (bool, error) {
 	}
 
 	if len(errs) > 0 {
-		return false, errs
+		return errs
 	}
 
-	return true, nil
+	return nil
 }
 
 type Config struct {
@@ -86,38 +92,44 @@ type Config struct {
 	sync.RWMutex
 }
 
-func (c *Config) Validate() (bool, error) {
+func (c *Config) Validate() error {
 	if configuration := c.Configuration; configuration != nil {
-		if result, err := configuration.validate(); err != nil {
-			return result, err
+		for _, amfSCTPAddress := range configuration.AMFSCTPAddresses {
+			if err := amfSCTPAddress.validate(); err != nil {
+				return err
+			}
 		}
 	}
 
-	result, err := govalidator.ValidateStruct(c)
-	return result, appendInvalid(err)
+	govalidator.TagMap["cidr"] = govalidator.Validator(func(str string) bool {
+		return govalidator.IsCIDR(str)
+	})
+
+	_, err := govalidator.ValidateStruct(c)
+	return appendInvalid(err)
 }
 
 type Info struct {
 	Version     string `yaml:"version,omitempty" valid:"required,in(1.0.5)"`
-	Description string `yaml:"description,omitempty" valid:"type(string)"`
+	Description string `yaml:"description,omitempty" valid:"optional"`
 }
 
 type Configuration struct {
-	N3IWFInfo        N3IWFNFInfo        `yaml:"N3IWFInformation" valid:"required"`
+	N3IWFInfo        *N3IWFNFInfo       `yaml:"N3IWFInformation" valid:"required"`
 	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"AMFSCTPAddresses" valid:"required"`
 
-	TCPPort              uint16     `yaml:"NASTCPPort" valid:"port,required"`
-	IKEBindAddr          string     `yaml:"IKEBindAddress" valid:"host,required"`
-	IPSecGatewayAddr     string     `yaml:"IPSecTunnelAddress" valid:"host,required"`
-	UEIPAddressRange     string     `yaml:"UEIPAddressRange" valid:"cidr,required"`                // e.g. 10.0.1.0/24
-	XfrmIfaceName        string     `yaml:"XFRMInterfaceName" valid:"stringlength(1|10),optional"` // must != 0
-	XfrmIfaceId          uint32     `yaml:"XFRMInterfaceID" valid:"numeric,optional"`              // must != 0
-	GTPBindAddr          string     `yaml:"GTPBindAddress" valid:"host,required"`
-	FQDN                 string     `yaml:"FQDN" valid:"url,required"` // e.g. n3iwf.free5gc.org
-	PrivateKey           string     `yaml:"PrivateKey" valid:"type(string),minstringlength(1),optional"`
-	CertificateAuthority string     `yaml:"CertificateAuthority" valid:"type(string),minstringlength(1),optional"`
-	Certificate          string     `yaml:"Certificate" valid:"type(string),minstringlength(1),optional"`
-	LivenessCheck        TimerValue `yaml:"LivenessCheck" valid:"required"`
+	TCPPort              int         `yaml:"NASTCPPort"           valid:"required,port"`
+	IKEBindAddr          string      `yaml:"IKEBindAddress"       valid:"required,host"`
+	IPSecGatewayAddr     string      `yaml:"IPSecTunnelAddress"   valid:"required,host"`
+	UEIPAddressRange     string      `yaml:"UEIPAddressRange"     valid:"required,cidr"`               // e.g. 10.0.1.0/24
+	XfrmIfaceName        string      `yaml:"XFRMInterfaceName"    valid:"optional,stringlength(1|10)"` // must != 0
+	XfrmIfaceId          uint32      `yaml:"XFRMInterfaceID"      valid:"optional"`                    // must != 0
+	GTPBindAddr          string      `yaml:"GTPBindAddress"       valid:"required,host"`
+	FQDN                 string      `yaml:"FQDN"                 valid:"required,host"` // e.g. n3iwf.Saviah.com
+	PrivateKey           string      `yaml:"PrivateKey"           valid:"optional"`
+	CertificateAuthority string      `yaml:"CertificateAuthority" valid:"optional"`
+	Certificate          string      `yaml:"Certificate"          valid:"optional"`
+	LivenessCheck        *TimerValue `yaml:"LivenessCheck"        valid:"required"`
 }
 
 type Logger struct {
@@ -126,37 +138,10 @@ type Logger struct {
 	ReportCaller bool   `yaml:"reportCaller" valid:"type(bool)"`
 }
 
-func (c *Configuration) validate() (bool, error) {
-	for _, amfSCTPAddress := range c.AMFSCTPAddresses {
-		if result, err := amfSCTPAddress.Validate(); err != nil {
-			return result, err
-		}
-	}
-
-	govalidator.TagMap["cidr"] = govalidator.Validator(func(str string) bool {
-		return govalidator.IsCIDR(str)
-	})
-
-	if _, err := c.LivenessCheck.validate(); err != nil {
-		return false, err
-	}
-
-	result, err := govalidator.ValidateStruct(c)
-	return result, appendInvalid(err)
-}
-
 type TimerValue struct {
-	Enable        bool          `yaml:"enable" valid:"type(bool)"`
-	TransFreq     time.Duration `yaml:"transFreq" valid:"type(time.Duration)"`
-	MaxRetryTimes int32         `yaml:"maxRetryTimes,omitempty" valid:"type(int32)"`
-}
-
-func (t *TimerValue) validate() (bool, error) {
-	if _, err := govalidator.ValidateStruct(t); err != nil {
-		return false, appendInvalid(err)
-	}
-
-	return true, nil
+	Enable        bool          `yaml:"enable"        valid:"optional"`
+	TransFreq     time.Duration `yaml:"transFreq"     valid:"required"`
+	MaxRetryTimes int32         `yaml:"maxRetryTimes" valid:"optional"`
 }
 
 func appendInvalid(err error) error {
@@ -256,4 +241,136 @@ func (c *Config) GetLogReportCaller() bool {
 		return false
 	}
 	return c.Logger.ReportCaller
+}
+
+func (c *Config) GetGlobalN3iwfId() *GlobalN3IWFID {
+	c.RLock()
+	defer c.RUnlock()
+	return deepcopy.Copy(c.Configuration.N3IWFInfo.GlobalN3IWFID).(*GlobalN3IWFID)
+}
+
+func (c *Config) GetRanNodeName() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.Configuration.N3IWFInfo.RanNodeName
+}
+
+func (c *Config) GetAmfSctpAddrs() []*sctp.SCTPAddr {
+	c.RLock()
+	defer c.RUnlock()
+
+	var addrs []*sctp.SCTPAddr
+	for _, amfAddr := range c.Configuration.AMFSCTPAddresses {
+		sctpAddr := new(sctp.SCTPAddr)
+		for _, ipStr := range amfAddr.IPAddresses {
+			ipAddr, err := net.ResolveIPAddr("ip", ipStr)
+			if err != nil {
+				continue
+			}
+			sctpAddr.IPAddrs = append(sctpAddr.IPAddrs, *ipAddr)
+		}
+		if amfAddr.Port == 0 {
+			sctpAddr.Port = 38412
+		} else {
+			sctpAddr.Port = amfAddr.Port
+		}
+		addrs = append(addrs, sctpAddr)
+	}
+	return addrs
+}
+
+func (c *Config) GetSupportedTAList() []SupportedTAItem {
+	c.RLock()
+	defer c.RUnlock()
+	if len(c.Configuration.N3IWFInfo.SupportedTAList) > 0 {
+		return deepcopy.Copy(c.Configuration.N3IWFInfo.SupportedTAList).([]SupportedTAItem)
+	}
+	return nil
+}
+
+func (c *Config) GetIKEBindAddr() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.Configuration.IKEBindAddr
+}
+
+func (c *Config) GetIPSecGatewayAddr() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.Configuration.IPSecGatewayAddr
+}
+
+func (c *Config) GetGTPBindAddr() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.Configuration.GTPBindAddr
+}
+
+func (c *Config) GetNasTcpAddr() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.Configuration.IPSecGatewayAddr + ":" + strconv.Itoa(c.Configuration.TCPPort)
+}
+
+func (c *Config) GetNasTcpPort() uint16 {
+	c.RLock()
+	defer c.RUnlock()
+	return uint16(c.Configuration.TCPPort)
+}
+
+func (c *Config) GetFQDN() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.Configuration.FQDN
+}
+
+func (c *Config) GetIKECAPemPath() string {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration.CertificateAuthority != "" {
+		return c.Configuration.CertificateAuthority
+	}
+	return N3iwfDefaultCertPemPath
+}
+
+func (c *Config) GetIKECertPemPath() string {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration.Certificate != "" {
+		return c.Configuration.Certificate
+	}
+	return N3iwfDefaultCertPemPath
+}
+
+func (c *Config) GetIKECertKeyPath() string {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration.PrivateKey != "" {
+		return c.Configuration.PrivateKey
+	}
+	return N3iwfDefaultCertKeyPath
+}
+
+func (c *Config) GetUEIPAddrRange() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.Configuration.UEIPAddressRange
+}
+
+func (c *Config) GetXfrmIfaceName() string {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration.XfrmIfaceName != "" {
+		return c.Configuration.XfrmIfaceName
+	}
+	return N3iwfDefaultXfrmIfaceName
+}
+
+func (c *Config) GetXfrmIfaceId() uint32 {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration.XfrmIfaceId != 0 {
+		return c.Configuration.XfrmIfaceId
+	}
+	return N3iwfDefaultXfrmIfaceId
 }

@@ -5,7 +5,7 @@ import (
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/handler"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/ngap"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/sctp"
@@ -24,7 +24,7 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 	// AMF SCTP address
 	sctpAddr := conn.RemoteAddr().String()
 	// AMF context
-	amf, _ := context.N3IWFSelf().AMFPoolLoad(sctpAddr)
+	amf, _ := n3iwf_context.N3IWFSelf().AMFPoolLoad(sctpAddr)
 	// Decode
 	pdu, err := ngap.Decoder(msg)
 	if err != nil {

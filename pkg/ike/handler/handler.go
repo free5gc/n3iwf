@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
 	"github.com/free5gc/n3iwf/pkg/ike/xfrm"
 )
@@ -35,7 +35,8 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 	var nonce *ike_message.Nonce
 	var notifications []*ike_message.Notification
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
 
 	// For response or needed data
 	responseIKEMessage := new(ike_message.IKEMessage)
@@ -337,7 +338,7 @@ func HandleIKESAINIT(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, messa
 	ikeSecurityAssociation.ResponderSignedOctets = append(responseIKEMessageData, nonce.NonceData...)
 	// MACedIDForR
 	var idPayload ike_message.IKEPayloadContainer
-	idPayload.BuildIdentificationResponder(ike_message.ID_FQDN, []byte(n3iwfSelf.FQDN))
+	idPayload.BuildIdentificationResponder(ike_message.ID_FQDN, []byte(cfg.GetFQDN()))
 	idPayloadData, err := idPayload.Encode()
 	if err != nil {
 		ikeLog.Errorln(err)
@@ -380,7 +381,9 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 	var encryptedPayload *ike_message.Encrypted
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
+	ipsecGwAddr := cfg.GetIPSecGatewayAddr()
 
 	// Used for response
 	responseIKEMessage := new(ike_message.IKEMessage)
@@ -680,7 +683,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		responseIKEMessage.Payloads.Reset()
 
 		// Identification
-		responseIKEPayload.BuildIdentificationResponder(ike_message.ID_FQDN, []byte(n3iwfSelf.FQDN))
+		responseIKEPayload.BuildIdentificationResponder(ike_message.ID_FQDN, []byte(cfg.GetFQDN()))
 
 		// Certificate
 		responseIKEPayload.BuildCertificate(ike_message.X509CertificateSignature, n3iwfSelf.N3IWFCertificate)
@@ -796,14 +799,14 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 				ranNgapId = 0
 			}
 
-			n3iwfSelf.NGAPServer.RcvEventCh <- context.NewUnmarshalEAP5GDataEvt(
+			n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewUnmarshalEAP5GDataEvt(
 				ikeSecurityAssociation.LocalSPI,
 				eapExpanded.VendorData,
 				ikeSecurityAssociation.IkeUE != nil,
 				ranNgapId,
 			)
 
-			ikeSecurityAssociation.IKEConnection = &context.UDPSocketInfo{
+			ikeSecurityAssociation.IKEConnection = &n3iwf_context.UDPSocketInfo{
 				Conn:      udpConn,
 				N3IWFAddr: n3iwfAddr,
 				UEAddr:    ueAddr,
@@ -933,12 +936,12 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		if addrRequest {
 			// IP addresses (IPSec)
 			ueIPAddr = n3iwfSelf.NewInternalUEIPAddr(ikeUE).To4()
-			n3iwfIPAddr = net.ParseIP(n3iwfSelf.IPSecGatewayAddress).To4()
+			n3iwfIPAddr = net.ParseIP(ipsecGwAddr).To4()
 
 			responseConfiguration := responseIKEPayload.BuildConfiguration(ike_message.CFG_REPLY)
 			responseConfiguration.ConfigurationAttribute.BuildConfigurationAttribute(ike_message.INTERNAL_IP4_ADDRESS, ueIPAddr)
 			responseConfiguration.ConfigurationAttribute.BuildConfigurationAttribute(
-				ike_message.INTERNAL_IP4_NETMASK, n3iwfSelf.Subnet.Mask)
+				ike_message.INTERNAL_IP4_NETMASK, n3iwfSelf.UeIPRange.Mask)
 
 			ikeUE.IPSecInnerIP = ueIPAddr
 			if ipsecInnerIPAddr, err := net.ResolveIPAddr("ip", ueIPAddr.String()); err != nil {
@@ -1020,10 +1023,10 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		}
 
 		// Notification(NAS_IP_ADDRESS)
-		responseIKEPayload.BuildNotifyNAS_IP4_ADDRESS(n3iwfSelf.IPSecGatewayAddress)
+		responseIKEPayload.BuildNotifyNAS_IP4_ADDRESS(ipsecGwAddr)
 
 		// Notification(NSA_TCP_PORT)
-		responseIKEPayload.BuildNotifyNAS_TCP_PORT(n3iwfSelf.TCPPort)
+		responseIKEPayload.BuildNotifyNAS_TCP_PORT(cfg.GetNasTcpPort())
 
 		if errEncrypt := EncryptProcedure(ikeSecurityAssociation, responseIKEPayload, responseIKEMessage); errEncrypt != nil {
 			ikeLog.Errorf("Encrypting IKE message failed: %+v", errEncrypt)
@@ -1032,7 +1035,7 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 
 		// Aplly XFRM rules
 		// IPsec for CP always use default XFRM interface
-		if err = xfrm.ApplyXFRMRule(false, n3iwfSelf.XfrmIfaceId, childSecurityAssociationContext); err != nil {
+		if err = xfrm.ApplyXFRMRule(false, cfg.GetXfrmIfaceId(), childSecurityAssociationContext); err != nil {
 			ikeLog.Errorf("Applying XFRM rules failed: %+v", err)
 			return
 		}
@@ -1049,13 +1052,13 @@ func HandleIKEAUTH(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, message
 		ikeSecurityAssociation.State++
 
 		// After this, N3IWF will forward NAS with Child SA (IPSec SA)
-		n3iwfSelf.NGAPServer.RcvEventCh <- context.NewStartTCPSignalNASMsgEvt(
+		n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewStartTCPSignalNASMsgEvt(
 			ranNgapId,
 		)
 
 		// Get TempPDUSessionSetupData from NGAP to setup PDU session if needed
-		n3iwfSelf.NGAPServer.RcvEventCh <- context.NewGetNGAPContextEvt(
-			ranNgapId, []int64{context.CxtTempPDUSessionSetupData},
+		n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewGetNGAPContextEvt(
+			ranNgapId, []int64{n3iwf_context.CxtTempPDUSessionSetupData},
 		)
 	}
 }
@@ -1066,7 +1069,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 
 	var encryptedPayload *ike_message.Encrypted
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 
 	responseIKEMessage := new(ike_message.IKEMessage)
 
@@ -1174,7 +1177,7 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		return
 	}
 
-	ikeSecurityAssociation.TemporaryIkeMsg = &context.IkeMsgTemporaryData{
+	ikeSecurityAssociation.TemporaryIkeMsg = &n3iwf_context.IkeMsgTemporaryData{
 		SecurityAssociation:      securityAssociation,
 		TrafficSelectorInitiator: trafficSelectorInitiator,
 		TrafficSelectorResponder: trafficSelectorResponder,
@@ -1186,17 +1189,19 @@ func HandleCREATECHILDSA(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		return
 	}
 
-	ngapCxtReqNumlist := []int64{context.CxtTempPDUSessionSetupData}
+	ngapCxtReqNumlist := []int64{n3iwf_context.CxtTempPDUSessionSetupData}
 
-	n3iwfSelf.NGAPServer.RcvEventCh <- context.NewGetNGAPContextEvt(ranNgapId,
+	n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewGetNGAPContextEvt(ranNgapId,
 		ngapCxtReqNumlist)
 }
 
-func continueCreateChildSA(ikeSecurityAssociation *context.IKESecurityAssociation,
-	temporaryPDUSessionSetupData *context.PDUSessionSetupTemporaryData,
+func continueCreateChildSA(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation,
+	temporaryPDUSessionSetupData *n3iwf_context.PDUSessionSetupTemporaryData,
 ) {
 	ikeLog := logger.IKELog
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
+	ipsecGwAddr := cfg.GetIPSecGatewayAddr()
 
 	// UE context
 	ikeUe := ikeSecurityAssociation.IkeUE
@@ -1233,7 +1238,7 @@ func continueCreateChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 	// Build TSi if there is no one in the response
 	if len(temporaryIkeMsg.TrafficSelectorInitiator.TrafficSelectors) == 0 {
 		ikeLog.Warnf("There is no TSi in CREATE_CHILD_SA response.")
-		n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
+		n3iwfIPAddr := net.ParseIP(ipsecGwAddr)
 		temporaryIkeMsg.TrafficSelectorInitiator.TrafficSelectors.BuildIndividualTrafficSelector(
 			ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
 			0, 65535, n3iwfIPAddr, n3iwfIPAddr)
@@ -1270,7 +1275,7 @@ func continueCreateChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 		childSecurityAssociationContext.NATPort = ikeConnection.UEAddr.Port
 	}
 
-	newXfrmiId := n3iwfSelf.XfrmIfaceId
+	newXfrmiId := cfg.GetXfrmIfaceId()
 
 	pduSessionListLen := ikeUe.PduSessionListLen
 
@@ -1279,10 +1284,10 @@ func continueCreateChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 	if pduSessionListLen > 1 {
 		// Setup XFRM interface for ipsec
 		var linkIPSec netlink.Link
-		n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress).To4()
-		n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfSelf.Subnet.Mask}
-		newXfrmiId += n3iwfSelf.XfrmIfaceId + n3iwfSelf.XfrmIfaceIdOffsetForUP
-		newXfrmiName := fmt.Sprintf("%s-%d", n3iwfSelf.XfrmIfaceName, newXfrmiId)
+		n3iwfIPAddr := net.ParseIP(ipsecGwAddr).To4()
+		n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfSelf.UeIPRange.Mask}
+		newXfrmiId += cfg.GetXfrmIfaceId() + n3iwfSelf.XfrmIfaceIdOffsetForUP
+		newXfrmiName := fmt.Sprintf("%s-%d", cfg.GetXfrmIfaceName(), newXfrmiId)
 
 		if linkIPSec, err = xfrm.SetupIPsecXfrmi(newXfrmiName, n3iwfSelf.XfrmParentIfaceName,
 			newXfrmiId, n3iwfIPAddrAndSubnet); err != nil {
@@ -1313,12 +1318,12 @@ func continueCreateChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 			return
 		}
 		// Forward PDU Seesion Establishment Accept to UE
-		n3iwfSelf.NGAPServer.RcvEventCh <- context.NewSendNASMsgEvt(
+		n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewSendNASMsgEvt(
 			ranNgapId,
 		)
 	}
 
-	temporaryPDUSessionSetupData.FailedErrStr = append(temporaryPDUSessionSetupData.FailedErrStr, context.ErrNil)
+	temporaryPDUSessionSetupData.FailedErrStr = append(temporaryPDUSessionSetupData.FailedErrStr, n3iwf_context.ErrNil)
 
 	ikeSecurityAssociation.ResponderMessageID++
 
@@ -1335,7 +1340,7 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 		return
 	}
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 	responseIKEMessage := new(ike_message.IKEMessage)
 	responderSPI := message.ResponderSPI
 	ikeSecurityAssociation, ok := n3iwfSelf.IKESALoad(responderSPI)
@@ -1398,11 +1403,11 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 				if err := n3iwfIke.Remove(); err != nil {
 					ikeLog.Errorf("Delete IkeUe Context error : %+v", err)
 				}
-				n3iwfSelf.NGAPServer.RcvEventCh <- context.NewSendUEContextReleaseCompleteEvt(
+				n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewSendUEContextReleaseCompleteEvt(
 					ranNgapId,
 				)
 			} else if deletePayload.ProtocolID == ike_message.TypeESP {
-				n3iwfSelf.NGAPServer.RcvEventCh <- context.NewSendPDUSessionResourceReleaseResEvt(
+				n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewSendPDUSessionResourceReleaseResEvt(
 					ranNgapId,
 				)
 			}
@@ -1415,28 +1420,28 @@ func HandleInformational(udpConn *net.UDPConn, n3iwfAddr, ueAddr *net.UDPAddr, m
 	ikeSecurityAssociation.ResponderMessageID++
 }
 
-func HandleEvent(ikeEvt context.IkeEvt) {
+func HandleEvent(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle IKE event")
 
 	switch ikeEvt.Type() {
-	case context.UnmarshalEAP5GDataResponse:
+	case n3iwf_context.UnmarshalEAP5GDataResponse:
 		HandleUnmarshalEAP5GDataResponse(ikeEvt)
-	case context.SendEAP5GFailureMsg:
+	case n3iwf_context.SendEAP5GFailureMsg:
 		HandleSendEAP5GFailureMsg(ikeEvt)
-	case context.SendEAPSuccessMsg:
+	case n3iwf_context.SendEAPSuccessMsg:
 		HandleSendEAPSuccessMsg(ikeEvt)
-	case context.SendEAPNASMsg:
+	case n3iwf_context.SendEAPNASMsg:
 		HandleSendEAPNASMsg(ikeEvt)
-	case context.CreatePDUSession:
+	case n3iwf_context.CreatePDUSession:
 		HandleCreatePDUSession(ikeEvt)
-	case context.IKEDeleteRequest:
+	case n3iwf_context.IKEDeleteRequest:
 		HandleIKEDeleteRequest(ikeEvt)
-	case context.SendChildSADeleteRequest:
+	case n3iwf_context.SendChildSADeleteRequest:
 		HandleSendChildSADeleteRequest(ikeEvt)
-	case context.IKEContextUpdate:
+	case n3iwf_context.IKEContextUpdate:
 		HandleIKEContextUpdate(ikeEvt)
-	case context.GetNGAPContextResponse:
+	case n3iwf_context.GetNGAPContextResponse:
 		HandleGetNGAPContextResponse(ikeEvt)
 	default:
 		ikeLog.Errorf("Undefine IKE event type : %d", ikeEvt.Type())
@@ -1444,16 +1449,16 @@ func HandleEvent(ikeEvt context.IkeEvt) {
 	}
 }
 
-func HandleUnmarshalEAP5GDataResponse(ikeEvt context.IkeEvt) {
+func HandleUnmarshalEAP5GDataResponse(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle UnmarshalEAP5GDataResponse event")
 
-	unmarshalEAP5GDataResponseEvt := ikeEvt.(*context.UnmarshalEAP5GDataResponseEvt)
+	unmarshalEAP5GDataResponseEvt := ikeEvt.(*n3iwf_context.UnmarshalEAP5GDataResponseEvt)
 	localSPI := unmarshalEAP5GDataResponseEvt.LocalSPI
 	ranUeNgapId := unmarshalEAP5GDataResponseEvt.RanUeNgapId
 	nasPDU := unmarshalEAP5GDataResponseEvt.NasPDU
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 	ikeSecurityAssociation, _ := n3iwfSelf.IKESALoad(localSPI)
 
 	// Create UE context
@@ -1466,7 +1471,7 @@ func HandleUnmarshalEAP5GDataResponse(ikeEvt context.IkeEvt) {
 
 	n3iwfSelf.IkeSpiNgapIdMapping(ikeUe.N3IWFIKESecurityAssociation.LocalSPI, ranUeNgapId)
 
-	n3iwfSelf.NGAPServer.RcvEventCh <- context.NewSendInitialUEMessageEvt(
+	n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewSendInitialUEMessageEvt(
 		ranUeNgapId,
 		ikeSecurityAssociation.IKEConnection.UEAddr.IP.To4().String(),
 		ikeSecurityAssociation.IKEConnection.UEAddr.Port,
@@ -1474,15 +1479,15 @@ func HandleUnmarshalEAP5GDataResponse(ikeEvt context.IkeEvt) {
 	)
 }
 
-func HandleSendEAP5GFailureMsg(ikeEvt context.IkeEvt) {
+func HandleSendEAP5GFailureMsg(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle SendEAP5GFailureMsg event")
 
-	sendEAP5GFailureMsgEvt := ikeEvt.(*context.SendEAP5GFailureMsgEvt)
+	sendEAP5GFailureMsgEvt := ikeEvt.(*n3iwf_context.SendEAP5GFailureMsgEvt)
 	errMsg := sendEAP5GFailureMsgEvt.ErrMsg
 	localSPI := sendEAP5GFailureMsgEvt.LocalSPI
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 	ikeSecurityAssociation, _ := n3iwfSelf.IKESALoad(localSPI)
 	ikeLog.Warnf("EAP Failure : %s", errMsg.Error())
 
@@ -1513,16 +1518,16 @@ func HandleSendEAP5GFailureMsg(ikeEvt context.IkeEvt) {
 		responseIKEMessage)
 }
 
-func HandleSendEAPSuccessMsg(ikeEvt context.IkeEvt) {
+func HandleSendEAPSuccessMsg(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle SendEAPSuccessMsg event")
 
-	sendEAPSuccessMsgEvt := ikeEvt.(*context.SendEAPSuccessMsgEvt)
+	sendEAPSuccessMsgEvt := ikeEvt.(*n3iwf_context.SendEAPSuccessMsgEvt)
 	localSPI := sendEAPSuccessMsgEvt.LocalSPI
 	kn3iwf := sendEAPSuccessMsgEvt.Kn3iwf
 	pduSessionListLen := sendEAPSuccessMsgEvt.PduSessionListLen
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 	ikeSecurityAssociation, _ := n3iwfSelf.IKESALoad(localSPI)
 
 	if kn3iwf != nil {
@@ -1564,15 +1569,15 @@ func HandleSendEAPSuccessMsg(ikeEvt context.IkeEvt) {
 	ikeSecurityAssociation.State++
 }
 
-func HandleSendEAPNASMsg(ikeEvt context.IkeEvt) {
+func HandleSendEAPNASMsg(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle SendEAPNASMsg event")
 
-	sendEAPNASMsgEvt := ikeEvt.(*context.SendEAPNASMsgEvt)
+	sendEAPNASMsgEvt := ikeEvt.(*n3iwf_context.SendEAPNASMsgEvt)
 	localSPI := sendEAPNASMsgEvt.LocalSPI
 	nasPDU := sendEAPNASMsgEvt.NasPDU
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 	ikeSecurityAssociation, _ := n3iwfSelf.IKESALoad(localSPI)
 
 	responseIKEMessage := new(ike_message.IKEMessage)
@@ -1606,16 +1611,16 @@ func HandleSendEAPNASMsg(ikeEvt context.IkeEvt) {
 		ikeSecurityAssociation.IKEConnection.UEAddr, responseIKEMessage)
 }
 
-func HandleCreatePDUSession(ikeEvt context.IkeEvt) {
+func HandleCreatePDUSession(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle CreatePDUSession event")
 
-	createPDUSessionEvt := ikeEvt.(*context.CreatePDUSessionEvt)
+	createPDUSessionEvt := ikeEvt.(*n3iwf_context.CreatePDUSessionEvt)
 	localSPI := createPDUSessionEvt.LocalSPI
 	pduSessionListLen := createPDUSessionEvt.PduSessionListLen
 	temporaryPDUSessionSetupData := createPDUSessionEvt.TempPDUSessionSetupData
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 	ikeSecurityAssociation, _ := n3iwfSelf.IKESALoad(localSPI)
 
 	ikeSecurityAssociation.IkeUE.PduSessionListLen = pduSessionListLen
@@ -1623,25 +1628,25 @@ func HandleCreatePDUSession(ikeEvt context.IkeEvt) {
 	CreatePDUSessionChildSA(ikeSecurityAssociation.IkeUE, temporaryPDUSessionSetupData)
 }
 
-func HandleIKEDeleteRequest(ikeEvt context.IkeEvt) {
+func HandleIKEDeleteRequest(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle IKEDeleteRequest event")
 
-	ikeDeleteRequest := ikeEvt.(*context.IKEDeleteRequestEvt)
+	ikeDeleteRequest := ikeEvt.(*n3iwf_context.IKEDeleteRequestEvt)
 	localSPI := ikeDeleteRequest.LocalSPI
 
 	SendIKEDeleteRequest(localSPI)
 }
 
-func HandleSendChildSADeleteRequest(ikeEvt context.IkeEvt) {
+func HandleSendChildSADeleteRequest(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle SendChildSADeleteRequest event")
 
-	sendChildSADeleteRequestEvt := ikeEvt.(*context.SendChildSADeleteRequestEvt)
+	sendChildSADeleteRequestEvt := ikeEvt.(*n3iwf_context.SendChildSADeleteRequestEvt)
 	localSPI := sendChildSADeleteRequestEvt.LocalSPI
 	releaseIdList := sendChildSADeleteRequestEvt.ReleaseIdList
 
-	ikeUe, ok := context.N3IWFSelf().IkeUePoolLoad(localSPI)
+	ikeUe, ok := n3iwf_context.N3IWFSelf().IkeUePoolLoad(localSPI)
 	if !ok {
 		ikeLog.Errorf("Cannot get IkeUE from SPI : %+v", localSPI)
 		return
@@ -1649,15 +1654,15 @@ func HandleSendChildSADeleteRequest(ikeEvt context.IkeEvt) {
 	SendChildSADeleteRequest(ikeUe, releaseIdList)
 }
 
-func HandleIKEContextUpdate(ikeEvt context.IkeEvt) {
+func HandleIKEContextUpdate(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle IKEContextUpdate event")
 
-	ikeContextUpdateEvt := ikeEvt.(*context.IKEContextUpdateEvt)
+	ikeContextUpdateEvt := ikeEvt.(*n3iwf_context.IKEContextUpdateEvt)
 	localSPI := ikeContextUpdateEvt.LocalSPI
 	kn3iwf := ikeContextUpdateEvt.Kn3iwf
 
-	ikeUe, ok := context.N3IWFSelf().IkeUePoolLoad(localSPI)
+	ikeUe, ok := n3iwf_context.N3IWFSelf().IkeUePoolLoad(localSPI)
 	if !ok {
 		ikeLog.Errorf("Cannot get IkeUE from SPI : %+v", localSPI)
 		return
@@ -1668,24 +1673,24 @@ func HandleIKEContextUpdate(ikeEvt context.IkeEvt) {
 	}
 }
 
-func HandleGetNGAPContextResponse(ikeEvt context.IkeEvt) {
+func HandleGetNGAPContextResponse(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle GetNGAPContextResponse event")
 
-	getNGAPContextRepEvt := ikeEvt.(*context.GetNGAPContextRepEvt)
+	getNGAPContextRepEvt := ikeEvt.(*n3iwf_context.GetNGAPContextRepEvt)
 	localSPI := getNGAPContextRepEvt.LocalSPI
 	ngapCxtReqNumlist := getNGAPContextRepEvt.NgapCxtReqNumlist
 	ngapCxt := getNGAPContextRepEvt.NgapCxt
 
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
 	ikeSecurityAssociation, _ := n3iwfSelf.IKESALoad(localSPI)
 
-	var tempPDUSessionSetupData *context.PDUSessionSetupTemporaryData
+	var tempPDUSessionSetupData *n3iwf_context.PDUSessionSetupTemporaryData
 
 	for i, num := range ngapCxtReqNumlist {
 		switch num {
-		case context.CxtTempPDUSessionSetupData:
-			tempPDUSessionSetupData = ngapCxt[i].(*context.PDUSessionSetupTemporaryData)
+		case n3iwf_context.CxtTempPDUSessionSetupData:
+			tempPDUSessionSetupData = ngapCxt[i].(*n3iwf_context.PDUSessionSetupTemporaryData)
 		default:
 			ikeLog.Errorf("Receive undefine NGAP Context Request number : %d", num)
 		}
@@ -1701,11 +1706,14 @@ func HandleGetNGAPContextResponse(ikeEvt context.IkeEvt) {
 	}
 }
 
-func CreatePDUSessionChildSA(ikeUe *context.N3IWFIkeUe,
-	temporaryPDUSessionSetupData *context.PDUSessionSetupTemporaryData,
+func CreatePDUSessionChildSA(ikeUe *n3iwf_context.N3IWFIkeUe,
+	temporaryPDUSessionSetupData *n3iwf_context.PDUSessionSetupTemporaryData,
 ) {
 	ikeLog := logger.IKELog
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
+	ipsecGwAddr := cfg.GetIPSecGatewayAddr()
+
 	ikeSecurityAssociation := ikeUe.N3IWFIKESecurityAssociation
 
 	ranNgapId, ok := n3iwfSelf.NgapIdLoad(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
@@ -1722,7 +1730,7 @@ func CreatePDUSessionChildSA(ikeUe *context.N3IWFIkeUe,
 			// Send CREATE_CHILD_SA to UE
 			ikeMessage := new(ike_message.IKEMessage)
 			var ikePayload ike_message.IKEPayloadContainer
-			errStr := context.ErrNil
+			errStr := n3iwf_context.ErrNil
 
 			// Build IKE message
 			ikeMessage.BuildIKEHeader(ikeSecurityAssociation.RemoteSPI,
@@ -1778,7 +1786,7 @@ func CreatePDUSessionChildSA(ikeUe *context.N3IWFIkeUe,
 			ikeSecurityAssociation.ConcatenatedNonce = nonceData
 
 			// TSi
-			n3iwfIPAddr := net.ParseIP(n3iwfSelf.IPSecGatewayAddress)
+			n3iwfIPAddr := net.ParseIP(ipsecGwAddr)
 			tsi := ikePayload.BuildTrafficSelectorInitiator()
 			tsi.TrafficSelectors.BuildIndividualTrafficSelector(
 				ike_message.TS_IPV4_ADDR_RANGE, ike_message.IPProtocolAll,
@@ -1795,13 +1803,13 @@ func CreatePDUSessionChildSA(ikeUe *context.N3IWFIkeUe,
 			ikePayload.BuildNotify5G_QOS_INFO(uint8(pduSessionID), pduSession.QFIList, true, false, 0)
 
 			// Notify-UP_IP_ADDRESS
-			ikePayload.BuildNotifyUP_IP4_ADDRESS(n3iwfSelf.IPSecGatewayAddress)
+			ikePayload.BuildNotifyUP_IP4_ADDRESS(ipsecGwAddr)
 
 			temporaryPDUSessionSetupData.Index++
 
 			if err := EncryptProcedure(ikeUe.N3IWFIKESecurityAssociation, ikePayload, ikeMessage); err != nil {
 				ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
-				errStr = context.ErrTransportResourceUnavailable
+				errStr = n3iwf_context.ErrTransportResourceUnavailable
 				temporaryPDUSessionSetupData.FailedErrStr = append(temporaryPDUSessionSetupData.FailedErrStr,
 					errStr)
 				continue
@@ -1814,7 +1822,7 @@ func CreatePDUSessionChildSA(ikeUe *context.N3IWFIkeUe,
 				ikeSecurityAssociation.IKEConnection.UEAddr, ikeMessage)
 			break
 		} else {
-			n3iwfSelf.NGAPServer.RcvEventCh <- context.NewSendPDUSessionResourceSetupResEvt(
+			n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewSendPDUSessionResourceSetupResEvt(
 				ranNgapId,
 			)
 			break
@@ -2047,7 +2055,7 @@ func is_Kernel_Supported(
 }
 
 func parseIPAddressInformationToChildSecurityAssociation(
-	childSecurityAssociation *context.ChildSecurityAssociation,
+	childSecurityAssociation *n3iwf_context.ChildSecurityAssociation,
 	uePublicIPAddr net.IP,
 	trafficSelectorLocal *ike_message.IndividualTrafficSelector,
 	trafficSelectorRemote *ike_message.IndividualTrafficSelector,
@@ -2057,8 +2065,10 @@ func parseIPAddressInformationToChildSecurityAssociation(
 		return errors.New("childSecurityAssociation is nil")
 	}
 
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
 	childSecurityAssociation.PeerPublicIPAddr = uePublicIPAddr
-	childSecurityAssociation.LocalPublicIPAddr = net.ParseIP(context.N3IWFSelf().IKEBindAddress)
+	childSecurityAssociation.LocalPublicIPAddr = net.ParseIP(cfg.GetIKEBindAddr())
 
 	ikeLog.Tracef("Local TS: %+v", trafficSelectorLocal.StartAddress)
 	ikeLog.Tracef("Remote TS: %+v", trafficSelectorRemote.StartAddress)

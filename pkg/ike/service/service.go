@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/ike"
 	"github.com/free5gc/n3iwf/pkg/ike/handler"
 )
@@ -19,10 +19,11 @@ var (
 )
 
 func Run(wg *sync.WaitGroup) error {
-	n3iwfSelf := context.N3IWFSelf()
+	n3iwfSelf := n3iwf_context.N3IWFSelf()
+	cfg := n3iwfSelf.Config()
 
 	// Resolve UDP addresses
-	ip := n3iwfSelf.IKEBindAddress
+	ip := cfg.GetIKEBindAddr()
 	udpAddrPort500, err := net.ResolveUDPAddr("udp", ip+":500")
 	if err != nil {
 		return errors.Wrapf(err, "ResolveUDPAddr (%s:500)", ip)
@@ -59,16 +60,16 @@ func Run(wg *sync.WaitGroup) error {
 	return nil
 }
 
-func NewIKEServer() *context.IkeServer {
-	return &context.IkeServer{
+func NewIKEServer() *n3iwf_context.IkeServer {
+	return &n3iwf_context.IkeServer{
 		Listener:    make(map[int]*net.UDPConn),
-		RcvIkePktCh: make(chan context.IkeReceivePacket, RECEIVE_IKEPACKET_CHANNEL_LEN),
-		RcvEventCh:  make(chan context.IkeEvt, RECEIVE_IKEEVENT_CHANNEL_LEN),
+		RcvIkePktCh: make(chan n3iwf_context.IkeReceivePacket, RECEIVE_IKEPACKET_CHANNEL_LEN),
+		RcvEventCh:  make(chan n3iwf_context.IkeEvt, RECEIVE_IKEEVENT_CHANNEL_LEN),
 		StopServer:  make(chan struct{}),
 	}
 }
 
-func server(ikeServer *context.IkeServer, wg *sync.WaitGroup) {
+func server(ikeServer *n3iwf_context.IkeServer, wg *sync.WaitGroup) {
 	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
@@ -94,7 +95,7 @@ func server(ikeServer *context.IkeServer, wg *sync.WaitGroup) {
 	}
 }
 
-func Receiver(localAddr *net.UDPAddr, ikeServer *context.IkeServer, errChan chan<- error, wg *sync.WaitGroup) {
+func Receiver(localAddr *net.UDPAddr, ikeServer *n3iwf_context.IkeServer, errChan chan<- error, wg *sync.WaitGroup) {
 	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
@@ -127,7 +128,7 @@ func Receiver(localAddr *net.UDPAddr, ikeServer *context.IkeServer, errChan chan
 
 		forwardData := make([]byte, n)
 		copy(forwardData, data[:n])
-		ikeServer.RcvIkePktCh <- context.IkeReceivePacket{
+		ikeServer.RcvIkePktCh <- n3iwf_context.IkeReceivePacket{
 			RemoteAddr: *remoteAddr,
 			Listener:   *listener,
 			LocalAddr:  *localAddr,
@@ -136,7 +137,7 @@ func Receiver(localAddr *net.UDPAddr, ikeServer *context.IkeServer, errChan chan
 	}
 }
 
-func Stop(n3iwfContext *context.N3IWFContext) {
+func Stop(n3iwfContext *n3iwf_context.N3IWFContext) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Close Ike server...")
 
