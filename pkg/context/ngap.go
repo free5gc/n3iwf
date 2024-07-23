@@ -1,19 +1,5 @@
 package context
 
-import (
-	"github.com/free5gc/sctp"
-)
-
-type NGAPServer struct {
-	Conn         []*sctp.SCTPConn
-	RcvNgapPktCh chan ReceiveNGAPPacket
-	RcvEventCh   chan NgapEvt
-}
-type ReceiveNGAPPacket struct {
-	Conn *sctp.SCTPConn
-	Buf  []byte
-}
-
 type NgapEventType int64
 
 // NGAP event type

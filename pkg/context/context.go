@@ -18,7 +18,6 @@ import (
 
 	"github.com/pkg/errors"
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
-	"golang.org/x/net/ipv4"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/factory"
@@ -26,8 +25,6 @@ import (
 	"github.com/free5gc/sctp"
 	"github.com/free5gc/util/idgenerator"
 )
-
-var n3iwfContext *N3IWFContext
 
 type n3iwf interface {
 	Config() *factory.Config
@@ -67,12 +64,6 @@ type N3IWFContext struct {
 
 	// Every UE's first UP IPsec will use default XFRM interface, additoinal UP IPsec will offset its XFRM id
 	XfrmIfaceIdOffsetForUP uint32
-
-	// N3IWF NWu interface IPv4 packet connection
-	NWuIPv4PacketConn *ipv4.PacketConn
-
-	NGAPServer *NGAPServer
-	IKEServer  *IkeServer
 }
 
 func NewContext(n3iwf n3iwf) (*N3IWFContext, error) {
@@ -136,13 +127,12 @@ func NewContext(n3iwf n3iwf) (*N3IWFContext, error) {
 	n.UeIPRange = ueIPRange
 
 	// XFRM related
-	ikeBindIfaceName, err := GetInterfaceName(cfg.GetIKEBindAddr())
+	ikeBindIfaceName, err := getInterfaceName(cfg.GetIKEBindAddr())
 	if err != nil {
 		return nil, err
 	}
 	n.XfrmParentIfaceName = ikeBindIfaceName
 
-	n3iwfContext = n
 	return n, nil
 }
 
@@ -158,7 +148,7 @@ func decodePEM(path string) (*pem.Block, []byte, error) {
 	return p, rest, nil
 }
 
-func GetInterfaceName(IPAddress string) (interfaceName string, err error) {
+func getInterfaceName(IPAddress string) (interfaceName string, err error) {
 	interfaces, err := net.Interfaces()
 	if err != nil {
 		return "nil", err
@@ -184,44 +174,43 @@ func GetInterfaceName(IPAddress string) (interfaceName string, err error) {
 	return "", fmt.Errorf("Cannot find interface name for IP[%s]", IPAddress)
 }
 
-// Create new N3IWF context
-func N3IWFSelf() *N3IWFContext {
-	return n3iwfContext
-}
-
-func (context *N3IWFContext) NewN3iwfIkeUe(spi uint64) *N3IWFIkeUe {
-	n3iwfIkeUe := new(N3IWFIkeUe)
+func (c *N3IWFContext) NewN3iwfIkeUe(spi uint64) *N3IWFIkeUe {
+	n3iwfIkeUe := &N3IWFIkeUe{
+		N3iwfCtx: c,
+	}
 	n3iwfIkeUe.init()
-	context.IKEUePool.Store(spi, n3iwfIkeUe)
+	c.IKEUePool.Store(spi, n3iwfIkeUe)
 	return n3iwfIkeUe
 }
 
-func (context *N3IWFContext) NewN3iwfRanUe() *N3IWFRanUe {
-	ranUeNgapId, err := context.RANUENGAPIDGenerator.Allocate()
+func (c *N3IWFContext) NewN3iwfRanUe() *N3IWFRanUe {
+	ranUeNgapId, err := c.RANUENGAPIDGenerator.Allocate()
 	if err != nil {
 		logger.CtxLog.Errorf("New N3IWF UE failed: %+v", err)
 		return nil
 	}
-	n3iwfRanUe := new(N3IWFRanUe)
+	n3iwfRanUe := &N3IWFRanUe{
+		N3iwfCtx: c,
+	}
 	n3iwfRanUe.init(ranUeNgapId)
-	context.RANUePool.Store(ranUeNgapId, n3iwfRanUe)
+	c.RANUePool.Store(ranUeNgapId, n3iwfRanUe)
 	n3iwfRanUe.TemporaryPDUSessionSetupData = new(PDUSessionSetupTemporaryData)
 
 	return n3iwfRanUe
 }
 
-func (context *N3IWFContext) DeleteRanUe(ranUeNgapId int64) {
-	context.RANUePool.Delete(ranUeNgapId)
-	context.DeleteIkeSPIFromNgapId(ranUeNgapId)
+func (c *N3IWFContext) DeleteRanUe(ranUeNgapId int64) {
+	c.RANUePool.Delete(ranUeNgapId)
+	c.DeleteIkeSPIFromNgapId(ranUeNgapId)
 }
 
-func (context *N3IWFContext) DeleteIKEUe(spi uint64) {
-	context.IKEUePool.Delete(spi)
-	context.DeleteNgapIdFromIkeSPI(spi)
+func (c *N3IWFContext) DeleteIKEUe(spi uint64) {
+	c.IKEUePool.Delete(spi)
+	c.DeleteNgapIdFromIkeSPI(spi)
 }
 
-func (context *N3IWFContext) IkeUePoolLoad(spi uint64) (*N3IWFIkeUe, bool) {
-	ikeUe, ok := context.IKEUePool.Load(spi)
+func (c *N3IWFContext) IkeUePoolLoad(spi uint64) (*N3IWFIkeUe, bool) {
+	ikeUe, ok := c.IKEUePool.Load(spi)
 	if ok {
 		return ikeUe.(*N3IWFIkeUe), ok
 	} else {
@@ -229,8 +218,8 @@ func (context *N3IWFContext) IkeUePoolLoad(spi uint64) (*N3IWFIkeUe, bool) {
 	}
 }
 
-func (context *N3IWFContext) RanUePoolLoad(ranUeNgapId int64) (*N3IWFRanUe, bool) {
-	ranUe, ok := context.RANUePool.Load(ranUeNgapId)
+func (c *N3IWFContext) RanUePoolLoad(ranUeNgapId int64) (*N3IWFRanUe, bool) {
+	ranUe, ok := c.RANUePool.Load(ranUeNgapId)
 	if ok {
 		return ranUe.(*N3IWFRanUe), ok
 	} else {
@@ -238,105 +227,99 @@ func (context *N3IWFContext) RanUePoolLoad(ranUeNgapId int64) (*N3IWFRanUe, bool
 	}
 }
 
-func (context *N3IWFContext) IkeSpiNgapIdMapping(spi uint64, ranUeNgapId int64) {
-	context.IKESPIToNGAPId.Store(spi, ranUeNgapId)
-	context.NGAPIdToIKESPI.Store(ranUeNgapId, spi)
+func (c *N3IWFContext) IkeSpiNgapIdMapping(spi uint64, ranUeNgapId int64) {
+	c.IKESPIToNGAPId.Store(spi, ranUeNgapId)
+	c.NGAPIdToIKESPI.Store(ranUeNgapId, spi)
 }
 
-func (context *N3IWFContext) IkeSpiLoad(ranUeNgapId int64) (uint64, bool) {
-	spi, ok := context.NGAPIdToIKESPI.Load(ranUeNgapId)
+func (c *N3IWFContext) IkeSpiLoad(ranUeNgapId int64) (uint64, bool) {
+	spi, ok := c.NGAPIdToIKESPI.Load(ranUeNgapId)
 	if ok {
 		return spi.(uint64), ok
-	} else {
-		return 0, ok
 	}
+	return 0, false
 }
 
-func (context *N3IWFContext) NgapIdLoad(spi uint64) (int64, bool) {
-	ranNgapId, ok := context.IKESPIToNGAPId.Load(spi)
+func (c *N3IWFContext) NgapIdLoad(spi uint64) (int64, bool) {
+	ranNgapId, ok := c.IKESPIToNGAPId.Load(spi)
 	if ok {
 		return ranNgapId.(int64), ok
-	} else {
-		return 0, ok
 	}
+	return 0, false
 }
 
-func (context *N3IWFContext) DeleteNgapIdFromIkeSPI(spi uint64) {
-	context.IKESPIToNGAPId.Delete(spi)
+func (c *N3IWFContext) DeleteNgapIdFromIkeSPI(spi uint64) {
+	c.IKESPIToNGAPId.Delete(spi)
 }
 
-func (context *N3IWFContext) DeleteIkeSPIFromNgapId(ranUeNgapId int64) {
-	context.NGAPIdToIKESPI.Delete(ranUeNgapId)
+func (c *N3IWFContext) DeleteIkeSPIFromNgapId(ranUeNgapId int64) {
+	c.NGAPIdToIKESPI.Delete(ranUeNgapId)
 }
 
-func (context *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (*N3IWFRanUe, error) {
-	ranNgapId, ok := context.IKESPIToNGAPId.Load(spi)
+func (c *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (*N3IWFRanUe, error) {
+	ranNgapId, ok := c.IKESPIToNGAPId.Load(spi)
 	if ok {
-		ranUe, err := context.RanUePoolLoad(ranNgapId.(int64))
+		ranUe, err := c.RanUePoolLoad(ranNgapId.(int64))
 		if !err {
 			return nil, fmt.Errorf("Cannot find RanUE from RanNgapId : %+v", ranNgapId)
 		}
 		return ranUe, nil
-	} else {
-		return nil, fmt.Errorf("Cannot find RanNgapId from IkeUe SPI : %+v", spi)
 	}
+	return nil, fmt.Errorf("Cannot find RanNgapId from IkeUe SPI : %+v", spi)
 }
 
-func (context *N3IWFContext) IkeUeLoadFromNgapId(ranUeNgapId int64) (*N3IWFIkeUe, error) {
-	spi, ok := context.NGAPIdToIKESPI.Load(ranUeNgapId)
+func (c *N3IWFContext) IkeUeLoadFromNgapId(ranUeNgapId int64) (*N3IWFIkeUe, error) {
+	spi, ok := c.NGAPIdToIKESPI.Load(ranUeNgapId)
 	if ok {
-		ikeUe, err := context.IkeUePoolLoad(spi.(uint64))
+		ikeUe, err := c.IkeUePoolLoad(spi.(uint64))
 		if !err {
 			return nil, fmt.Errorf("Cannot find IkeUe from spi : %+v", spi)
 		}
 		return ikeUe, nil
-	} else {
-		return nil, fmt.Errorf("Cannot find SPI from NgapId : %+v", ranUeNgapId)
 	}
+	return nil, fmt.Errorf("Cannot find SPI from NgapId : %+v", ranUeNgapId)
 }
 
-func (context *N3IWFContext) NewN3iwfAmf(sctpAddr string, conn *sctp.SCTPConn) *N3IWFAMF {
+func (c *N3IWFContext) NewN3iwfAmf(sctpAddr string, conn *sctp.SCTPConn) *N3IWFAMF {
 	amf := new(N3IWFAMF)
 	amf.init(sctpAddr, conn)
-	if item, loaded := context.AMFPool.LoadOrStore(sctpAddr, amf); loaded {
+	item, loaded := c.AMFPool.LoadOrStore(sctpAddr, amf)
+	if loaded {
 		logger.CtxLog.Warn("[Context] NewN3iwfAmf(): AMF entry already exists.")
 		return item.(*N3IWFAMF)
-	} else {
-		return amf
 	}
+	return amf
 }
 
-func (context *N3IWFContext) DeleteN3iwfAmf(sctpAddr string) {
-	context.AMFPool.Delete(sctpAddr)
+func (c *N3IWFContext) DeleteN3iwfAmf(sctpAddr string) {
+	c.AMFPool.Delete(sctpAddr)
 }
 
-func (context *N3IWFContext) AMFPoolLoad(sctpAddr string) (*N3IWFAMF, bool) {
-	amf, ok := context.AMFPool.Load(sctpAddr)
+func (c *N3IWFContext) AMFPoolLoad(sctpAddr string) (*N3IWFAMF, bool) {
+	amf, ok := c.AMFPool.Load(sctpAddr)
 	if ok {
 		return amf.(*N3IWFAMF), ok
-	} else {
-		return nil, ok
 	}
+	return nil, false
 }
 
-func (context *N3IWFContext) DeleteAMFReInitAvailableFlag(sctpAddr string) {
-	context.AMFReInitAvailableList.Delete(sctpAddr)
+func (c *N3IWFContext) DeleteAMFReInitAvailableFlag(sctpAddr string) {
+	c.AMFReInitAvailableList.Delete(sctpAddr)
 }
 
-func (context *N3IWFContext) AMFReInitAvailableListLoad(sctpAddr string) (bool, bool) {
-	flag, ok := context.AMFReInitAvailableList.Load(sctpAddr)
+func (c *N3IWFContext) AMFReInitAvailableListLoad(sctpAddr string) (bool, bool) {
+	flag, ok := c.AMFReInitAvailableList.Load(sctpAddr)
 	if ok {
 		return flag.(bool), ok
-	} else {
-		return true, ok
 	}
+	return true, false
 }
 
-func (context *N3IWFContext) AMFReInitAvailableListStore(sctpAddr string, flag bool) {
-	context.AMFReInitAvailableList.Store(sctpAddr, flag)
+func (c *N3IWFContext) AMFReInitAvailableListStore(sctpAddr string, flag bool) {
+	c.AMFReInitAvailableList.Store(sctpAddr, flag)
 }
 
-func (context *N3IWFContext) NewIKESecurityAssociation() *IKESecurityAssociation {
+func (c *N3IWFContext) NewIKESecurityAssociation() *IKESecurityAssociation {
 	ikeSecurityAssociation := new(IKESecurityAssociation)
 
 	var maxSPI *big.Int = new(big.Int).SetUint64(math.MaxUint64)
@@ -349,7 +332,8 @@ func (context *N3IWFContext) NewIKESecurityAssociation() *IKESecurityAssociation
 			return nil
 		}
 		localSPIuint64 = localSPI.Uint64()
-		if _, duplicate := context.IKESA.LoadOrStore(localSPIuint64, ikeSecurityAssociation); !duplicate {
+		_, duplicate := c.IKESA.LoadOrStore(localSPIuint64, ikeSecurityAssociation)
+		if !duplicate {
 			break
 		}
 	}
@@ -359,49 +343,48 @@ func (context *N3IWFContext) NewIKESecurityAssociation() *IKESecurityAssociation
 	return ikeSecurityAssociation
 }
 
-func (context *N3IWFContext) DeleteIKESecurityAssociation(spi uint64) {
-	context.IKESA.Delete(spi)
+func (c *N3IWFContext) DeleteIKESecurityAssociation(spi uint64) {
+	c.IKESA.Delete(spi)
 }
 
-func (context *N3IWFContext) IKESALoad(spi uint64) (*IKESecurityAssociation, bool) {
-	securityAssociation, ok := context.IKESA.Load(spi)
+func (c *N3IWFContext) IKESALoad(spi uint64) (*IKESecurityAssociation, bool) {
+	securityAssociation, ok := c.IKESA.Load(spi)
 	if ok {
 		return securityAssociation.(*IKESecurityAssociation), ok
-	} else {
-		return nil, ok
 	}
+	return nil, false
 }
 
-func (context *N3IWFContext) DeleteGTPConnection(upfAddr string) {
-	context.GTPConnectionWithUPF.Delete(upfAddr)
+func (c *N3IWFContext) DeleteGTPConnection(upfAddr string) {
+	c.GTPConnectionWithUPF.Delete(upfAddr)
 }
 
-func (context *N3IWFContext) GTPConnectionWithUPFLoad(upfAddr string) (*gtpv1.UPlaneConn, bool) {
-	conn, ok := context.GTPConnectionWithUPF.Load(upfAddr)
+func (c *N3IWFContext) GTPConnectionWithUPFLoad(upfAddr string) (*gtpv1.UPlaneConn, bool) {
+	conn, ok := c.GTPConnectionWithUPF.Load(upfAddr)
 	if ok {
 		return conn.(*gtpv1.UPlaneConn), ok
-	} else {
-		return nil, ok
 	}
+	return nil, false
 }
 
-func (context *N3IWFContext) GTPConnectionWithUPFStore(upfAddr string, conn *gtpv1.UPlaneConn) {
-	context.GTPConnectionWithUPF.Store(upfAddr, conn)
+func (c *N3IWFContext) GTPConnectionWithUPFStore(upfAddr string, conn *gtpv1.UPlaneConn) {
+	c.GTPConnectionWithUPF.Store(upfAddr, conn)
 }
 
-func (context *N3IWFContext) NewInternalUEIPAddr(ikeUe *N3IWFIkeUe) net.IP {
+func (c *N3IWFContext) NewInternalUEIPAddr(ikeUe *N3IWFIkeUe) net.IP {
 	var ueIPAddr net.IP
 
-	cfg := context.Config()
+	cfg := c.Config()
 	ipsecGwAddr := cfg.GetIPSecGatewayAddr()
 	// TODO: Check number of allocated IP to detect running out of IPs
 	for {
-		ueIPAddr = generateRandomIPinRange(context.UeIPRange)
+		ueIPAddr = generateRandomIPinRange(c.UeIPRange)
 		if ueIPAddr != nil {
 			if ueIPAddr.String() == ipsecGwAddr {
 				continue
 			}
-			if _, ok := context.AllocatedUEIPAddress.LoadOrStore(ueIPAddr.String(), ikeUe); !ok {
+			_, ok := c.AllocatedUEIPAddress.LoadOrStore(ueIPAddr.String(), ikeUe)
+			if !ok {
 				break
 			}
 		}
@@ -410,51 +393,50 @@ func (context *N3IWFContext) NewInternalUEIPAddr(ikeUe *N3IWFIkeUe) net.IP {
 	return ueIPAddr
 }
 
-func (context *N3IWFContext) DeleteInternalUEIPAddr(ipAddr string) {
-	context.AllocatedUEIPAddress.Delete(ipAddr)
+func (c *N3IWFContext) DeleteInternalUEIPAddr(ipAddr string) {
+	c.AllocatedUEIPAddress.Delete(ipAddr)
 }
 
-func (context *N3IWFContext) AllocatedUEIPAddressLoad(ipAddr string) (*N3IWFIkeUe, bool) {
-	ikeUe, ok := context.AllocatedUEIPAddress.Load(ipAddr)
+func (c *N3IWFContext) AllocatedUEIPAddressLoad(ipAddr string) (*N3IWFIkeUe, bool) {
+	ikeUe, ok := c.AllocatedUEIPAddress.Load(ipAddr)
 	if ok {
 		return ikeUe.(*N3IWFIkeUe), ok
-	} else {
-		return nil, ok
 	}
+	return nil, false
 }
 
-func (context *N3IWFContext) NewTEID(ranUe *N3IWFRanUe) uint32 {
-	teid64, err := context.TEIDGenerator.Allocate()
+func (c *N3IWFContext) NewTEID(ranUe *N3IWFRanUe) uint32 {
+	teid64, err := c.TEIDGenerator.Allocate()
 	if err != nil {
 		logger.CtxLog.Errorf("New TEID failed: %+v", err)
 		return 0
 	}
 	teid32 := uint32(teid64)
 
-	context.AllocatedUETEID.Store(teid32, ranUe)
+	c.AllocatedUETEID.Store(teid32, ranUe)
 
 	return teid32
 }
 
-func (context *N3IWFContext) DeleteTEID(teid uint32) {
-	context.TEIDGenerator.FreeID(int64(teid))
-	context.AllocatedUETEID.Delete(teid)
+func (c *N3IWFContext) DeleteTEID(teid uint32) {
+	c.TEIDGenerator.FreeID(int64(teid))
+	c.AllocatedUETEID.Delete(teid)
 }
 
-func (context *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (*N3IWFRanUe, bool) {
-	ranUe, ok := context.AllocatedUETEID.Load(teid)
+func (c *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (*N3IWFRanUe, bool) {
+	ranUe, ok := c.AllocatedUETEID.Load(teid)
 	if ok {
 		return ranUe.(*N3IWFRanUe), ok
-	} else {
-		return nil, ok
 	}
+	return nil, false
 }
 
-func (context *N3IWFContext) AMFSelection(ueSpecifiedGUAMI *ngapType.GUAMI,
+func (c *N3IWFContext) AMFSelection(
+	ueSpecifiedGUAMI *ngapType.GUAMI,
 	ueSpecifiedPLMNId *ngapType.PLMNIdentity,
 ) *N3IWFAMF {
 	var availableAMF *N3IWFAMF
-	context.AMFPool.Range(func(key, value interface{}) bool {
+	c.AMFPool.Range(func(key, value interface{}) bool {
 		amf := value.(*N3IWFAMF)
 		if amf.FindAvalibleAMFByCompareGUAMI(ueSpecifiedGUAMI) {
 			availableAMF = amf
@@ -465,9 +447,8 @@ func (context *N3IWFContext) AMFSelection(ueSpecifiedGUAMI *ngapType.GUAMI,
 			if amf.FindAvalibleAMFByCompareSelectedPLMNId(ueSpecifiedPLMNId) {
 				availableAMF = amf
 				return false
-			} else {
-				return true
 			}
+			return true
 		}
 	})
 	return availableAMF

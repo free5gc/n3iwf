@@ -1,4 +1,4 @@
-package handler
+package ngap
 
 import (
 	"encoding/binary"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/free5gc/aper"
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/ike/message"
+	"github.com/free5gc/n3iwf/internal/ngap/message"
 	"github.com/free5gc/ngap/ngapType"
 )
 
@@ -20,18 +20,19 @@ type ANParameters struct {
 	EstablishmentCause *ngapType.RRCEstablishmentCause
 }
 
-func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *ANParameters, nasPDU []byte, err error) {
-	ikeLog := logger.IKELog
+func UnmarshalEAP5GData(
+	codedData []byte,
+) (
+	anParameters *ANParameters,
+	nasPDU []byte,
+	err error,
+) {
+	ngapLog := logger.NgapLog
 	if len(codedData) < 2 {
-		return 0, nil, nil, errors.New("No data to decode")
+		return nil, nil, errors.New("No data to decode")
 	}
-	ikeLog.Debug("===== Unmarshal EAP5G Data (Ref: TS24.502 Fig. 9.3.2.2.2-1) =====")
 
-	eap5GMessageID = codedData[0]
-	ikeLog.Debugf("Message-Id: %d", eap5GMessageID)
-	if eap5GMessageID == message.EAP5GType5GStop {
-		return eap5GMessageID, anParameters, nasPDU, err
-	}
+	ngapLog.Debug("===== Unmarshal EAP5G Data (Ref: TS24.502 Fig. 9.3.2.2.2-1) =====")
 
 	codedData = codedData[2:]
 
@@ -41,25 +42,25 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 	// anParameter = AN-parameter Type | AN-parameter Length | Value part of IE
 
 	if len(codedData) < 2 {
-		ikeLog.Error("No AN-Parameter type or length specified")
-		return 0, nil, nil, errors.New("Error formatting")
+		ngapLog.Error("No AN-Parameter type or length specified")
+		return nil, nil, errors.New("Error formatting")
 	}
 
 	// Length of the AN-Parameter field
 	anParameterLength := binary.BigEndian.Uint16(codedData[:2])
-	ikeLog.Debugf("AN-parameters length: %d", anParameterLength)
+	ngapLog.Debugf("AN-parameters length: %d", anParameterLength)
 
 	if anParameterLength != 0 {
 		anParameterField := codedData[2:]
 
 		// Bound checking
 		if len(anParameterField) < int(anParameterLength) {
-			ikeLog.Error("Packet contained error length of value")
-			return 0, nil, nil, errors.New("Error formatting")
+			ngapLog.Error("Packet contained error length of value")
+			return nil, nil, errors.New("Error formatting")
 		}
 		anParameterField = anParameterField[:anParameterLength]
 
-		ikeLog.Debugf("Parsing AN-parameters...: % v", anParameterField)
+		ngapLog.Debugf("Parsing AN-parameters...: % v", anParameterField)
 
 		anParameters = new(ANParameters)
 
@@ -71,17 +72,17 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 			switch parameterType {
 			case message.ANParametersTypeGUAMI:
-				ikeLog.Debugf("-> Parameter type: GUAMI")
+				ngapLog.Debugf("-> Parameter type: GUAMI")
 				if parameterLength != 0 {
 					parameterValue := anParameterField[2:]
 
 					if len(parameterValue) < int(parameterLength) {
-						return 0, nil, nil, errors.New("Error formatting")
+						return nil, nil, errors.New("Error formatting")
 					}
 					parameterValue = parameterValue[:parameterLength]
 
 					if len(parameterValue) != message.ANParametersLenGUAMI {
-						return 0, nil, nil, errors.New("Unmatched GUAMI length")
+						return nil, nil, errors.New("Unmatched GUAMI length")
 					}
 
 					guamiField := make([]byte, 1)
@@ -90,30 +91,30 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 					ngapGUAMI := new(ngapType.GUAMI)
 					err = aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
 					if err != nil {
-						ikeLog.Errorf("APER unmarshal with parameter failed: %+v", err)
-						return 0, nil, nil, errors.New("Unmarshal failed when decoding GUAMI")
+						ngapLog.Errorf("APER unmarshal with parameter failed: %+v", err)
+						return nil, nil, errors.New("Unmarshal failed when decoding GUAMI")
 					}
 					anParameters.GUAMI = ngapGUAMI
-					ikeLog.Debugf("Unmarshal GUAMI: % x", guamiField)
-					ikeLog.Debugf("\tGUAMI: PLMNIdentity[% x], "+
+					ngapLog.Debugf("Unmarshal GUAMI: % x", guamiField)
+					ngapLog.Debugf("\tGUAMI: PLMNIdentity[% x], "+
 						"AMFRegionID[% x], AMFSetID[% x], AMFPointer[% x]",
 						anParameters.GUAMI.PLMNIdentity, anParameters.GUAMI.AMFRegionID,
 						anParameters.GUAMI.AMFSetID, anParameters.GUAMI.AMFPointer)
 				} else {
-					ikeLog.Warn("AN-Parameter GUAMI field empty")
+					ngapLog.Warn("AN-Parameter GUAMI field empty")
 				}
 			case message.ANParametersTypeSelectedPLMNID:
-				ikeLog.Debugf("-> Parameter type: ANParametersTypeSelectedPLMNID")
+				ngapLog.Debugf("-> Parameter type: ANParametersTypeSelectedPLMNID")
 				if parameterLength != 0 {
 					parameterValue := anParameterField[2:]
 
 					if len(parameterValue) < int(parameterLength) {
-						return 0, nil, nil, errors.New("Error formatting")
+						return nil, nil, errors.New("Error formatting")
 					}
 					parameterValue = parameterValue[:parameterLength]
 
 					if len(parameterValue) != message.ANParametersLenPLMNID {
-						return 0, nil, nil, errors.New("Unmatched PLMN ID length")
+						return nil, nil, errors.New("Unmatched PLMN ID length")
 					}
 
 					plmnField := make([]byte, 1)
@@ -122,22 +123,22 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 					ngapPLMN := new(ngapType.PLMNIdentity)
 					err = aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
 					if err != nil {
-						ikeLog.Errorf("APER unmarshal with parameter failed: %v", err)
-						return 0, nil, nil, errors.New("Unmarshal failed when decoding PLMN")
+						ngapLog.Errorf("APER unmarshal with parameter failed: %v", err)
+						return nil, nil, errors.New("Unmarshal failed when decoding PLMN")
 					}
 					anParameters.SelectedPLMNID = ngapPLMN
-					ikeLog.Debugf("Unmarshal SelectedPLMNID: % x", plmnField)
-					ikeLog.Debugf("\tSelectedPLMNID: % x", anParameters.SelectedPLMNID.Value)
+					ngapLog.Debugf("Unmarshal SelectedPLMNID: % x", plmnField)
+					ngapLog.Debugf("\tSelectedPLMNID: % x", anParameters.SelectedPLMNID.Value)
 				} else {
-					ikeLog.Warn("AN-Parameter PLMN field empty")
+					ngapLog.Warn("AN-Parameter PLMN field empty")
 				}
 			case message.ANParametersTypeRequestedNSSAI:
-				ikeLog.Debugf("-> Parameter type: ANParametersTypeRequestedNSSAI")
+				ngapLog.Debugf("-> Parameter type: ANParametersTypeRequestedNSSAI")
 				if parameterLength != 0 {
 					parameterValue := anParameterField[2:]
 
 					if len(parameterValue) < int(parameterLength) {
-						return 0, nil, nil, errors.New("Error formatting")
+						return nil, nil, errors.New("Error formatting")
 					}
 					parameterValue = parameterValue[:parameterLength]
 
@@ -153,8 +154,8 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 						snssaiValue := parameterValue[1:]
 
 						if len(snssaiValue) < int(snssaiLength) {
-							ikeLog.Error("SNSSAI length error")
-							return 0, nil, nil, errors.New("Error formatting")
+							ngapLog.Error("SNSSAI length error")
+							return nil, nil, errors.New("Error formatting")
 						}
 						snssaiValue = snssaiValue[:snssaiLength]
 
@@ -176,19 +177,19 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 								},
 							}
 						} else {
-							ikeLog.Error("Empty SNSSAI value")
-							return 0, nil, nil, errors.New("Error formatting")
+							ngapLog.Error("Empty SNSSAI value")
+							return nil, nil, errors.New("Error formatting")
 						}
 
 						ngapNSSAI.List = append(ngapNSSAI.List, ngapSNSSAIItem)
 
-						ikeLog.Debugf("Unmarshal SNSSAI: % x", parameterValue[:1+snssaiLength])
-						ikeLog.Debugf("\t\t\tSST: % x", ngapSNSSAIItem.SNSSAI.SST.Value)
+						ngapLog.Debugf("Unmarshal SNSSAI: % x", parameterValue[:1+snssaiLength])
+						ngapLog.Debugf("\t\t\tSST: % x", ngapSNSSAIItem.SNSSAI.SST.Value)
 						sd := ngapSNSSAIItem.SNSSAI.SD
 						if sd == nil {
-							ikeLog.Debugf("\t\t\tSD: nil")
+							ngapLog.Debugf("\t\t\tSD: nil")
 						} else {
-							ikeLog.Debugf("\t\t\tSD: % x", sd.Value)
+							ngapLog.Debugf("\t\t\tSD: % x", sd.Value)
 						}
 
 						// shift parameterValue for parsing next s-nssai
@@ -196,40 +197,40 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 					}
 					anParameters.RequestedNSSAI = ngapNSSAI
 				} else {
-					ikeLog.Warn("AN-Parameter NSSAI is empty")
+					ngapLog.Warn("AN-Parameter NSSAI is empty")
 				}
 			case message.ANParametersTypeEstablishmentCause:
-				ikeLog.Debugf("-> Parameter type: ANParametersTypeEstablishmentCause")
+				ngapLog.Debugf("-> Parameter type: ANParametersTypeEstablishmentCause")
 				if parameterLength != 0 {
 					parameterValue := anParameterField[2:]
 
 					if len(parameterValue) < int(parameterLength) {
-						return 0, nil, nil, errors.New("Error formatting")
+						return nil, nil, errors.New("Error formatting")
 					}
 					parameterValue = parameterValue[:parameterLength]
 
 					if len(parameterValue) != message.ANParametersLenEstCause {
-						return 0, nil, nil, errors.New("Unmatched Establishment Cause length")
+						return nil, nil, errors.New("Unmatched Establishment Cause length")
 					}
 
-					ikeLog.Debugf("Unmarshal ANParametersTypeEstablishmentCause: % x", parameterValue)
+					ngapLog.Debugf("Unmarshal ANParametersTypeEstablishmentCause: % x", parameterValue)
 
 					establishmentCause := parameterValue[0] & 0x0f
 					switch establishmentCause {
 					case message.EstablishmentCauseEmergency:
-						ikeLog.Trace("AN-Parameter establishment cause: Emergency")
+						ngapLog.Trace("AN-Parameter establishment cause: Emergency")
 					case message.EstablishmentCauseHighPriorityAccess:
-						ikeLog.Trace("AN-Parameter establishment cause: High Priority Access")
+						ngapLog.Trace("AN-Parameter establishment cause: High Priority Access")
 					case message.EstablishmentCauseMO_Signalling:
-						ikeLog.Trace("AN-Parameter establishment cause: MO Signalling")
+						ngapLog.Trace("AN-Parameter establishment cause: MO Signalling")
 					case message.EstablishmentCauseMO_Data:
-						ikeLog.Trace("AN-Parameter establishment cause: MO Data")
+						ngapLog.Trace("AN-Parameter establishment cause: MO Data")
 					case message.EstablishmentCauseMPS_PriorityAccess:
-						ikeLog.Trace("AN-Parameter establishment cause: MPS Priority Access")
+						ngapLog.Trace("AN-Parameter establishment cause: MPS Priority Access")
 					case message.EstablishmentCauseMCS_PriorityAccess:
-						ikeLog.Trace("AN-Parameter establishment cause: MCS Priority Access")
+						ngapLog.Trace("AN-Parameter establishment cause: MCS Priority Access")
 					default:
-						ikeLog.Trace("AN-Parameter establishment cause: Unknown. Treat as mo-Data")
+						ngapLog.Trace("AN-Parameter establishment cause: Unknown. Treat as mo-Data")
 						establishmentCause = message.EstablishmentCauseMO_Data
 					}
 
@@ -238,10 +239,10 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 					anParameters.EstablishmentCause = ngapEstablishmentCause
 				} else {
-					ikeLog.Warn("AN-Parameter establishment cause field empty")
+					ngapLog.Warn("AN-Parameter establishment cause field empty")
 				}
 			default:
-				ikeLog.Warn("Unsopprted AN-Parameter. Ignore.")
+				ngapLog.Warn("Unsopprted AN-Parameter. Ignore.")
 			}
 
 			// shift anParameterField
@@ -251,29 +252,29 @@ func UnmarshalEAP5GData(codedData []byte) (eap5GMessageID uint8, anParameters *A
 
 	// shift codedData
 	codedData = codedData[2+anParameterLength:]
-	if len(codedData) < 2 {
-		ikeLog.Error("No NASPDU length specified")
-		return 0, nil, nil, errors.New("Error formatting")
-	}
 
+	if len(codedData) < 2 {
+		ngapLog.Error("No NASPDU length specified")
+		return nil, nil, errors.New("Error formatting")
+	}
 	// Length of the NASPDU field
 	nasPDULength := binary.BigEndian.Uint16(codedData[:2])
-	ikeLog.Debugf("nasPDULength: %d", nasPDULength)
+	ngapLog.Debugf("nasPDULength: %d", nasPDULength)
 
 	if nasPDULength == 0 {
-		ikeLog.Error("No NAS PDU included in EAP-5G packet")
-		return 0, nil, nil, errors.New("No NAS PDU")
+		ngapLog.Error("No NAS PDU included in EAP-5G packet")
+		return nil, nil, errors.New("No NAS PDU")
 	}
 
 	nasPDUField := codedData[2:]
 	// Bound checking
 	if len(nasPDUField) < int(nasPDULength) {
-		return 0, nil, nil, errors.New("Error formatting")
+		return nil, nil, errors.New("Error formatting")
+	} else {
+		nasPDUField = nasPDUField[:nasPDULength]
 	}
-	nasPDUField = nasPDUField[:nasPDULength]
-
-	ikeLog.Debugf("nasPDUField: % v", nasPDUField)
+	ngapLog.Debugf("nasPDUField: % v", nasPDUField)
 
 	nasPDU = append(nasPDU, nasPDUField...)
-	return eap5GMessageID, anParameters, nasPDU, err
+	return anParameters, nasPDU, err
 }

@@ -12,15 +12,16 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/net/ipv4"
 
 	"github.com/free5gc/n3iwf/internal/logger"
-	ngap_service "github.com/free5gc/n3iwf/internal/ngap/service"
-	nwucp_service "github.com/free5gc/n3iwf/internal/nwucp/service"
-	nwuup_service "github.com/free5gc/n3iwf/internal/nwuup/service"
+	"github.com/free5gc/n3iwf/internal/ngap"
+	"github.com/free5gc/n3iwf/internal/nwucp"
+	"github.com/free5gc/n3iwf/internal/nwuup"
 	"github.com/free5gc/n3iwf/pkg/app"
 	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
-	ike_service "github.com/free5gc/n3iwf/pkg/ike/service"
+	"github.com/free5gc/n3iwf/pkg/ike"
 	"github.com/free5gc/n3iwf/pkg/ike/xfrm"
 )
 
@@ -29,8 +30,12 @@ var N3IWF *N3iwfApp
 var _ app.App = &N3iwfApp{}
 
 type N3iwfApp struct {
-	n3iwfCtx *n3iwf_context.N3IWFContext
-	cfg      *factory.Config
+	n3iwfCtx    *n3iwf_context.N3IWFContext
+	cfg         *factory.Config
+	ngapServer  *ngap.Server
+	nwucpServer *nwucp.Server
+	nwuupServer *nwuup.Server
+	ikeServer   *ike.Server
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -54,7 +59,19 @@ func NewApp(
 	n3iwf.SetReportCaller(cfg.GetLogReportCaller())
 
 	if n3iwf.n3iwfCtx, err = n3iwf_context.NewContext(n3iwf); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "NewApp()")
+	}
+	if n3iwf.ngapServer, err = ngap.NewServer(n3iwf); err != nil {
+		return nil, errors.Wrap(err, "NewApp()")
+	}
+	if n3iwf.nwucpServer, err = nwucp.NewServer(n3iwf); err != nil {
+		return nil, errors.Wrap(err, "NewApp()")
+	}
+	if n3iwf.nwuupServer, err = nwuup.NewServer(n3iwf); err != nil {
+		return nil, errors.Wrap(err, "NewApp()")
+	}
+	if n3iwf.ikeServer, err = ike.NewServer(n3iwf); err != nil {
+		return nil, errors.Wrap(err, "NewApp()")
 	}
 	N3IWF = n3iwf
 	return n3iwf, nil
@@ -123,26 +140,26 @@ func (a *N3iwfApp) Run() error {
 	go a.listenShutdownEvent()
 
 	// NGAP
-	if err := ngap_service.Run(&a.wg); err != nil {
-		return errors.Wrapf(err, "Start NGAP service failed")
+	if err := a.ngapServer.Run(&a.wg); err != nil {
+		return errors.Wrapf(err, "Run()")
 	}
 	logger.MainLog.Infof("NGAP service running.")
 
 	// Relay listeners
 	// Control plane
-	if err := nwucp_service.Run(&a.wg); err != nil {
+	if err := a.nwucpServer.Run(&a.wg); err != nil {
 		return errors.Wrapf(err, "Listen NWu control plane traffic failed")
 	}
 	logger.MainLog.Infof("NAS TCP server successfully started.")
 
 	// User plane
-	if err := nwuup_service.Run(&a.wg); err != nil {
+	if err := a.nwuupServer.Run(&a.wg); err != nil {
 		return errors.Wrapf(err, "Listen NWu user plane traffic failed")
 	}
 	logger.MainLog.Infof("Listening NWu user plane traffic")
 
 	// IKE
-	if err := ike_service.Run(&a.wg); err != nil {
+	if err := a.ikeServer.Run(&a.wg); err != nil {
 		return errors.Wrapf(err, "Start IKE service failed")
 	}
 	logger.MainLog.Infof("IKE service running")
@@ -232,11 +249,23 @@ func (a *N3iwfApp) Terminate() {
 func (a *N3iwfApp) terminateProcedure() {
 	logger.MainLog.Info("Stopping service created by N3IWF")
 
-	ngap_service.Stop(a.n3iwfCtx)
+	a.ngapServer.Stop()
 
-	nwucp_service.Stop(a.n3iwfCtx)
+	a.nwucpServer.Stop()
 
-	nwuup_service.Stop(a.n3iwfCtx)
+	a.nwuupServer.Stop()
 
-	ike_service.Stop(a.n3iwfCtx)
+	a.ikeServer.Stop()
+}
+
+func (a *N3iwfApp) NgapEvtCh() chan n3iwf_context.NgapEvt {
+	return a.ngapServer.RcvEventCh
+}
+
+func (a *N3iwfApp) IkeEvtCh() chan n3iwf_context.IkeEvt {
+	return a.ikeServer.RcvEventCh
+}
+
+func (a *N3iwfApp) NwuupIPv4PktConn() *ipv4.PacketConn {
+	return a.nwuupServer.IPv4PacketConn
 }

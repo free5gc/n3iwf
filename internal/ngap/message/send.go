@@ -22,7 +22,10 @@ func SendToAmf(amf *n3iwf_context.N3IWFAMF, pkt []byte) {
 	}
 }
 
-func SendNGSetupRequest(conn *sctp.SCTPConn) {
+func SendNGSetupRequest(
+	conn *sctp.SCTPConn,
+	n3iwfCtx *n3iwf_context.N3IWFContext,
+) {
 	ngapLog := logger.NgapLog
 	defer func() {
 		if p := recover(); p != nil {
@@ -33,15 +36,20 @@ func SendNGSetupRequest(conn *sctp.SCTPConn) {
 
 	ngapLog.Infoln("[N3IWF] Send NG Setup Request")
 
+	cfg := n3iwfCtx.Config()
 	sctpAddr := conn.RemoteAddr().String()
 
-	if available, _ := n3iwf_context.N3IWFSelf().AMFReInitAvailableListLoad(sctpAddr); !available {
+	if available, _ := n3iwfCtx.AMFReInitAvailableListLoad(sctpAddr); !available {
 		ngapLog.Warnf(
 			"[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
 			sctpAddr)
 		return
 	}
-	pkt, err := BuildNGSetupRequest()
+	pkt, err := BuildNGSetupRequest(
+		cfg.GetGlobalN3iwfId(),
+		cfg.GetRanNodeName(),
+		cfg.GetSupportedTAList(),
+	)
 	if err != nil {
 		ngapLog.Errorf("Build NGSetup Request failed: %+v\n", err)
 		return
@@ -503,18 +511,25 @@ func SendAMFConfigurationUpdateFailure(
 	SendToAmf(amf, pkt)
 }
 
-func SendRANConfigurationUpdate(amf *n3iwf_context.N3IWFAMF) {
+func SendRANConfigurationUpdate(
+	n3iwfCtx *n3iwf_context.N3IWFContext,
+	amf *n3iwf_context.N3IWFAMF,
+) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("[N3IWF] Send RAN Configuration Update")
 
-	if available, _ := n3iwf_context.N3IWFSelf().AMFReInitAvailableListLoad(amf.SCTPAddr); !available {
+	available, _ := n3iwfCtx.AMFReInitAvailableListLoad(amf.SCTPAddr)
+	if !available {
 		ngapLog.Warnf(
 			"[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
 			amf.SCTPAddr)
 		return
 	}
 
-	pkt, err := BuildRANConfigurationUpdate()
+	cfg := n3iwfCtx.Config()
+	pkt, err := BuildRANConfigurationUpdate(
+		cfg.GetRanNodeName(),
+		cfg.GetSupportedTAList())
 	if err != nil {
 		ngapLog.Errorf("Build AMF Configuration Update Failure failed : %+v\n", err)
 		return

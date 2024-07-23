@@ -6,10 +6,8 @@ import (
 	"net"
 
 	"github.com/vishvananda/netlink"
-	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
-	"github.com/free5gc/ngap/ngapType"
 )
 
 const (
@@ -17,6 +15,8 @@ const (
 )
 
 type N3IWFIkeUe struct {
+	N3iwfCtx *N3IWFContext
+
 	/* UE identity */
 	IPSecInnerIP     net.IP
 	IPSecInnerIPAddr *net.IPAddr // Used to send UP packets to UE
@@ -40,103 +40,10 @@ type N3IWFIkeUe struct {
 	PduSessionListLen int
 }
 
-type N3IWFRanUe struct {
-	/* UE identity */
-	RanUeNgapId  int64
-	AmfUeNgapId  int64
-	IPAddrv4     string
-	IPAddrv6     string
-	PortNumber   int32
-	MaskedIMEISV *ngapType.MaskedIMEISV // TS 38.413 9.3.1.54
-	Guti         string
-
-	/* Relative Context */
-	AMF *N3IWFAMF
-
-	/* Security */
-	SecurityCapabilities *ngapType.UESecurityCapabilities // TS 38.413 9.3.1.86
-
-	/* PDU Session */
-	PduSessionList map[int64]*PDUSession // pduSessionId as key
-
-	/* PDU Session Setup Temporary Data */
-	TemporaryPDUSessionSetupData *PDUSessionSetupTemporaryData
-
-	/* Temporary cached NAS message */
-	// Used when NAS registration accept arrived before
-	// UE setup NAS TCP connection with N3IWF, and
-	// Forward pduSessionEstablishmentAccept to UE after
-	// UE send CREATE_CHILD_SA response
-	TemporaryCachedNASMessage []byte
-
-	/* NAS TCP Connection Established */
-	IsNASTCPConnEstablished         bool
-	IsNASTCPConnEstablishedComplete bool
-
-	/* NAS TCP Connection */
-	TCPConnection net.Conn
-
-	/* Others */
-	Guami                            *ngapType.GUAMI
-	IndexToRfsp                      int64
-	Ambr                             *ngapType.UEAggregateMaximumBitRate
-	AllowedNssai                     *ngapType.AllowedNSSAI
-	RadioCapability                  *ngapType.UERadioCapability                // TODO: This is for RRC, can be deleted
-	CoreNetworkAssistanceInformation *ngapType.CoreNetworkAssistanceInformation // TS 38.413 9.3.1.15
-	IMSVoiceSupported                int32
-	RRCEstablishmentCause            int16
-	PduSessionReleaseList            ngapType.PDUSessionResourceReleasedListRelRes
-}
-
-type PDUSession struct {
-	Id                               int64 // PDU Session ID
-	Type                             *ngapType.PDUSessionType
-	Ambr                             *ngapType.PDUSessionAggregateMaximumBitRate
-	Snssai                           ngapType.SNSSAI
-	NetworkInstance                  *ngapType.NetworkInstance
-	SecurityCipher                   bool
-	SecurityIntegrity                bool
-	MaximumIntegrityDataRateUplink   *ngapType.MaximumIntegrityProtectedDataRate
-	MaximumIntegrityDataRateDownlink *ngapType.MaximumIntegrityProtectedDataRate
-	GTPConnection                    *GTPConnectionInfo
-	QFIList                          []uint8
-	QosFlows                         map[int64]*QosFlow // QosFlowIdentifier as key
-}
-
-type PDUSessionSetupTemporaryData struct {
-	// Slice of unactivated PDU session
-	UnactivatedPDUSession []*PDUSession // PDUSession as content
-	// NGAPProcedureCode is used to identify which type of
-	// response shall be used
-	NGAPProcedureCode ngapType.ProcedureCode
-	// PDU session setup list response
-	SetupListCxtRes  *ngapType.PDUSessionResourceSetupListCxtRes
-	FailedListCxtRes *ngapType.PDUSessionResourceFailedToSetupListCxtRes
-	SetupListSURes   *ngapType.PDUSessionResourceSetupListSURes
-	FailedListSURes  *ngapType.PDUSessionResourceFailedToSetupListSURes
-	// List of Error for failed setup PDUSessionID
-	FailedErrStr []EvtError // Error string as content
-	// Current Index of UnactivatedPDUSession
-	Index int
-}
-
 type IkeMsgTemporaryData struct {
 	SecurityAssociation      *ike_message.SecurityAssociation
 	TrafficSelectorInitiator *ike_message.TrafficSelectorInitiator
 	TrafficSelectorResponder *ike_message.TrafficSelectorResponder
-}
-
-type QosFlow struct {
-	Identifier int64
-	Parameters ngapType.QosFlowLevelQosParameters
-}
-
-type GTPConnectionInfo struct {
-	UPFIPAddr           string
-	UPFUDPAddr          net.Addr
-	IncomingTEID        uint32
-	OutgoingTEID        uint32
-	UserPlaneConnection *gtpv1.UPlaneConn
 }
 
 type IKESecurityAssociation struct {
@@ -262,55 +169,28 @@ func (ikeUe *N3IWFIkeUe) init() {
 	ikeUe.TemporaryExchangeMsgIDChildSAMapping = make(map[uint32]*ChildSecurityAssociation)
 }
 
-func (ranUe *N3IWFRanUe) init(ranUeNgapId int64) {
-	ranUe.RanUeNgapId = ranUeNgapId
-	ranUe.AmfUeNgapId = AmfUeNgapIdUnspecified
-	ranUe.PduSessionList = make(map[int64]*PDUSession)
-	ranUe.IsNASTCPConnEstablished = false
-	ranUe.IsNASTCPConnEstablishedComplete = false
-}
-
 func (ikeUe *N3IWFIkeUe) Remove() error {
 	if ikeUe.N3IWFIKESecurityAssociation.IsUseDPD {
 		ikeUe.N3IWFIKESecurityAssociation.IKESAClosedCh <- struct{}{}
 	}
 
 	// remove from IKE UE context
-	n3iwfSelf := N3IWFSelf()
-	n3iwfSelf.DeleteIKESecurityAssociation(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
-	n3iwfSelf.DeleteInternalUEIPAddr(ikeUe.IPSecInnerIP.String())
+	n3iwfCtx := ikeUe.N3iwfCtx
+	n3iwfCtx.DeleteIKESecurityAssociation(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
+	n3iwfCtx.DeleteInternalUEIPAddr(ikeUe.IPSecInnerIP.String())
 
 	for _, childSA := range ikeUe.N3IWFChildSecurityAssociation {
 		if err := ikeUe.DeleteChildSA(childSA); err != nil {
 			return err
 		}
 	}
-	n3iwfSelf.DeleteIKEUe(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
-
-	return nil
-}
-
-func (ranUe *N3IWFRanUe) Remove() error {
-	// remove from AMF context
-	ranUe.DetachAMF()
-
-	// remove from RAN UE context
-	n3iwfSelf := N3IWFSelf()
-	n3iwfSelf.DeleteRanUe(ranUe.RanUeNgapId)
-
-	for _, pduSession := range ranUe.PduSessionList {
-		n3iwfSelf.DeleteTEID(pduSession.GTPConnection.IncomingTEID)
-	}
-
-	if err := ranUe.TCPConnection.Close(); err != nil {
-		return fmt.Errorf("Stop nwucp server error : %+v", err)
-	}
+	n3iwfCtx.DeleteIKEUe(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
 
 	return nil
 }
 
 func (ikeUe *N3IWFIkeUe) DeleteChildSA(childSA *ChildSecurityAssociation) error {
-	n3iwfSelf := N3IWFSelf()
+	n3iwfCtx := ikeUe.N3iwfCtx
 	iface := childSA.XfrmIface
 
 	// Delete child SA xfrmState
@@ -330,33 +210,12 @@ func (ikeUe *N3IWFIkeUe) DeleteChildSA(childSA *ChildSecurityAssociation) error 
 	} else if err := netlink.LinkDel(iface); err != nil {
 		return fmt.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
 	} else {
-		n3iwfSelf.XfrmIfaces.Delete(uint32(childSA.XfrmStateList[0].Ifid))
+		n3iwfCtx.XfrmIfaces.Delete(uint32(childSA.XfrmStateList[0].Ifid))
 	}
 
 	delete(ikeUe.N3IWFChildSecurityAssociation, childSA.InboundSPI)
 
 	return nil
-}
-
-func (ranUe *N3IWFRanUe) FindPDUSession(pduSessionID int64) *PDUSession {
-	if pduSession, ok := ranUe.PduSessionList[pduSessionID]; ok {
-		return pduSession
-	} else {
-		return nil
-	}
-}
-
-func (ranUe *N3IWFRanUe) CreatePDUSession(pduSessionID int64, snssai ngapType.SNSSAI) (*PDUSession, error) {
-	if _, exists := ranUe.PduSessionList[pduSessionID]; exists {
-		return nil, fmt.Errorf("PDU Session[ID:%d] is already exists", pduSessionID)
-	}
-	pduSession := &PDUSession{
-		Id:       pduSessionID,
-		Snssai:   snssai,
-		QosFlows: make(map[int64]*QosFlow),
-	}
-	ranUe.PduSessionList[pduSessionID] = pduSession
-	return pduSession, nil
 }
 
 // When N3IWF send CREATE_CHILD_SA request to N3UE, the inbound SPI of childSA will be only stored first until
@@ -410,24 +269,7 @@ func (ikeUe *N3IWFIkeUe) CompleteChildSA(msgID uint32, outboundSPI uint32,
 	// Record to UE context with inbound SPI as key
 	ikeUe.N3IWFChildSecurityAssociation[childSA.InboundSPI] = childSA
 	// Record to N3IWF context with inbound SPI as key
-	N3IWFSelf().ChildSA.Store(childSA.InboundSPI, childSA)
+	ikeUe.N3iwfCtx.ChildSA.Store(childSA.InboundSPI, childSA)
 
 	return childSA, nil
-}
-
-func (ranUe *N3IWFRanUe) AttachAMF(sctpAddr string) bool {
-	if amf, ok := N3IWFSelf().AMFPoolLoad(sctpAddr); ok {
-		amf.N3iwfRanUeList[ranUe.RanUeNgapId] = ranUe
-		ranUe.AMF = amf
-		return true
-	} else {
-		return false
-	}
-}
-
-func (ranUe *N3IWFRanUe) DetachAMF() {
-	if ranUe.AMF == nil {
-		return
-	}
-	delete(ranUe.AMF.N3iwfRanUeList, ranUe.RanUeNgapId)
 }

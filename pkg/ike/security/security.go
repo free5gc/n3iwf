@@ -1,4 +1,4 @@
-package handler
+package security
 
 import (
 	"bytes"
@@ -302,21 +302,23 @@ func PKCS7Padding(plainText []byte, blockSize int) []byte {
 }
 
 // Certificate
-func CompareRootCertificate(certificateEncoding uint8, requestedCertificateAuthorityHash []byte) bool {
+func CompareRootCertificate(
+	ca []byte,
+	certificateEncoding uint8,
+	requestedCertificateAuthorityHash []byte,
+) bool {
 	ikeLog := logger.IKELog
 	if certificateEncoding != message.X509CertificateSignature {
 		ikeLog.Debugf("Not support certificate type: %d. Reject.", certificateEncoding)
 		return false
 	}
 
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-
-	if len(n3iwfSelf.CertificateAuthority) == 0 {
+	if len(ca) == 0 {
 		ikeLog.Error("Certificate authority in context is empty")
 		return false
 	}
 
-	return bytes.Equal(n3iwfSelf.CertificateAuthority, requestedCertificateAuthorityHash)
+	return bytes.Equal(ca, requestedCertificateAuthorityHash)
 }
 
 // Key Gen for IKE SA

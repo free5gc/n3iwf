@@ -1,6 +1,7 @@
-package service
+package nwuup
 
 import (
+	"context"
 	"net"
 	"runtime/debug"
 	"sync"
@@ -14,15 +15,34 @@ import (
 	gtpQoSMsg "github.com/free5gc/n3iwf/internal/gtp/message"
 	"github.com/free5gc/n3iwf/internal/logger"
 	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
+	"github.com/free5gc/n3iwf/pkg/factory"
 )
+
+type n3iwf interface {
+	Config() *factory.Config
+	Context() *n3iwf_context.N3IWFContext
+	CancelContext() context.Context
+}
+
+type Server struct {
+	n3iwf
+
+	// N3IWF NWu interface IPv4 packet connection
+	IPv4PacketConn *ipv4.PacketConn
+}
+
+func NewServer(n3iwf n3iwf) (*Server, error) {
+	s := &Server{
+		n3iwf: n3iwf,
+	}
+	return s, nil
+}
 
 // Run bind and listen IPv4 packet connection on N3IWF NWu interface
 // with UP_IP_ADDRESS, catching GRE encapsulated packets and forward
 // to N3 interface.
-func Run(wg *sync.WaitGroup) error {
-	// Local IPSec address
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	cfg := n3iwfSelf.Config()
+func (s *Server) Run(wg *sync.WaitGroup) error {
+	cfg := s.Config()
 	listenAddr := cfg.GetIPSecGatewayAddr()
 
 	// Setup IPv4 packet connection socket
@@ -35,18 +55,17 @@ func Run(wg *sync.WaitGroup) error {
 	if ipv4PacketConn == nil {
 		return errors.Wrapf(err, "Error opening IPv4 packet connection socket on %s", listenAddr)
 	}
-
-	n3iwfSelf.NWuIPv4PacketConn = ipv4PacketConn
+	s.IPv4PacketConn = ipv4PacketConn
 
 	wg.Add(1)
-	go listenAndServe(ipv4PacketConn, wg)
+	go s.listenAndServe(wg)
 
 	return nil
 }
 
 // listenAndServe read from socket and call forward() to
 // forward packet.
-func listenAndServe(ipv4PacketConn *ipv4.PacketConn, wg *sync.WaitGroup) {
+func (s *Server) listenAndServe(wg *sync.WaitGroup) {
 	nwuupLog := logger.NWuUPLog
 	defer func() {
 		if p := recover(); p != nil {
@@ -54,7 +73,7 @@ func listenAndServe(ipv4PacketConn *ipv4.PacketConn, wg *sync.WaitGroup) {
 			nwuupLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 
-		err := ipv4PacketConn.Close()
+		err := s.IPv4PacketConn.Close()
 		if err != nil {
 			nwuupLog.Errorf("Error closing raw socket: %+v", err)
 		}
@@ -63,13 +82,13 @@ func listenAndServe(ipv4PacketConn *ipv4.PacketConn, wg *sync.WaitGroup) {
 
 	buffer := make([]byte, 65535)
 
-	if err := ipv4PacketConn.SetControlMessage(ipv4.FlagInterface|ipv4.FlagTTL, true); err != nil {
+	if err := s.IPv4PacketConn.SetControlMessage(ipv4.FlagInterface|ipv4.FlagTTL, true); err != nil {
 		nwuupLog.Errorf("Set control message visibility for IPv4 packet connection fail: %+v", err)
 		return
 	}
 
 	for {
-		n, cm, src, err := ipv4PacketConn.ReadFrom(buffer)
+		n, cm, src, err := s.IPv4PacketConn.ReadFrom(buffer)
 		nwuupLog.Tracef("Read %d bytes, %s", n, cm)
 		if err != nil {
 			nwuupLog.Errorf("Error read from IPv4 packet connection: %+v", err)
@@ -80,13 +99,13 @@ func listenAndServe(ipv4PacketConn *ipv4.PacketConn, wg *sync.WaitGroup) {
 		copy(forwardData, buffer)
 
 		wg.Add(1)
-		go forward(src.String(), cm.IfIndex, forwardData, wg)
+		go s.forward(src.String(), cm.IfIndex, forwardData, wg)
 	}
 }
 
 // forward forwards user plane packets from NWu to UPF
 // with GTP header encapsulated
-func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) {
+func (s *Server) forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) {
 	nwuupLog := logger.NWuUPLog
 	defer func() {
 		if p := recover(); p != nil {
@@ -97,14 +116,14 @@ func forward(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) 
 	}()
 
 	// Find UE information
-	self := n3iwf_context.N3IWFSelf()
-	ikeUe, ok := self.AllocatedUEIPAddressLoad(ueInnerIP)
+	n3iwfCtx := s.Context()
+	ikeUe, ok := n3iwfCtx.AllocatedUEIPAddressLoad(ueInnerIP)
 	if !ok {
 		nwuupLog.Error("Ike UE context not found")
 		return
 	}
 
-	ranUe, err := self.RanUeLoadFromIkeSPI(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
+	ranUe, err := n3iwfCtx.RanUeLoadFromIkeSPI(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
 	if err != nil {
 		nwuupLog.Error("ranUe not found")
 		return
@@ -191,11 +210,11 @@ func buildQoSGTPPacket(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
 	return b, nil
 }
 
-func Stop(n3iwfContext *n3iwf_context.N3IWFContext) {
+func (s *Server) Stop() {
 	nwuupLog := logger.NWuUPLog
 	nwuupLog.Infof("Close Nwuup server...")
 
-	if err := n3iwfContext.NWuIPv4PacketConn.Close(); err != nil {
+	if err := s.IPv4PacketConn.Close(); err != nil {
 		nwuupLog.Errorf("Stop nwuup server error : %+v", err)
 	}
 }

@@ -374,3 +374,9 @@ func (c *Config) GetXfrmIfaceId() uint32 {
 	}
 	return N3iwfDefaultXfrmIfaceId
 }
+
+func (c *Config) GetLivenessCheck() TimerValue {
+	c.RLock()
+	defer c.RUnlock()
+	return *c.Configuration.LivenessCheck
+}

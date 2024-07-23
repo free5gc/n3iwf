@@ -4,14 +4,12 @@ import (
 	"runtime/debug"
 
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/internal/ngap/handler"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/ngap"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/sctp"
 )
 
-func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
+func (s *Server) NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 	ngapLog := logger.NgapLog
 
 	defer func() {
@@ -24,7 +22,8 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 	// AMF SCTP address
 	sctpAddr := conn.RemoteAddr().String()
 	// AMF context
-	amf, _ := n3iwf_context.N3IWFSelf().AMFPoolLoad(sctpAddr)
+	n3iwfCtx := s.Context()
+	amf, _ := n3iwfCtx.AMFPoolLoad(sctpAddr)
 	// Decode
 	pdu, err := ngap.Decoder(msg)
 	if err != nil {
@@ -42,41 +41,41 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 
 		switch initiatingMessage.ProcedureCode.Value {
 		case ngapType.ProcedureCodeNGReset:
-			handler.HandleNGReset(amf, pdu)
+			s.HandleNGReset(amf, pdu)
 		case ngapType.ProcedureCodeInitialContextSetup:
-			handler.HandleInitialContextSetupRequest(amf, pdu)
+			s.HandleInitialContextSetupRequest(amf, pdu)
 		case ngapType.ProcedureCodeUEContextModification:
-			handler.HandleUEContextModificationRequest(amf, pdu)
+			s.HandleUEContextModificationRequest(amf, pdu)
 		case ngapType.ProcedureCodeUEContextRelease:
-			handler.HandleUEContextReleaseCommand(amf, pdu)
+			s.HandleUEContextReleaseCommand(amf, pdu)
 		case ngapType.ProcedureCodeDownlinkNASTransport:
-			handler.HandleDownlinkNASTransport(amf, pdu)
+			s.HandleDownlinkNASTransport(amf, pdu)
 		case ngapType.ProcedureCodePDUSessionResourceSetup:
-			handler.HandlePDUSessionResourceSetupRequest(amf, pdu)
+			s.HandlePDUSessionResourceSetupRequest(amf, pdu)
 		case ngapType.ProcedureCodePDUSessionResourceModify:
-			handler.HandlePDUSessionResourceModifyRequest(amf, pdu)
+			s.HandlePDUSessionResourceModifyRequest(amf, pdu)
 		case ngapType.ProcedureCodePDUSessionResourceRelease:
-			handler.HandlePDUSessionResourceReleaseCommand(amf, pdu)
+			s.HandlePDUSessionResourceReleaseCommand(amf, pdu)
 		case ngapType.ProcedureCodeErrorIndication:
-			handler.HandleErrorIndication(amf, pdu)
+			s.HandleErrorIndication(amf, pdu)
 		case ngapType.ProcedureCodeUERadioCapabilityCheck:
-			handler.HandleUERadioCapabilityCheckRequest(amf, pdu)
+			s.HandleUERadioCapabilityCheckRequest(amf, pdu)
 		case ngapType.ProcedureCodeAMFConfigurationUpdate:
-			handler.HandleAMFConfigurationUpdate(amf, pdu)
+			s.HandleAMFConfigurationUpdate(amf, pdu)
 		case ngapType.ProcedureCodeDownlinkRANConfigurationTransfer:
-			handler.HandleDownlinkRANConfigurationTransfer(pdu)
+			s.HandleDownlinkRANConfigurationTransfer(pdu)
 		case ngapType.ProcedureCodeDownlinkRANStatusTransfer:
-			handler.HandleDownlinkRANStatusTransfer(pdu)
+			s.HandleDownlinkRANStatusTransfer(pdu)
 		case ngapType.ProcedureCodeAMFStatusIndication:
-			handler.HandleAMFStatusIndication(pdu)
+			s.HandleAMFStatusIndication(pdu)
 		case ngapType.ProcedureCodeLocationReportingControl:
-			handler.HandleLocationReportingControl(pdu)
+			s.HandleLocationReportingControl(pdu)
 		case ngapType.ProcedureCodeUETNLABindingRelease:
-			handler.HandleUETNLAReleaseRequest(pdu)
+			s.HandleUETNLAReleaseRequest(pdu)
 		case ngapType.ProcedureCodeOverloadStart:
-			handler.HandleOverloadStart(amf, pdu)
+			s.HandleOverloadStart(amf, pdu)
 		case ngapType.ProcedureCodeOverloadStop:
-			handler.HandleOverloadStop(amf, pdu)
+			s.HandleOverloadStop(amf, pdu)
 		default:
 			ngapLog.Warnf("Not implemented NGAP message(initiatingMessage), procedureCode:%d]\n",
 				initiatingMessage.ProcedureCode.Value)
@@ -90,13 +89,13 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 
 		switch successfulOutcome.ProcedureCode.Value {
 		case ngapType.ProcedureCodeNGSetup:
-			handler.HandleNGSetupResponse(sctpAddr, conn, pdu)
+			s.HandleNGSetupResponse(sctpAddr, conn, pdu)
 		case ngapType.ProcedureCodeNGReset:
-			handler.HandleNGResetAcknowledge(amf, pdu)
+			s.HandleNGResetAcknowledge(amf, pdu)
 		case ngapType.ProcedureCodePDUSessionResourceModifyIndication:
-			handler.HandlePDUSessionResourceModifyConfirm(amf, pdu)
+			s.HandlePDUSessionResourceModifyConfirm(amf, pdu)
 		case ngapType.ProcedureCodeRANConfigurationUpdate:
-			handler.HandleRANConfigurationUpdateAcknowledge(amf, pdu)
+			s.HandleRANConfigurationUpdateAcknowledge(amf, pdu)
 		default:
 			ngapLog.Warnf("Not implemented NGAP message(successfulOutcome), procedureCode:%d]\n",
 				successfulOutcome.ProcedureCode.Value)
@@ -110,9 +109,9 @@ func NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
 
 		switch unsuccessfulOutcome.ProcedureCode.Value {
 		case ngapType.ProcedureCodeNGSetup:
-			handler.HandleNGSetupFailure(sctpAddr, conn, pdu)
+			s.HandleNGSetupFailure(sctpAddr, conn, pdu)
 		case ngapType.ProcedureCodeRANConfigurationUpdate:
-			handler.HandleRANConfigurationUpdateFailure(amf, pdu)
+			s.HandleRANConfigurationUpdateFailure(amf, pdu)
 		default:
 			ngapLog.Warnf("Not implemented NGAP message(unsuccessfulOutcome), procedureCode:%d]\n",
 				unsuccessfulOutcome.ProcedureCode.Value)

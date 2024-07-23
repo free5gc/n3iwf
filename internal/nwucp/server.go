@@ -1,6 +1,7 @@
-package service
+package nwucp
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"net"
@@ -11,26 +12,41 @@ import (
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
 	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
+	"github.com/free5gc/n3iwf/pkg/factory"
 )
 
-var tcpListener net.Listener
+type n3iwf interface {
+	Config() *factory.Config
+	Context() *n3iwf_context.N3IWFContext
+	CancelContext() context.Context
+	NgapEvtCh() chan n3iwf_context.NgapEvt
+}
+
+type Server struct {
+	n3iwf
+
+	tcpListener net.Listener
+}
+
+func NewServer(n3iwf n3iwf) (*Server, error) {
+	s := &Server{
+		n3iwf: n3iwf,
+	}
+	return s, nil
+}
 
 // Run setup N3IWF NAS for UE to forward NAS message
 // to AMF
-func Run(wg *sync.WaitGroup) error {
-	// N3IWF context
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	cfg := n3iwfSelf.Config()
-
+func (s *Server) Run(wg *sync.WaitGroup) error {
+	cfg := s.Config()
 	listener, err := net.Listen("tcp", cfg.GetNasTcpAddr())
 	if err != nil {
 		return err
 	}
-
-	tcpListener = listener
+	s.tcpListener = listener
 
 	wg.Add(1)
-	go listenAndServe(tcpListener, wg)
+	go s.listenAndServe(wg)
 
 	return nil
 }
@@ -39,7 +55,7 @@ func Run(wg *sync.WaitGroup) error {
 // requests. It also stores accepted connection into UE
 // context, and finally, call serveConn() to serve the messages
 // received from the connection.
-func listenAndServe(listener net.Listener, wg *sync.WaitGroup) {
+func (s *Server) listenAndServe(wg *sync.WaitGroup) {
 	nwucpLog := logger.NWuCPLog
 	defer func() {
 		if p := recover(); p != nil {
@@ -47,15 +63,16 @@ func listenAndServe(listener net.Listener, wg *sync.WaitGroup) {
 			nwucpLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 
-		err := tcpListener.Close()
+		err := s.tcpListener.Close()
 		if err != nil {
 			nwucpLog.Errorf("Error closing tcpListener: %+v", err)
 		}
 		wg.Done()
 	}()
 
+	n3iwfCtx := s.Context()
 	for {
-		connection, err := listener.Accept()
+		connection, err := s.tcpListener.Accept()
 		if err != nil {
 			nwucpLog.Errorf("TCP server accept failed : %+v. Close the listener...", err)
 			return
@@ -65,16 +82,15 @@ func listenAndServe(listener net.Listener, wg *sync.WaitGroup) {
 
 		// Find UE context and store this connection in to it, then check if
 		// there is any cached NAS message for this UE. If yes, send to it.
-		n3iwfSelf := n3iwf_context.N3IWFSelf()
 
 		ueIP := strings.Split(connection.RemoteAddr().String(), ":")[0]
-		ikeUe, ok := n3iwfSelf.AllocatedUEIPAddressLoad(ueIP)
+		ikeUe, ok := n3iwfCtx.AllocatedUEIPAddressLoad(ueIP)
 		if !ok {
 			nwucpLog.Errorf("UE context not found for peer %+v", ueIP)
 			continue
 		}
 
-		ranUe, err := n3iwfSelf.RanUeLoadFromIkeSPI(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
+		ranUe, err := n3iwfCtx.RanUeLoadFromIkeSPI(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
 		if err != nil {
 			nwucpLog.Errorf("RanUe context not found : %+v", err)
 			continue
@@ -82,7 +98,7 @@ func listenAndServe(listener net.Listener, wg *sync.WaitGroup) {
 		// Store connection
 		ranUe.TCPConnection = connection
 
-		n3iwfSelf.NGAPServer.RcvEventCh <- n3iwf_context.NewNASTCPConnEstablishedCompleteEvt(
+		s.NgapEvtCh() <- n3iwf_context.NewNASTCPConnEstablishedCompleteEvt(
 			ranUe.RanUeNgapId,
 		)
 
@@ -106,15 +122,15 @@ func decapNasMsgFromEnvelope(envelop []byte) []byte {
 	return nasMsg
 }
 
-func Stop(n3iwfContext *n3iwf_context.N3IWFContext) {
+func (s *Server) Stop() {
 	nwucpLog := logger.NWuCPLog
 	nwucpLog.Infof("Close Nwucp server...")
 
-	if err := tcpListener.Close(); err != nil {
+	if err := s.tcpListener.Close(); err != nil {
 		nwucpLog.Errorf("Stop nwuup server error : %+v", err)
 	}
 
-	n3iwfContext.RANUePool.Range(
+	s.Context().RANUePool.Range(
 		func(key, value interface{}) bool {
 			ranUe := value.(*n3iwf_context.N3IWFRanUe)
 			if ranUe.TCPConnection != nil {

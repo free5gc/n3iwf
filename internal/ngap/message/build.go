@@ -8,15 +8,17 @@ import (
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/util"
 	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
+	"github.com/free5gc/n3iwf/pkg/factory"
 	"github.com/free5gc/ngap"
 	"github.com/free5gc/ngap/ngapConvert"
 	"github.com/free5gc/ngap/ngapType"
 )
 
-func BuildNGSetupRequest() ([]byte, error) {
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	cfg := n3iwfSelf.Config()
-
+func BuildNGSetupRequest(
+	gN3iwfId *factory.GlobalN3IWFID,
+	ranNodeName string,
+	suppTAList []factory.SupportedTAItem,
+) ([]byte, error) {
 	var pdu ngapType.NGAPPDU
 	pdu.Present = ngapType.NGAPPDUPresentInitiatingMessage
 	pdu.InitiatingMessage = new(ngapType.InitiatingMessage)
@@ -42,7 +44,6 @@ func BuildNGSetupRequest() ([]byte, error) {
 	globalRANNodeID.Present = ngapType.GlobalRANNodeIDPresentGlobalN3IWFID
 	globalRANNodeID.GlobalN3IWFID = new(ngapType.GlobalN3IWFID)
 
-	gN3iwfId := cfg.GetGlobalN3iwfId()
 	globalN3IWFID := globalRANNodeID.GlobalN3IWFID
 	globalN3IWFID.PLMNIdentity = util.PlmnIdToNgap(*gN3iwfId.PLMNID)
 	globalN3IWFID.N3IWFID.Present = ngapType.N3IWFIDPresentN3IWFID
@@ -57,7 +58,7 @@ func BuildNGSetupRequest() ([]byte, error) {
 	ie.Value.RANNodeName = new(ngapType.RANNodeName)
 
 	rANNodeName := ie.Value.RANNodeName
-	rANNodeName.Value = cfg.GetRanNodeName()
+	rANNodeName.Value = ranNodeName
 	nGSetupRequestIEs.List = append(nGSetupRequestIEs.List, ie)
 	// SupportedTAList
 	ie = ngapType.NGSetupRequestIEs{}
@@ -69,7 +70,6 @@ func BuildNGSetupRequest() ([]byte, error) {
 	supportedTAList := ie.Value.SupportedTAList
 
 	ngapLog := logger.NgapLog
-	suppTAList := cfg.GetSupportedTAList()
 	for _, supportedTAItemLocal := range suppTAList {
 		// SupportedTAItem in SupportedTAList
 		supportedTAItem := ngapType.SupportedTAItem{}
@@ -1618,7 +1618,10 @@ func BuildAMFConfigurationUpdateFailure(
 	return ngap.Encoder(pdu)
 }
 
-func BuildRANConfigurationUpdate() ([]byte, error) {
+func BuildRANConfigurationUpdate(
+	ranNodeName string,
+	suppTAList []factory.SupportedTAItem,
+) ([]byte, error) {
 	ngapLog := logger.NgapLog
 
 	var pdu ngapType.NGAPPDU
@@ -1635,11 +1638,7 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 	rANConfigurationUpdate := initiatingMessage.Value.RANConfigurationUpdate
 	rANConfigurationUpdateIEs := &rANConfigurationUpdate.ProtocolIEs
 
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	cfg := n3iwfSelf.Config()
-
 	// RANNodeName
-	ranNodeName := cfg.GetRanNodeName()
 	if ranNodeName != "" {
 		ie := ngapType.RANConfigurationUpdateIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDRANNodeName
@@ -1653,7 +1652,6 @@ func BuildRANConfigurationUpdate() ([]byte, error) {
 		rANConfigurationUpdateIEs.List = append(rANConfigurationUpdateIEs.List, ie)
 	}
 	// SupportedTAList
-	suppTAList := cfg.GetSupportedTAList()
 	if len(suppTAList) > 0 {
 		ie := ngapType.RANConfigurationUpdateIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDSupportedTAList
@@ -1744,11 +1742,10 @@ func BuildRRCInactiveTransitionReport() ([]byte, error) {
 	return ngap.Encoder(pdu)
 }
 
-func BuildPDUSessionResourceSetupResponseTransfer(pduSession *n3iwf_context.PDUSession) ([]byte, error) {
-	// N3IWF context
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	cfg := n3iwfSelf.Config()
-
+func BuildPDUSessionResourceSetupResponseTransfer(
+	pduSession *n3iwf_context.PDUSession,
+	gtpBindIPv4 string,
+) ([]byte, error) {
 	transfer := ngapType.PDUSessionResourceSetupResponseTransfer{}
 
 	// TODO: use tunnel info allocated by n3iwf
@@ -1763,7 +1760,7 @@ func BuildPDUSessionResourceSetupResponseTransfer(pduSession *n3iwf_context.PDUS
 	teid := make([]byte, 4)
 	binary.BigEndian.PutUint32(teid, pduSession.GTPConnection.IncomingTEID)
 	gtpTunnel.GTPTEID.Value = teid
-	gtpTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(cfg.GetGTPBindAddr(), "")
+	gtpTunnel.TransportLayerAddress = ngapConvert.IPAddressToNgap(gtpBindIPv4, "")
 
 	// Associated Qos Flow List
 	for _, qfi := range pduSession.QFIList {

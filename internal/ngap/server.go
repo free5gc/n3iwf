@@ -1,17 +1,19 @@
-package service
+package ngap
 
 import (
+	"context"
 	"errors"
 	"io"
 	"runtime/debug"
 	"sync"
 	"time"
 
+	"golang.org/x/net/ipv4"
+
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/internal/ngap"
-	"github.com/free5gc/n3iwf/internal/ngap/handler"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
 	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
+	"github.com/free5gc/n3iwf/pkg/factory"
 	lib_ngap "github.com/free5gc/ngap"
 	"github.com/free5gc/sctp"
 )
@@ -21,38 +23,59 @@ var (
 	RECEIVE_NGAPEVENT_CHANNEL_LEN  = 512
 )
 
+type n3iwf interface {
+	Config() *factory.Config
+	Context() *n3iwf_context.N3IWFContext
+	CancelContext() context.Context
+	IkeEvtCh() chan n3iwf_context.IkeEvt
+	NwuupIPv4PktConn() *ipv4.PacketConn
+}
+
+type Server struct {
+	n3iwf
+
+	Conn         []*sctp.SCTPConn
+	RcvNgapPktCh chan ReceiveNGAPPacket
+	RcvEventCh   chan n3iwf_context.NgapEvt
+}
+
+type ReceiveNGAPPacket struct {
+	Conn *sctp.SCTPConn
+	Buf  []byte
+}
+
+func NewServer(n3iwf n3iwf) (*Server, error) {
+	s := &Server{
+		n3iwf:        n3iwf,
+		RcvNgapPktCh: make(chan ReceiveNGAPPacket, RECEIVE_NGAPPACKET_CHANNEL_LEN),
+		RcvEventCh:   make(chan n3iwf_context.NgapEvt, RECEIVE_NGAPEVENT_CHANNEL_LEN),
+	}
+	return s, nil
+}
+
 // Run start the N3IWF SCTP process.
-func Run(wg *sync.WaitGroup) error {
+func (s *Server) Run(wg *sync.WaitGroup) error {
 	// n3iwf context
-	n3iwfSelf := n3iwf_context.N3IWFSelf()
-	cfg := n3iwfSelf.Config()
+	cfg := s.Config()
 
 	localAddr := new(sctp.SCTPAddr)
 
-	n3iwfSelf.NGAPServer = NewNGAPServer()
 	for _, remoteAddr := range cfg.GetAmfSctpAddrs() {
 		errChan := make(chan error)
 		wg.Add(1)
-		go Receiver(localAddr, remoteAddr, errChan, n3iwfSelf.NGAPServer, wg)
+		go s.listenAndServe(localAddr, remoteAddr, errChan, wg)
 		if err, ok := <-errChan; ok {
 			return err
 		}
 	}
 
 	wg.Add(1)
-	go server(n3iwfSelf.NGAPServer, wg)
+	go s.runNgapEventHandler(wg)
 
 	return nil
 }
 
-func NewNGAPServer() *n3iwf_context.NGAPServer {
-	return &n3iwf_context.NGAPServer{
-		RcvNgapPktCh: make(chan n3iwf_context.ReceiveNGAPPacket, RECEIVE_NGAPPACKET_CHANNEL_LEN),
-		RcvEventCh:   make(chan n3iwf_context.NgapEvt, RECEIVE_NGAPEVENT_CHANNEL_LEN),
-	}
-}
-
-func server(ngapServer *n3iwf_context.NGAPServer, wg *sync.WaitGroup) {
+func (s *Server) runNgapEventHandler(wg *sync.WaitGroup) {
 	ngapLog := logger.NgapLog
 	defer func() {
 		if p := recover(); p != nil {
@@ -60,25 +83,27 @@ func server(ngapServer *n3iwf_context.NGAPServer, wg *sync.WaitGroup) {
 			ngapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 		ngapLog.Infof("NGAP server stopped")
-		close(ngapServer.RcvEventCh)
-		close(ngapServer.RcvNgapPktCh)
+		close(s.RcvEventCh)
+		close(s.RcvNgapPktCh)
 		wg.Done()
 	}()
 
 	for {
 		select {
-		case rcvPkt := <-ngapServer.RcvNgapPktCh:
+		case rcvPkt := <-s.RcvNgapPktCh:
 			if len(rcvPkt.Buf) == 0 { // receiver closed
 				return
 			}
-			ngap.NGAPDispatch(rcvPkt.Conn, rcvPkt.Buf)
-		case rcvEvt := <-ngapServer.RcvEventCh:
-			handler.HandleEvent(rcvEvt)
+			s.NGAPDispatch(rcvPkt.Conn, rcvPkt.Buf)
+		case rcvEvt := <-s.RcvEventCh:
+			s.HandleEvent(rcvEvt)
 		}
 	}
 }
 
-func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapServer *n3iwf_context.NGAPServer,
+func (s *Server) listenAndServe(
+	localAddr, remoteAddr *sctp.SCTPAddr,
+	errChan chan<- error,
 	wg *sync.WaitGroup,
 ) {
 	ngapLog := logger.NgapLog
@@ -148,11 +173,12 @@ func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapSe
 	}
 
 	// Send NG setup request
-	message.SendNGSetupRequest(conn)
+	n3iwfCtx := s.Context()
+	message.SendNGSetupRequest(conn, n3iwfCtx)
 
 	close(errChan)
 
-	ngapServer.Conn = append(ngapServer.Conn, conn)
+	s.Conn = append(s.Conn, conn)
 
 	data := make([]byte, 65535)
 	for {
@@ -166,7 +192,7 @@ func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapSe
 				if errConn != nil {
 					ngapLog.Errorf("conn close error: %+v", errConn)
 				}
-				ngapServer.RcvNgapPktCh <- n3iwf_context.ReceiveNGAPPacket{}
+				s.RcvNgapPktCh <- ReceiveNGAPPacket{}
 				return
 			}
 			ngapLog.Errorf("[SCTP] Read from SCTP connection failed: %+v", err)
@@ -181,7 +207,7 @@ func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapSe
 			forwardData := make([]byte, n)
 			copy(forwardData, data[:n])
 
-			ngapServer.RcvNgapPktCh <- n3iwf_context.ReceiveNGAPPacket{
+			s.RcvNgapPktCh <- ReceiveNGAPPacket{
 				Conn: conn,
 				Buf:  forwardData[:n],
 			}
@@ -189,11 +215,11 @@ func Receiver(localAddr, remoteAddr *sctp.SCTPAddr, errChan chan<- error, ngapSe
 	}
 }
 
-func Stop(n3iwfContext *n3iwf_context.N3IWFContext) {
+func (s *Server) Stop() {
 	ngapLog := logger.NgapLog
 	ngapLog.Infof("Close NGAP server....")
 
-	for _, ngapServerConn := range n3iwfContext.NGAPServer.Conn {
+	for _, ngapServerConn := range s.Conn {
 		if err := ngapServerConn.Close(); err != nil {
 			ngapLog.Errorf("Stop ngap server error : %+v", err)
 		}

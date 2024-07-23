@@ -1,23 +1,5 @@
 package context
 
-import (
-	"net"
-)
-
-type IkeServer struct {
-	Listener    map[int]*net.UDPConn
-	RcvIkePktCh chan IkeReceivePacket
-	RcvEventCh  chan IkeEvt
-	StopServer  chan struct{}
-}
-
-type IkeReceivePacket struct {
-	Listener   net.UDPConn
-	LocalAddr  net.UDPAddr
-	RemoteAddr net.UDPAddr
-	Msg        []byte
-}
-
 type IkeEventType int64
 
 // IKE Event type
