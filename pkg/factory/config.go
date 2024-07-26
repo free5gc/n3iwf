@@ -115,8 +115,9 @@ type Info struct {
 }
 
 type Configuration struct {
-	N3IWFInfo        *N3IWFNFInfo       `yaml:"N3IWFInformation" valid:"required"`
-	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"AMFSCTPAddresses" valid:"required"`
+	N3IWFInfo        *N3IWFNFInfo       `yaml:"N3IWFInformation"        valid:"required"`
+	LocalSctpAddr    string             `yaml:"localSctpAddr,omitempty" valid:"optional,host"`
+	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"AMFSCTPAddresses"        valid:"required"`
 
 	TCPPort              int         `yaml:"NASTCPPort"           valid:"required,port"`
 	IKEBindAddr          string      `yaml:"IKEBindAddress"       valid:"required,host"`
@@ -253,6 +254,23 @@ func (c *Config) GetRanNodeName() string {
 	c.RLock()
 	defer c.RUnlock()
 	return c.Configuration.N3IWFInfo.RanNodeName
+}
+
+func (c *Config) GetLocalSctpAddr() *sctp.SCTPAddr {
+	c.RLock()
+	defer c.RUnlock()
+
+	sctpAddr := new(sctp.SCTPAddr)
+	localAddr := c.Configuration.LocalSctpAddr
+	if localAddr != "" {
+		ipAddr, err := net.ResolveIPAddr("ip", localAddr)
+		if err == nil {
+			sctpAddr = &sctp.SCTPAddr{
+				IPAddrs: []net.IPAddr{*ipAddr},
+			}
+		}
+	}
+	return sctpAddr
 }
 
 func (c *Config) GetAmfSctpAddrs() []*sctp.SCTPAddr {

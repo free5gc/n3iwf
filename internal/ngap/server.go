@@ -58,7 +58,7 @@ func (s *Server) Run(wg *sync.WaitGroup) error {
 	// n3iwf context
 	cfg := s.Config()
 
-	localAddr := new(sctp.SCTPAddr)
+	localAddr := cfg.GetLocalSctpAddr()
 
 	for _, remoteAddr := range cfg.GetAmfSctpAddrs() {
 		errChan := make(chan error)
