@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
-	"golang.org/x/net/ipv4"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap"
@@ -264,8 +263,4 @@ func (a *N3iwfApp) NgapEvtCh() chan n3iwf_context.NgapEvt {
 
 func (a *N3iwfApp) IkeEvtCh() chan n3iwf_context.IkeEvt {
 	return a.ikeServer.RcvEventCh
-}
-
-func (a *N3iwfApp) NwuupIPv4PktConn() *ipv4.PacketConn {
-	return a.nwuupServer.IPv4PacketConn
 }

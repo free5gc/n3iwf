@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/ipv4"
-
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
 	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
@@ -28,7 +26,6 @@ type n3iwf interface {
 	Context() *n3iwf_context.N3IWFContext
 	CancelContext() context.Context
 	IkeEvtCh() chan n3iwf_context.IkeEvt
-	NwuupIPv4PktConn() *ipv4.PacketConn
 }
 
 type Server struct {

@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"net"
 
-	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
-
 	"github.com/free5gc/ngap/ngapType"
 )
 
@@ -79,11 +77,10 @@ type QosFlow struct {
 }
 
 type GTPConnectionInfo struct {
-	UPFIPAddr           string
-	UPFUDPAddr          net.Addr
-	IncomingTEID        uint32
-	OutgoingTEID        uint32
-	UserPlaneConnection *gtpv1.UPlaneConn
+	UPFIPAddr    string
+	UPFUDPAddr   net.Addr
+	IncomingTEID uint32
+	OutgoingTEID uint32
 }
 
 type PDUSessionSetupTemporaryData struct {

@@ -5,6 +5,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/wmnsk/go-gtp/gtpv1"
+
 	"github.com/free5gc/aper"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
@@ -863,74 +865,37 @@ func (s *Server) handlePDUSessionResourceSetupRequestTransfer(
 			OutgoingTEID: binary.BigEndian.Uint32(ulNGUUPTNLInformation.GTPTunnel.GTPTEID.Value),
 		}
 
-		if userPlaneConnection, ok := n3iwfCtx.GTPConnectionWithUPFLoad(upfIPv4); ok {
-			// UPF UDP address
-			upfUDPAddr, err := net.ResolveUDPAddr("udp", upfIPv4+":2152")
+		// UPF UDP address
+		upfAddr := upfIPv4 + gtpv1.GTPUPort
+		upfUDPAddr, err := net.ResolveUDPAddr("udp", upfAddr)
+		if err != nil {
+			ngapLog.Errorf("Resolve UPF addr [%s] failed: %v", upfAddr, err)
+			cause := message.BuildCause(ngapType.CausePresentTransport,
+				ngapType.CauseTransportPresentTransportResourceUnavailable)
+			responseTransfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
 			if err != nil {
-				ngapLog.Errorf("Resolve UDP address failed: %v", err)
-				cause := message.BuildCause(ngapType.CausePresentTransport,
-					ngapType.CauseTransportPresentTransportResourceUnavailable)
-				responseTransfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-				if err != nil {
-					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %v\n", err)
-				}
-				return false, responseTransfer
+				ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %v\n", err)
 			}
-
-			// UE TEID
-			ueTEID := n3iwfCtx.NewTEID(ranUe)
-			if ueTEID == 0 {
-				ngapLog.Error("Invalid TEID (0).")
-				cause := message.BuildCause(
-					ngapType.CausePresentProtocol,
-					ngapType.CauseProtocolPresentUnspecified)
-				responseTransfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-				if err != nil {
-					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %v\n", err)
-				}
-				return false, responseTransfer
-			}
-
-			// Set UE associated GTP connection
-			gtpConnection.UPFUDPAddr = upfUDPAddr
-			gtpConnection.IncomingTEID = ueTEID
-			gtpConnection.UserPlaneConnection = userPlaneConnection
-		} else {
-			// Setup GTP connection with UPF
-			userPlaneConnection, upfUDPAddr, err := s.setupGTPTunnelWithUPF(upfIPv4)
-			if err != nil {
-				ngapLog.Errorf("Setup GTP connection with UPF failed: %v", err)
-				cause := message.BuildCause(ngapType.CausePresentTransport,
-					ngapType.CauseTransportPresentTransportResourceUnavailable)
-				responseTransfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-				if err != nil {
-					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %v\n", err)
-				}
-				return false, responseTransfer
-			}
-
-			// UE TEID
-			ueTEID := n3iwfCtx.NewTEID(ranUe)
-			if ueTEID == 0 {
-				ngapLog.Error("Invalid TEID (0).")
-				cause := message.BuildCause(
-					ngapType.CausePresentProtocol,
-					ngapType.CauseProtocolPresentUnspecified)
-				responseTransfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
-				if err != nil {
-					ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %v\n", err)
-				}
-				return false, responseTransfer
-			}
-
-			// Setup GTP connection with UPF
-			gtpConnection.UPFUDPAddr = upfUDPAddr
-			gtpConnection.IncomingTEID = ueTEID
-			gtpConnection.UserPlaneConnection = userPlaneConnection
-
-			// Store GTP connection with UPF into N3IWF context
-			n3iwfCtx.GTPConnectionWithUPFStore(upfIPv4, userPlaneConnection)
+			return false, responseTransfer
 		}
+
+		// UE TEID
+		ueTEID := n3iwfCtx.NewTEID(ranUe)
+		if ueTEID == 0 {
+			ngapLog.Error("Invalid TEID (0).")
+			cause := message.BuildCause(
+				ngapType.CausePresentProtocol,
+				ngapType.CauseProtocolPresentUnspecified)
+			responseTransfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+			if err != nil {
+				ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %v\n", err)
+			}
+			return false, responseTransfer
+		}
+
+		// Setup GTP connection with UPF
+		gtpConnection.UPFUDPAddr = upfUDPAddr
+		gtpConnection.IncomingTEID = ueTEID
 
 		pduSession.GTPConnection = gtpConnection
 	} else {
