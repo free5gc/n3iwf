@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/wmnsk/go-gtp/gtpv1"
 
 	"github.com/free5gc/aper"
@@ -1134,14 +1135,25 @@ func (s *Server) HandleUEContextReleaseCommand(
 		printAndGetCause(cause)
 	}
 
+	message.SendUEContextReleaseComplete(ranUe, nil)
+
+	err := s.releaseIkeUeAndRanUe(ranUe)
+	if err != nil {
+		ngapLog.Warnf("HandleUEContextReleaseCommand(): %v", err)
+	}
+}
+
+func (s *Server) releaseIkeUeAndRanUe(ranUe *n3iwf_context.N3IWFRanUe) error {
+	n3iwfCtx := s.Context()
 	localSPI, ok := n3iwfCtx.IkeSpiLoad(ranUe.RanUeNgapId)
-	if !ok {
-		ngapLog.Errorf("Cannot get SPI from RanUeNgapID : %+v", ranUe.RanUeNgapId)
-		return
+	if ok {
+		s.IkeEvtCh() <- n3iwf_context.NewIKEDeleteRequestEvt(localSPI)
 	}
 
-	s.IkeEvtCh() <- n3iwf_context.NewIKEDeleteRequestEvt(localSPI)
-	// TODO: release pdu session and gtp info for ue
+	if err := ranUe.Remove(); err != nil {
+		return errors.Wrapf(err, "releaseIkeUeAndRanUe RanUeNgapId[%016x]", ranUe.RanUeNgapId)
+	}
+	return nil
 }
 
 func encapNasMsgToEnvelope(nasPDU *ngapType.NASPDU) []byte {
@@ -2159,6 +2171,23 @@ func (s *Server) HandleErrorIndication(
 
 	if criticalityDiagnostics != nil {
 		printCriticalityDiagnostics(criticalityDiagnostics)
+	}
+
+	n3iwfCtx := s.Context()
+	ranUe, ok := n3iwfCtx.RanUePoolLoad(rANUENGAPID.Value)
+	if ok {
+		err := s.releaseIkeUeAndRanUe(ranUe)
+		if err != nil {
+			ngapLog.Warnf("HandleErrorIndication(): %v", err)
+		}
+	}
+
+	ranUe = amf.FindUeByAmfUeNgapID(aMFUENGAPID.Value)
+	if ranUe != nil {
+		err := s.releaseIkeUeAndRanUe(ranUe)
+		if err != nil {
+			ngapLog.Warnf("HandleErrorIndication(): %v", err)
+		}
 	}
 
 	// TODO: handle error based on cause/criticalityDiagnostics

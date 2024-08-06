@@ -8,7 +8,6 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	math_rand "math/rand"
 	"net"
@@ -16,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
@@ -1499,7 +1499,7 @@ func (s *Server) HandleEvent(ikeEvt n3iwf_context.IkeEvt) {
 	case n3iwf_context.CreatePDUSession:
 		s.HandleCreatePDUSession(ikeEvt)
 	case n3iwf_context.IKEDeleteRequest:
-		s.HandleIKEDeleteRequest(ikeEvt)
+		s.HandleIKEDeleteEvt(ikeEvt)
 	case n3iwf_context.SendChildSADeleteRequest:
 		s.HandleSendChildSADeleteRequest(ikeEvt)
 	case n3iwf_context.IKEContextUpdate:
@@ -1696,7 +1696,7 @@ func (s *Server) HandleCreatePDUSession(ikeEvt n3iwf_context.IkeEvt) {
 	s.CreatePDUSessionChildSA(ikeSecurityAssociation.IkeUE, temporaryPDUSessionSetupData)
 }
 
-func (s *Server) HandleIKEDeleteRequest(ikeEvt n3iwf_context.IkeEvt) {
+func (s *Server) HandleIKEDeleteEvt(ikeEvt n3iwf_context.IkeEvt) {
 	ikeLog := logger.IKELog
 	ikeLog.Infof("Handle IKEDeleteRequest event")
 
@@ -1705,6 +1705,27 @@ func (s *Server) HandleIKEDeleteRequest(ikeEvt n3iwf_context.IkeEvt) {
 	localSPI := ikeDeleteRequest.LocalSPI
 
 	SendIKEDeleteRequest(n3iwfCtx, localSPI)
+
+	// In normal case, should wait response and then remove ikeUe.
+	// Remove ikeUe here to prevent no response received.
+	// Even response replied, it will be discarded.
+	err := s.removeIkeUe(localSPI)
+	if err != nil {
+		ikeLog.Errorf("HandleIKEDeleteEvt(): %v", err)
+	}
+}
+
+func (s *Server) removeIkeUe(localSPI uint64) error {
+	n3iwfCtx := s.Context()
+	ikeUe, ok := n3iwfCtx.IkeUePoolLoad(localSPI)
+	if !ok {
+		return errors.Errorf("Cannot get IkeUE from SPI : %016x", localSPI)
+	}
+	err := ikeUe.Remove()
+	if err != nil {
+		return errors.Wrapf(err, "Delete IkeUe error")
+	}
+	return nil
 }
 
 func (s *Server) HandleSendChildSADeleteRequest(ikeEvt n3iwf_context.IkeEvt) {

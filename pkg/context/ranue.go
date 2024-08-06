@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/pkg/errors"
+
 	"github.com/free5gc/ngap/ngapType"
 )
 
@@ -120,8 +122,10 @@ func (ranUe *N3IWFRanUe) Remove() error {
 		n3iwfCtx.DeleteTEID(pduSession.GTPConnection.IncomingTEID)
 	}
 
-	if err := ranUe.TCPConnection.Close(); err != nil {
-		return fmt.Errorf("Stop nwucp server error : %+v", err)
+	if ranUe.TCPConnection != nil {
+		if err := ranUe.TCPConnection.Close(); err != nil {
+			return errors.Errorf("Close TCP conn error : %v", err)
+		}
 	}
 
 	return nil
