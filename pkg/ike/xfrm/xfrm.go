@@ -5,20 +5,12 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/ike/message"
 )
-
-// Log
-var ikeLog *logrus.Entry
-
-func init() {
-	ikeLog = logger.IKELog
-}
 
 type XFRMEncryptionAlgorithmType uint16
 
@@ -53,6 +45,8 @@ func (xfrmIntegrityAlgorithmType XFRMIntegrityAlgorithmType) String() string {
 		return "hmac(sha1)"
 	case message.AUTH_AES_XCBC_96:
 		return "xcbc(aes)"
+	case message.AUTH_HMAC_SHA2_256_128:
+		return "hmac(sha256)"
 	default:
 		return ""
 	}
@@ -61,6 +55,7 @@ func (xfrmIntegrityAlgorithmType XFRMIntegrityAlgorithmType) String() string {
 func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 	childSecurityAssociation *context.ChildSecurityAssociation,
 ) error {
+	ikeLog := logger.IKELog
 	// Build XFRM information data structure for incoming traffic.
 
 	// Direction: {private_network} -> this_server
@@ -73,8 +68,9 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 		}
 		if childSecurityAssociation.IntegrityAlgorithm != 0 {
 			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
-				Name: XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
-				Key:  childSecurityAssociation.ResponderToInitiatorIntegrityKey,
+				Name:        XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
+				Key:         childSecurityAssociation.ResponderToInitiatorIntegrityKey,
+				TruncateLen: getTruncateLength(childSecurityAssociation.IntegrityAlgorithm),
 			}
 		}
 	} else {
@@ -84,8 +80,9 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 		}
 		if childSecurityAssociation.IntegrityAlgorithm != 0 {
 			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
-				Name: XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
-				Key:  childSecurityAssociation.InitiatorToResponderIntegrityKey,
+				Name:        XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
+				Key:         childSecurityAssociation.InitiatorToResponderIntegrityKey,
+				TruncateLen: getTruncateLength(childSecurityAssociation.IntegrityAlgorithm),
 			}
 		}
 	}
@@ -199,6 +196,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 }
 
 func printSAInfo(n3iwf_is_initiator bool, xfrmiId uint32, childSecurityAssociation *context.ChildSecurityAssociation) {
+	ikeLog := logger.IKELog
 	var InboundEncryptionKey, InboundIntegrityKey, OutboundEncryptionKey, OutboundIntegrityKey []byte
 
 	if n3iwf_is_initiator {
@@ -237,6 +235,7 @@ func printSAInfo(n3iwf_is_initiator bool, xfrmiId uint32, childSecurityAssociati
 func SetupIPsecXfrmi(xfrmIfaceName, parentIfaceName string, xfrmIfaceId uint32,
 	xfrmIfaceAddr net.IPNet,
 ) (netlink.Link, error) {
+	ikeLog := logger.IKELog
 	var (
 		xfrmi, parent netlink.Link
 		err           error
@@ -280,4 +279,17 @@ func SetupIPsecXfrmi(xfrmIfaceName, parentIfaceName string, xfrmIfaceId uint32,
 	}
 
 	return xfrmi, nil
+}
+
+func getTruncateLength(transformID uint16) int {
+	switch transformID {
+	case message.AUTH_HMAC_MD5_96:
+		return 96
+	case message.AUTH_HMAC_SHA1_96:
+		return 96
+	case message.AUTH_HMAC_SHA2_256_128:
+		return 128
+	default:
+		return 96
+	}
 }

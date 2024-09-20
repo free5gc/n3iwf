@@ -4,24 +4,20 @@ import (
 	"net"
 	"runtime/debug"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/ike/handler"
 	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
 )
 
-var ikeLog *logrus.Entry
-
-func init() {
-	ikeLog = logger.IKELog
-}
-
-func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []byte) {
+func (s *Server) Dispatch(
+	udpConn *net.UDPConn,
+	localAddr, remoteAddr *net.UDPAddr,
+	msg []byte,
+) {
+	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			logger.IKELog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			ikeLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 	}()
 
@@ -49,13 +45,13 @@ func Dispatch(udpConn *net.UDPConn, localAddr, remoteAddr *net.UDPAddr, msg []by
 
 	switch ikeMessage.ExchangeType {
 	case ike_message.IKE_SA_INIT:
-		handler.HandleIKESAINIT(udpConn, localAddr, remoteAddr, ikeMessage, msg)
+		s.HandleIKESAINIT(udpConn, localAddr, remoteAddr, ikeMessage, msg)
 	case ike_message.IKE_AUTH:
-		handler.HandleIKEAUTH(udpConn, localAddr, remoteAddr, ikeMessage)
+		s.HandleIKEAUTH(udpConn, localAddr, remoteAddr, ikeMessage)
 	case ike_message.CREATE_CHILD_SA:
-		handler.HandleCREATECHILDSA(udpConn, localAddr, remoteAddr, ikeMessage)
+		s.HandleCREATECHILDSA(udpConn, localAddr, remoteAddr, ikeMessage)
 	case ike_message.INFORMATIONAL:
-		handler.HandleInformational(udpConn, localAddr, remoteAddr, ikeMessage)
+		s.HandleInformational(udpConn, localAddr, remoteAddr, ikeMessage)
 	default:
 		ikeLog.Warnf("Unimplemented IKE message type, exchange type: %d", ikeMessage.ExchangeType)
 	}

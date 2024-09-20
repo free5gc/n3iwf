@@ -13,16 +13,6 @@ import (
 	"testing"
 )
 
-var conn net.Conn
-
-func init() {
-	if connTmp, err := net.Dial("udp", "127.0.0.1:500"); err != nil {
-		panic(err)
-	} else {
-		conn = connTmp
-	}
-}
-
 // TestEncodeDecode tests the Encode() and Decode() function using the data
 // build manually.
 // First, build each payload with correct value, then the IKE message for
@@ -32,6 +22,10 @@ func init() {
 // Third, send the encoded data to the UDP connection for verification with Wireshark.
 // Compare the dataFirstEncode and dataSecondEncode and return the result.
 func TestEncodeDecode(t *testing.T) {
+	conn, err := net.Dial("udp", "127.0.0.1:500")
+	if err != nil {
+		t.Fatalf("udp Dial failed: %+v", err)
+	}
 	testPacket := &IKEMessage{}
 
 	// random an SPI
@@ -281,11 +275,11 @@ func TestEncodeDecode(t *testing.T) {
 	testEAP.Code = 1
 	testEAP.Identifier = 123
 
-	testEAPExpanded := new(EAPExpanded)
-
-	testEAPExpanded.VendorID = 26838
-	testEAPExpanded.VendorType = 1
-	testEAPExpanded.VendorData = []byte{9, 4, 8, 7}
+	// testEAPExpanded := &EAPExpanded{
+	// 	VendorID:   26838,
+	// 	VendorType: 1,
+	// 	VendorData: []byte{9, 4, 8, 7},
+	// }
 
 	testEAPNotification := new(EAPNotification)
 
@@ -329,7 +323,8 @@ func TestEncodeDecode(t *testing.T) {
 	// ciphertext
 	cipherText := make([]byte, aes.BlockSize+len(ikePayloadDataForSK))
 	iv := cipherText[:aes.BlockSize]
-	if _, err := io.ReadFull(Crand.Reader, iv); err != nil {
+	_, err = io.ReadFull(Crand.Reader, iv)
+	if err != nil {
 		t.Fatalf("IO ReadFull failed: %+v", err)
 	}
 
@@ -342,7 +337,6 @@ func TestEncodeDecode(t *testing.T) {
 	testPacket.Payloads = append(testPacket.Payloads, testSK)
 
 	var dataFirstEncode, dataSecondEncode []byte
-	var err error
 	decodedPacket := new(IKEMessage)
 
 	if dataFirstEncode, err = testPacket.Encode(); err != nil {

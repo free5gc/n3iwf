@@ -1,4 +1,4 @@
-package handler
+package security
 
 import (
 	"bytes"
@@ -7,16 +7,19 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"errors"
 	"hash"
 	"io"
 	"math/big"
 	"strings"
 
-	"github.com/free5gc/n3iwf/pkg/context"
+	"github.com/pkg/errors"
+
+	"github.com/free5gc/n3iwf/internal/logger"
+	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/ike/message"
 )
 
@@ -34,6 +37,8 @@ func init() {
 func GenerateRandomNumber() *big.Int {
 	var number *big.Int
 	var err error
+
+	ikeLog := logger.IKELog
 	for {
 		number, err = rand.Int(rand.Reader, &randomNumberMaximum)
 		if err != nil {
@@ -49,6 +54,7 @@ func GenerateRandomNumber() *big.Int {
 }
 
 func GenerateRandomUint8() (uint8, error) {
+	ikeLog := logger.IKELog
 	number := make([]byte, 1)
 	_, err := io.ReadFull(rand.Reader, number)
 	if err != nil {
@@ -92,6 +98,7 @@ const (
 func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte,
 	diffieHellmanGroupNumber uint16,
 ) (localPublicValue []byte, sharedKey []byte) {
+	ikeLog := logger.IKELog
 	peerPublicValueBig := new(big.Int).SetBytes(peerPublicValue)
 	var generator, factor *big.Int
 	var ok bool
@@ -115,7 +122,7 @@ func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte,
 		}
 	default:
 		ikeLog.Errorf("Unsupported Diffie-Hellman group: %d", diffieHellmanGroupNumber)
-		return
+		return localPublicValue, sharedKey
 	}
 
 	localPublicValue = new(big.Int).Exp(generator, secret, factor).Bytes()
@@ -131,11 +138,14 @@ func CalculateDiffieHellmanMaterials(secret *big.Int, peerPublicValue []byte,
 
 // Pseudorandom Function
 func NewPseudorandomFunction(key []byte, algorithmType uint16) (hash.Hash, bool) {
+	ikeLog := logger.IKELog
 	switch algorithmType {
 	case message.PRF_HMAC_MD5:
 		return hmac.New(md5.New, key), true
 	case message.PRF_HMAC_SHA1:
-		return hmac.New(sha1.New, key), true
+		return hmac.New(sha1.New, key), true // #nosec G401
+	case message.PRF_HMAC_SHA2_256:
+		return hmac.New(sha256.New, key), true
 	default:
 		ikeLog.Errorf("Unsupported pseudo random function: %d", algorithmType)
 		return nil, false
@@ -143,74 +153,58 @@ func NewPseudorandomFunction(key []byte, algorithmType uint16) (hash.Hash, bool)
 }
 
 // Integrity Algorithm
-func CalculateChecksum(key []byte, originData []byte, algorithmType uint16) ([]byte, error) {
-	switch algorithmType {
-	case message.AUTH_HMAC_MD5_96:
-		if len(key) != 16 {
-			return nil, errors.New("Unmatched input key length")
-		}
-		integrityFunction := hmac.New(md5.New, key)
-		if _, err := integrityFunction.Write(originData); err != nil {
-			ikeLog.Errorf("Hash function write error when calculating checksum: %+v", err)
-			return nil, errors.New("Hash function write error")
-		}
-		return integrityFunction.Sum(nil), nil
-	case message.AUTH_HMAC_SHA1_96:
-		if len(key) != 20 {
-			return nil, errors.New("Unmatched input key length")
-		}
-		integrityFunction := hmac.New(sha1.New, key)
-		if _, err := integrityFunction.Write(originData); err != nil {
-			ikeLog.Errorf("Hash function write error when calculating checksum: %+v", err)
-			return nil, errors.New("Hash function write error")
-		}
-		return integrityFunction.Sum(nil)[:12], nil
-	default:
-		ikeLog.Errorf("Unsupported integrity function: %d", algorithmType)
-		return nil, errors.New("Unsupported algorithm")
+func calculateIntegrity(key []byte, originData []byte, transform *message.Transform) ([]byte, error) {
+	expectKeyLen, ok := getKeyLength(
+		transform.TransformType, transform.TransformID,
+		transform.AttributePresent, transform.AttributeValue)
+	if !ok {
+		return nil, errors.Errorf("calculateIntegrity[%d]: unsupported algo", transform.TransformID)
 	}
+	keyLen := len(key)
+	if keyLen != expectKeyLen {
+		return nil, errors.Errorf("calculateIntegrity[%d]: Unmatched input key length[%d:%d]",
+			transform.TransformID, keyLen, expectKeyLen)
+	}
+	outputLen, ok := getOutputLength(
+		transform.TransformType, transform.TransformID,
+		transform.AttributePresent, transform.AttributeValue)
+	if !ok {
+		return nil, errors.Errorf("calculateIntegrity[%d]: unsupported algo", transform.TransformID)
+	}
+
+	var integrityFunction hash.Hash
+	switch transform.TransformID {
+	case message.AUTH_HMAC_MD5_96:
+		integrityFunction = hmac.New(md5.New, key)
+	case message.AUTH_HMAC_SHA1_96:
+		integrityFunction = hmac.New(sha1.New, key) // #nosec G401
+	case message.AUTH_HMAC_SHA2_256_128:
+		integrityFunction = hmac.New(sha256.New, key)
+	default:
+		return nil, errors.Errorf("calculateIntegrity[%d]: unsupported algo", transform.TransformID)
+	}
+
+	if _, err := integrityFunction.Write(originData); err != nil {
+		return nil, errors.Wrapf(err, "calculateIntegrity[%d]", transform.TransformID)
+	}
+	return integrityFunction.Sum(nil)[:outputLen], nil
 }
 
-func VerifyIKEChecksum(key []byte, originData []byte, checksum []byte, algorithmType uint16) (bool, error) {
-	switch algorithmType {
-	case message.AUTH_HMAC_MD5_96:
-		if len(key) != 16 {
-			return false, errors.New("Unmatched input key length")
-		}
-		integrityFunction := hmac.New(md5.New, key)
-		if _, err := integrityFunction.Write(originData); err != nil {
-			ikeLog.Errorf("Hash function write error when verifying IKE checksum: %+v", err)
-			return false, errors.New("Hash function write error")
-		}
-		checksumOfMessage := integrityFunction.Sum(nil)
-
-		ikeLog.Tracef("Calculated checksum:\n%s\nReceived checksum:\n%s",
-			hex.Dump(checksumOfMessage), hex.Dump(checksum))
-
-		return hmac.Equal(checksumOfMessage, checksum), nil
-	case message.AUTH_HMAC_SHA1_96:
-		if len(key) != 20 {
-			return false, errors.New("Unmatched input key length")
-		}
-		integrityFunction := hmac.New(sha1.New, key)
-		if _, err := integrityFunction.Write(originData); err != nil {
-			ikeLog.Errorf("Hash function write error when verifying IKE checksum: %+v", err)
-			return false, errors.New("Hash function write error")
-		}
-		checksumOfMessage := integrityFunction.Sum(nil)[:12]
-
-		ikeLog.Tracef("Calculated checksum:\n%s\nReceived checksum:\n%s",
-			hex.Dump(checksumOfMessage), hex.Dump(checksum))
-
-		return hmac.Equal(checksumOfMessage, checksum), nil
-	default:
-		ikeLog.Errorf("Unsupported integrity function: %d", algorithmType)
-		return false, errors.New("Unsupported algorithm")
+func verifyIntegrity(key []byte, originData []byte, checksum []byte, transform *message.Transform) (bool, error) {
+	ikeLog := logger.IKELog
+	expectChecksum, err := calculateIntegrity(key, originData, transform)
+	if err != nil {
+		return false, errors.Wrapf(err, "verifyIntegrity")
 	}
+
+	ikeLog.Tracef("Calculated checksum:\n%s\nReceived checksum:\n%s",
+		hex.Dump(expectChecksum), hex.Dump(checksum))
+	return hmac.Equal(expectChecksum, checksum), nil
 }
 
 // Encryption Algorithm
 func EncryptMessage(key []byte, originData []byte, algorithmType uint16) ([]byte, error) {
+	ikeLog := logger.IKELog
 	switch algorithmType {
 	case message.ENCR_AES_CBC:
 		// padding message
@@ -243,6 +237,7 @@ func EncryptMessage(key []byte, originData []byte, algorithmType uint16) ([]byte
 }
 
 func DecryptMessage(key []byte, cipherText []byte, algorithmType uint16) ([]byte, error) {
+	ikeLog := logger.IKELog
 	switch algorithmType {
 	case message.ENCR_AES_CBC:
 		if len(cipherText) < aes.BlockSize {
@@ -292,24 +287,28 @@ func PKCS7Padding(plainText []byte, blockSize int) []byte {
 }
 
 // Certificate
-func CompareRootCertificate(certificateEncoding uint8, requestedCertificateAuthorityHash []byte) bool {
+func CompareRootCertificate(
+	ca []byte,
+	certificateEncoding uint8,
+	requestedCertificateAuthorityHash []byte,
+) bool {
+	ikeLog := logger.IKELog
 	if certificateEncoding != message.X509CertificateSignature {
 		ikeLog.Debugf("Not support certificate type: %d. Reject.", certificateEncoding)
 		return false
 	}
 
-	n3iwfSelf := context.N3IWFSelf()
-
-	if len(n3iwfSelf.CertificateAuthority) == 0 {
+	if len(ca) == 0 {
 		ikeLog.Error("Certificate authority in context is empty")
 		return false
 	}
 
-	return bytes.Equal(n3iwfSelf.CertificateAuthority, requestedCertificateAuthorityHash)
+	return bytes.Equal(ca, requestedCertificateAuthorityHash)
 }
 
 // Key Gen for IKE SA
-func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation) error {
+func GenerateKeyForIKESA(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation) error {
+	ikeLog := logger.IKELog
 	// Check parameters
 	if ikeSecurityAssociation == nil {
 		return errors.New("IKE SA is nil")
@@ -439,9 +438,10 @@ func GenerateKeyForIKESA(ikeSecurityAssociation *context.IKESecurityAssociation)
 }
 
 // Key Gen for child SA
-func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociation,
-	childSecurityAssociation *context.ChildSecurityAssociation,
+func GenerateKeyForChildSA(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation,
+	childSecurityAssociation *n3iwf_context.ChildSecurityAssociation,
 ) error {
+	ikeLog := logger.IKELog
 	// Check parameters
 	if ikeSecurityAssociation == nil {
 		return errors.New("IKE SA is nil")
@@ -539,9 +539,10 @@ func GenerateKeyForChildSA(ikeSecurityAssociation *context.IKESecurityAssociatio
 }
 
 // Decrypt
-func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ikeMessage *message.IKEMessage,
+func DecryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation, ikeMessage *message.IKEMessage,
 	encryptedPayload *message.Encrypted,
 ) (message.IKEPayloadContainer, error) {
+	ikeLog := logger.IKELog
 	// Check parameters
 	if ikeSecurityAssociation == nil {
 		return nil, errors.New("IKE SA is nil")
@@ -589,9 +590,9 @@ func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ik
 		return nil, errors.New("Encoding IKE message failed")
 	}
 
-	ok, err = VerifyIKEChecksum(ikeSecurityAssociation.SK_ai,
+	ok, err = verifyIntegrity(ikeSecurityAssociation.SK_ai,
 		ikeMessageData[:len(ikeMessageData)-checksumLength], checksum,
-		transformIntegrityAlgorithm.TransformID)
+		transformIntegrityAlgorithm)
 	if err != nil {
 		ikeLog.Errorf("Error occur when verifying checksum: %+v", err)
 		return nil, errors.New("Error verify checksum")
@@ -621,9 +622,10 @@ func DecryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation, ik
 }
 
 // Encrypt
-func EncryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation,
+func EncryptProcedure(ikeSecurityAssociation *n3iwf_context.IKESecurityAssociation,
 	ikePayload message.IKEPayloadContainer, responseIKEMessage *message.IKEMessage,
 ) error {
+	ikeLog := logger.IKELog
 	// Check parameters
 	if ikeSecurityAssociation == nil {
 		return errors.New("IKE SA is nil")
@@ -684,9 +686,9 @@ func EncryptProcedure(ikeSecurityAssociation *context.IKESecurityAssociation,
 		ikeLog.Error(err)
 		return errors.New("Encoding IKE message error")
 	}
-	checksumOfMessage, err := CalculateChecksum(ikeSecurityAssociation.SK_ar,
+	checksumOfMessage, err := calculateIntegrity(ikeSecurityAssociation.SK_ar,
 		responseIKEMessageData[:len(responseIKEMessageData)-checksumLength],
-		transformIntegrityAlgorithm.TransformID)
+		transformIntegrityAlgorithm)
 	if err != nil {
 		ikeLog.Errorf("Calculating checksum failed: %+v", err)
 		return errors.New("Error calculating checksum")
@@ -783,6 +785,8 @@ func getKeyLength(transformType uint8, transformID uint16, attributePresent bool
 			return 16, true
 		case message.PRF_HMAC_SHA1:
 			return 20, true
+		case message.PRF_HMAC_SHA2_256:
+			return 32, true
 		case message.PRF_HMAC_TIGER:
 			return 0, false
 		default:
@@ -802,6 +806,8 @@ func getKeyLength(transformType uint8, transformID uint16, attributePresent bool
 			return 0, false
 		case message.AUTH_AES_XCBC_96:
 			return 0, false
+		case message.AUTH_HMAC_SHA2_256_128:
+			return 32, true
 		default:
 			return 0, false
 		}
@@ -833,9 +839,15 @@ func getKeyLength(transformType uint8, transformID uint16, attributePresent bool
 	}
 }
 
-func getOutputLength(transformType uint8, transformID uint16, attributePresent bool,
+func getOutputLength(
+	transformType uint8,
+	transformID uint16,
+	attributePresent bool,
 	attributeValue uint16,
 ) (int, bool) {
+	_ = attributePresent
+	_ = attributeValue
+
 	switch transformType {
 	case message.TypePseudorandomFunction:
 		switch transformID {
@@ -845,6 +857,8 @@ func getOutputLength(transformType uint8, transformID uint16, attributePresent b
 			return 20, true
 		case message.PRF_HMAC_TIGER:
 			return 0, false
+		case message.PRF_HMAC_SHA2_256:
+			return 32, true
 		default:
 			return 0, false
 		}
@@ -862,6 +876,8 @@ func getOutputLength(transformType uint8, transformID uint16, attributePresent b
 			return 0, false
 		case message.AUTH_AES_XCBC_96:
 			return 0, false
+		case message.AUTH_HMAC_SHA2_256_128:
+			return 16, true
 		default:
 			return 0, false
 		}

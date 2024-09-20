@@ -3,6 +3,8 @@ package message
 import (
 	"encoding/binary"
 	"net"
+
+	"github.com/free5gc/n3iwf/internal/logger"
 )
 
 func (ikeMessage *IKEMessage) BuildIKEHeader(
@@ -241,6 +243,7 @@ func (container *IKEPayloadContainer) BuildEAP5GStart(identifier uint8) {
 }
 
 func (container *IKEPayloadContainer) BuildEAP5GNAS(identifier uint8, nasPDU []byte) {
+	ikeLog := logger.IKELog
 	if len(nasPDU) == 0 {
 		ikeLog.Error("BuildEAP5GNAS(): NASPDU is nil")
 		return
