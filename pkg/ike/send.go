@@ -2,26 +2,31 @@ package ike
 
 import (
 	"encoding/binary"
+	"math"
 	"net"
 
+	"github.com/pkg/errors"
+
+	"github.com/free5gc/ike"
+	"github.com/free5gc/ike/message"
+	ike_message "github.com/free5gc/ike/message"
+	"github.com/free5gc/ike/security"
 	"github.com/free5gc/n3iwf/internal/logger"
 	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
-	"github.com/free5gc/n3iwf/pkg/ike/message"
-	"github.com/free5gc/n3iwf/pkg/ike/security"
 )
 
 func SendIKEMessageToUE(
 	udpConn *net.UDPConn,
 	srcAddr, dstAddr *net.UDPAddr,
 	message *message.IKEMessage,
-) {
+	ikeSAKey *security.IKESAKey,
+) error {
 	ikeLog := logger.IKELog
 	ikeLog.Trace("Send IKE message to UE")
 	ikeLog.Trace("Encoding...")
-	pkt, err := message.Encode()
+	pkt, err := ike.EncodeEncrypt(message, ikeSAKey, ike_message.Role_Responder)
 	if err != nil {
-		ikeLog.Errorln(err)
-		return
+		return errors.Wrapf(err, "SendIKEMessageToUE")
 	}
 	// As specified in RFC 7296 section 3.1, the IKE message send from/to UDP port 4500
 	// should prepend a 4 bytes zero
@@ -33,39 +38,39 @@ func SendIKEMessageToUE(
 	ikeLog.Trace("Sending...")
 	n, err := udpConn.WriteToUDP(pkt, dstAddr)
 	if err != nil {
-		ikeLog.Error(err)
-		return
+		return errors.Wrapf(err, "SendIKEMessageToUE")
 	}
 	if n != len(pkt) {
-		ikeLog.Errorf("Not all of the data is sent. Total length: %d. Sent: %d.", len(pkt), n)
-		return
+		return errors.Errorf("SendIKEMessageToUE Not all of the data is sent. Total length: %d. Sent: %d.",
+			len(pkt), n)
 	}
+	return nil
 }
 
 func SendUEInformationExchange(
-	ikeUe *n3iwf_context.N3IWFIkeUe,
-	payload message.IKEPayloadContainer,
+	ikeSA *n3iwf_context.IKESecurityAssociation,
+	payload *message.IKEPayloadContainer, ike_flag uint8, messageID uint32,
+	conn *net.UDPConn, ueAddr *net.UDPAddr, n3iwfAddr *net.UDPAddr,
 ) {
 	ikeLog := logger.IKELog
-	ikeSA := ikeUe.N3IWFIKESecurityAssociation
 	responseIKEMessage := new(message.IKEMessage)
-
+	var ikeSAKey *security.IKESAKey
 	// Build IKE message
 	responseIKEMessage.BuildIKEHeader(
 		ikeSA.RemoteSPI, ikeSA.LocalSPI,
-		message.INFORMATIONAL, 0,
-		ikeSA.ResponderMessageID)
-	if payload != nil { // This message isn't a DPD message
-		err := security.EncryptProcedure(
-			ikeSA, payload, responseIKEMessage)
-		if err != nil {
-			ikeLog.Errorf("Encrypting IKE message failed: %+v", err)
-			return
-		}
+		message.INFORMATIONAL, ike_flag,
+		messageID)
+
+	if payload != nil && len(*payload) > 0 {
+		responseIKEMessage.Payloads = append(responseIKEMessage.Payloads, *payload...)
+		ikeSAKey = ikeSA.IKESAKey
 	}
-	SendIKEMessageToUE(
-		ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.N3IWFAddr,
-		ikeUe.IKEConnection.UEAddr, responseIKEMessage)
+
+	err := SendIKEMessageToUE(conn, n3iwfAddr, ueAddr, responseIKEMessage, ikeSAKey)
+	if err != nil {
+		ikeLog.Errorf("SendUEInformationExchange err: %+v", err)
+		return
+	}
 }
 
 func SendIKEDeleteRequest(n3iwfCtx *n3iwf_context.N3IWFContext, localSPI uint64) {
@@ -78,7 +83,9 @@ func SendIKEDeleteRequest(n3iwfCtx *n3iwf_context.N3IWFContext, localSPI uint64)
 
 	var deletePayload message.IKEPayloadContainer
 	deletePayload.BuildDeletePayload(message.TypeIKE, 0, 0, nil)
-	SendUEInformationExchange(ikeUe, deletePayload)
+	SendUEInformationExchange(ikeUe.N3IWFIKESecurityAssociation, &deletePayload, 0,
+		ikeUe.N3IWFIKESecurityAssociation.ResponderMessageID, ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr,
+		ikeUe.IKEConnection.N3IWFAddr)
 }
 
 func SendChildSADeleteRequest(
@@ -92,12 +99,18 @@ func SendChildSADeleteRequest(
 		for _, childSA := range ikeUe.N3IWFChildSecurityAssociation {
 			if childSA.PDUSessionIds[0] == releaseItem {
 				spiByte := make([]byte, 4)
-				binary.BigEndian.PutUint32(spiByte, uint32(childSA.XfrmStateList[0].Spi))
+				spi := childSA.XfrmStateList[0].Spi
+				if spi < 0 || spi > math.MaxUint32 {
+					ikeLog.Errorf("SendChildSADeleteRequest spi out of uint32 range : %d", spi)
+					return
+				}
+				binary.BigEndian.PutUint32(spiByte, uint32(spi))
 				deleteSPIs = append(deleteSPIs, spiByte...)
 				spiLen += 1
 				err := ikeUe.DeleteChildSA(childSA)
 				if err != nil {
 					ikeLog.Errorf("Delete Child SA error : %v", err)
+					return
 				}
 			}
 		}
@@ -105,5 +118,7 @@ func SendChildSADeleteRequest(
 
 	var deletePayload message.IKEPayloadContainer
 	deletePayload.BuildDeletePayload(message.TypeESP, 4, spiLen, deleteSPIs)
-	SendUEInformationExchange(ikeUe, deletePayload)
+	SendUEInformationExchange(ikeUe.N3IWFIKESecurityAssociation, &deletePayload, 0,
+		ikeUe.N3IWFIKESecurityAssociation.ResponderMessageID, ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr,
+		ikeUe.IKEConnection.N3IWFAddr)
 }

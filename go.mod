@@ -5,11 +5,13 @@ go 1.21
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/free5gc/aper v1.0.6-0.20240503143507-2c4c4780b98f
+	github.com/free5gc/ike v1.0.1-0.20240918094906-1ee5ab8d45ed
 	github.com/free5gc/ngap v1.0.9-0.20240708062829-734d184eed74
 	github.com/free5gc/sctp v1.0.1
 	github.com/free5gc/util v1.0.7-0.20240713162917-350ee8f4af4c
 	github.com/gin-contrib/pprof v1.5.0
 	github.com/gin-gonic/gin v1.10.0
+	github.com/google/gopacket v1.1.19
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3

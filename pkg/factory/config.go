@@ -333,7 +333,7 @@ func (c *Config) GetNasTcpAddr() string {
 func (c *Config) GetNasTcpPort() uint16 {
 	c.RLock()
 	defer c.RUnlock()
-	return uint16(c.Configuration.TCPPort)
+	return uint16(c.Configuration.TCPPort) // #nosec G115
 }
 
 func (c *Config) GetFQDN() string {

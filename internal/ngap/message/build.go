@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 
+	"github.com/pkg/errors"
+
 	"github.com/free5gc/aper"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/util"
@@ -724,7 +726,12 @@ func BuildInitialUEMessage(ranUe *n3iwf_context.N3IWFRanUe, nasPdu []byte,
 		ie.Value.RRCEstablishmentCause = new(ngapType.RRCEstablishmentCause)
 
 		rRCEstablishmentCause := ie.Value.RRCEstablishmentCause
-		rRCEstablishmentCause.Value = aper.Enumerated(ranUe.RRCEstablishmentCause)
+		value := ranUe.RRCEstablishmentCause
+		if value < 0 {
+			return nil, errors.Errorf("BuildInitialUEMessage() ranUe.RRCEstablishmentCause "+
+				"negative value: %d", value)
+		}
+		rRCEstablishmentCause.Value = aper.Enumerated(value)
 		initialUEMessageIEs.List = append(initialUEMessageIEs.List, ie)
 	}
 	// FiveGSTMSI
@@ -1476,7 +1483,13 @@ func BuildUERadioCapabilityCheckResponse(
 		ie.Value.IMSVoiceSupportIndicator = new(ngapType.IMSVoiceSupportIndicator)
 
 		iMSVoiceSupportIndicator := ie.Value.IMSVoiceSupportIndicator
-		iMSVoiceSupportIndicator.Value = aper.Enumerated(ranUe.IMSVoiceSupported)
+		value := ranUe.IMSVoiceSupported
+		if value < 0 {
+			return nil, errors.Errorf("BuildUERadioCapabilityCheckResponse() ranUe.IMSVoiceSupported "+
+				"negative value: %d", value)
+		}
+
+		iMSVoiceSupportIndicator.Value = aper.Enumerated(value)
 		uERadioCapabilityCheckResponseIEs.List = append(uERadioCapabilityCheckResponseIEs.List, ie)
 	}
 	// CriticalityDiagnostics

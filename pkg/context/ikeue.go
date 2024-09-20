@@ -1,13 +1,15 @@
 package context
 
 import (
-	"errors"
 	"fmt"
+	"math"
 	"net"
 
+	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 
-	ike_message "github.com/free5gc/n3iwf/pkg/ike/message"
+	ike_message "github.com/free5gc/ike/message"
+	ike_security "github.com/free5gc/ike/security"
 )
 
 const (
@@ -47,6 +49,7 @@ type IkeMsgTemporaryData struct {
 }
 
 type IKESecurityAssociation struct {
+	*ike_security.IKESAKey
 	// SPI
 	RemoteSPI uint64
 	LocalSPI  uint64
@@ -55,25 +58,8 @@ type IKESecurityAssociation struct {
 	InitiatorMessageID uint32
 	ResponderMessageID uint32
 
-	// Transforms for IKE SA
-	EncryptionAlgorithm    *ike_message.Transform
-	PseudorandomFunction   *ike_message.Transform
-	IntegrityAlgorithm     *ike_message.Transform
-	DiffieHellmanGroup     *ike_message.Transform
-	ExpandedSequenceNumber *ike_message.Transform
-
 	// Used for key generating
-	ConcatenatedNonce      []byte
-	DiffieHellmanSharedKey []byte
-
-	// Keys
-	SK_d  []byte // used for child SA key deriving
-	SK_ai []byte // used by initiator for integrity checking
-	SK_ar []byte // used by responder for integrity checking
-	SK_ei []byte // used by initiator for encrypting
-	SK_er []byte // used by responder for encrypting
-	SK_pi []byte // used by initiator for IKE authentication
-	SK_pr []byte // used by responder for IKE authentication
+	ConcatenatedNonce []byte
 
 	// State for IKE_AUTH
 	State uint8
@@ -94,11 +80,8 @@ type IKESecurityAssociation struct {
 	InitiatorSignedOctets []byte
 
 	// NAT detection
-	// If UEIsBehindNAT == true, N3IWF should enable NAT traversal and
-	// TODO: should support dynamic updating network address (MOBIKE)
-	UEIsBehindNAT bool
-	// If N3IWFIsBehindNAT == true, N3IWF should send UDP keepalive periodically
-	N3IWFIsBehindNAT bool
+	UeBehindNAT    bool // If true, N3IWF should enable NAT traversal and
+	N3iwfBehindNAT bool // TODO: If true, N3IWF should send UDP keepalive periodically
 
 	// IKE UE context
 	IkeUE *N3IWFIkeUe
@@ -110,6 +93,13 @@ type IKESecurityAssociation struct {
 	CurrentRetryTimes  int32  // Accumulate the number of times the DPD response wasn't received
 	IKESAClosedCh      chan struct{}
 	IsUseDPD           bool
+}
+
+func (ikeSA *IKESecurityAssociation) String() string {
+	return "====== IKE Security Association Info =====" +
+		"\nInitiator's SPI: " + fmt.Sprintf("%016x", ikeSA.RemoteSPI) +
+		"\nResponder's SPI: " + fmt.Sprintf("%016x", ikeSA.LocalSPI) +
+		"\nIKESAKey: " + ikeSA.IKESAKey.String()
 }
 
 // Temporary State Data Args
@@ -138,13 +128,7 @@ type ChildSecurityAssociation struct {
 	TrafficSelectorRemote net.IPNet
 
 	// Security
-	EncryptionAlgorithm               uint16
-	InitiatorToResponderEncryptionKey []byte
-	ResponderToInitiatorEncryptionKey []byte
-	IntegrityAlgorithm                uint16
-	InitiatorToResponderIntegrityKey  []byte
-	ResponderToInitiatorIntegrityKey  []byte
-	ESN                               bool
+	*ike_security.ChildSAKey
 
 	// Encapsulate
 	EnableEncapsulate bool
@@ -156,6 +140,60 @@ type ChildSecurityAssociation struct {
 
 	// IKE UE context
 	IkeUE *N3IWFIkeUe
+
+	LocalIsInitiator bool
+}
+
+func (childSA *ChildSecurityAssociation) String(xfrmiId uint32) string {
+	var inboundEncryptionKey, inboundIntegrityKey, outboundEncryptionKey, outboundIntegrityKey []byte
+
+	if childSA.LocalIsInitiator {
+		inboundEncryptionKey = childSA.ResponderToInitiatorEncryptionKey
+		inboundIntegrityKey = childSA.ResponderToInitiatorIntegrityKey
+		outboundEncryptionKey = childSA.InitiatorToResponderEncryptionKey
+		outboundIntegrityKey = childSA.InitiatorToResponderIntegrityKey
+	} else {
+		inboundEncryptionKey = childSA.InitiatorToResponderEncryptionKey
+		inboundIntegrityKey = childSA.InitiatorToResponderIntegrityKey
+		outboundEncryptionKey = childSA.ResponderToInitiatorEncryptionKey
+		outboundIntegrityKey = childSA.ResponderToInitiatorIntegrityKey
+	}
+
+	return fmt.Sprintf("====== IPSec/Child SA Info ======"+
+		"\n====== Inbound ======"+
+		"\nXFRM interface if_id: %d"+
+		"\nIPSec Inbound  SPI: 0x%016x"+
+		"\n[UE:%+v] -> [N3IWF:%+v]"+
+		"\nIPSec Encryption Algorithm: %d"+
+		"\nIPSec Encryption Key: 0x%x"+
+		"\nIPSec Integrity  Algorithm: %d"+
+		"\nIPSec Integrity  Key: 0x%x"+
+		"\n====== IPSec/Child SA Info ======"+
+		"\n====== Outbound ======"+
+		"\nXFRM interface if_id: %d"+
+		"\nIPSec Outbound  SPI: 0x%016x"+
+		"\n[N3IWF:%+v] -> [UE:%+v]"+
+		"\nIPSec Encryption Algorithm: %d"+
+		"\nIPSec Encryption Key: 0x%x"+
+		"\nIPSec Integrity  Algorithm: %d"+
+		"\nIPSec Integrity  Key: 0x%x",
+		xfrmiId,
+		childSA.InboundSPI,
+		childSA.PeerPublicIPAddr,
+		childSA.LocalPublicIPAddr,
+		childSA.EncrKInfo.TransformID(),
+		inboundEncryptionKey,
+		childSA.IntegKInfo.TransformID(),
+		inboundIntegrityKey,
+		xfrmiId,
+		childSA.OutboundSPI,
+		childSA.LocalPublicIPAddr,
+		childSA.PeerPublicIPAddr,
+		childSA.EncrKInfo.TransformID(),
+		outboundEncryptionKey,
+		childSA.IntegKInfo.TransformID(),
+		outboundIntegrityKey,
+	)
 }
 
 type UDPSocketInfo struct {
@@ -189,28 +227,45 @@ func (ikeUe *N3IWFIkeUe) Remove() error {
 	return nil
 }
 
-func (ikeUe *N3IWFIkeUe) DeleteChildSA(childSA *ChildSecurityAssociation) error {
+func (ikeUe *N3IWFIkeUe) DeleteChildSAXfrm(childSA *ChildSecurityAssociation) error {
 	n3iwfCtx := ikeUe.N3iwfCtx
 	iface := childSA.XfrmIface
 
 	// Delete child SA xfrmState
-	for _, xfrmState := range childSA.XfrmStateList {
+	for idx := range childSA.XfrmStateList {
+		xfrmState := childSA.XfrmStateList[idx]
 		if err := netlink.XfrmStateDel(&xfrmState); err != nil {
-			return fmt.Errorf("Delete xfrmstate error : %+v", err)
+			return errors.Wrapf(err, "Delete xfrmstate")
 		}
 	}
 	// Delete child SA xfrmPolicy
-	for _, xfrmPolicy := range childSA.XfrmPolicyList {
+	for idx := range childSA.XfrmPolicyList {
+		xfrmPolicy := childSA.XfrmPolicyList[idx]
 		if err := netlink.XfrmPolicyDel(&xfrmPolicy); err != nil {
-			return fmt.Errorf("Delete xfrmPolicy error : %+v", err)
+			return errors.Wrapf(err, "Delete xfrmPolicy")
 		}
 	}
 
 	if iface == nil || iface.Attrs().Name == "xfrmi-default" {
 	} else if err := netlink.LinkDel(iface); err != nil {
-		return fmt.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
+		return errors.Wrapf(err, "Delete interface[%s]", iface.Attrs().Name)
 	} else {
-		n3iwfCtx.XfrmIfaces.Delete(uint32(childSA.XfrmStateList[0].Ifid))
+		ifId := childSA.XfrmStateList[0].Ifid
+		if ifId < 0 || ifId > math.MaxUint32 {
+			return errors.Errorf("DeleteChildSAXfrm Ifid has out of uint32 range value: %d", ifId)
+		}
+		n3iwfCtx.XfrmIfaces.Delete(uint32(ifId))
+	}
+
+	childSA.XfrmStateList = nil
+	childSA.XfrmPolicyList = nil
+
+	return nil
+}
+
+func (ikeUe *N3IWFIkeUe) DeleteChildSA(childSA *ChildSecurityAssociation) error {
+	if err := ikeUe.DeleteChildSAXfrm(childSA); err != nil {
+		return err
 	}
 
 	delete(ikeUe.N3IWFChildSecurityAssociation, childSA.InboundSPI)
@@ -252,18 +307,10 @@ func (ikeUe *N3IWFIkeUe) CompleteChildSA(msgID uint32, outboundSPI uint32,
 
 	childSA.OutboundSPI = outboundSPI
 
-	if len(chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm) != 0 {
-		childSA.EncryptionAlgorithm = chosenSecurityAssociation.Proposals[0].EncryptionAlgorithm[0].TransformID
-	}
-	if len(chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm) != 0 {
-		childSA.IntegrityAlgorithm = chosenSecurityAssociation.Proposals[0].IntegrityAlgorithm[0].TransformID
-	}
-	if len(chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers) != 0 {
-		if chosenSecurityAssociation.Proposals[0].ExtendedSequenceNumbers[0].TransformID == 0 {
-			childSA.ESN = false
-		} else {
-			childSA.ESN = true
-		}
+	var err error
+	childSA.ChildSAKey, err = ike_security.NewChildSAKeyByProposal(chosenSecurityAssociation.Proposals[0])
+	if err != nil {
+		return nil, errors.Wrapf(err, "CompleteChildSA")
 	}
 
 	// Record to UE context with inbound SPI as key

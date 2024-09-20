@@ -411,6 +411,10 @@ func (c *N3IWFContext) NewTEID(ranUe *N3IWFRanUe) uint32 {
 		logger.CtxLog.Errorf("New TEID failed: %+v", err)
 		return 0
 	}
+	if teid64 < 0 || teid64 > math.MaxUint32 {
+		logger.CtxLog.Warnf("NewTEID teid64 out of uint32 range: %d, use maxUint32", teid64)
+		return 0
+	}
 	teid32 := uint32(teid64)
 
 	c.AllocatedUETEID.Store(teid32, ranUe)

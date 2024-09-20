@@ -7,9 +7,9 @@ import (
 
 	"github.com/vishvananda/netlink"
 
+	"github.com/free5gc/ike/message"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/context"
-	"github.com/free5gc/n3iwf/pkg/ike/message"
 )
 
 type XFRMEncryptionAlgorithmType uint16
@@ -63,26 +63,26 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 	var xfrmEncryptionAlgorithm, xfrmIntegrityAlgorithm *netlink.XfrmStateAlgo
 	if n3iwf_is_initiator {
 		xfrmEncryptionAlgorithm = &netlink.XfrmStateAlgo{
-			Name: XFRMEncryptionAlgorithmType(childSecurityAssociation.EncryptionAlgorithm).String(),
+			Name: XFRMEncryptionAlgorithmType(childSecurityAssociation.EncrKInfo.TransformID()).String(),
 			Key:  childSecurityAssociation.ResponderToInitiatorEncryptionKey,
 		}
-		if childSecurityAssociation.IntegrityAlgorithm != 0 {
+		if childSecurityAssociation.IntegKInfo != nil {
 			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
-				Name:        XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
+				Name:        XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegKInfo.TransformID()).String(),
 				Key:         childSecurityAssociation.ResponderToInitiatorIntegrityKey,
-				TruncateLen: getTruncateLength(childSecurityAssociation.IntegrityAlgorithm),
+				TruncateLen: getTruncateLength(childSecurityAssociation.IntegKInfo.TransformID()),
 			}
 		}
 	} else {
 		xfrmEncryptionAlgorithm = &netlink.XfrmStateAlgo{
-			Name: XFRMEncryptionAlgorithmType(childSecurityAssociation.EncryptionAlgorithm).String(),
+			Name: XFRMEncryptionAlgorithmType(childSecurityAssociation.EncrKInfo.TransformID()).String(),
 			Key:  childSecurityAssociation.InitiatorToResponderEncryptionKey,
 		}
-		if childSecurityAssociation.IntegrityAlgorithm != 0 {
+		if childSecurityAssociation.IntegKInfo != nil {
 			xfrmIntegrityAlgorithm = &netlink.XfrmStateAlgo{
-				Name:        XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegrityAlgorithm).String(),
+				Name:        XFRMIntegrityAlgorithmType(childSecurityAssociation.IntegKInfo.TransformID()).String(),
 				Key:         childSecurityAssociation.InitiatorToResponderIntegrityKey,
-				TruncateLen: getTruncateLength(childSecurityAssociation.IntegrityAlgorithm),
+				TruncateLen: getTruncateLength(childSecurityAssociation.IntegKInfo.TransformID()),
 			}
 		}
 	}
@@ -97,7 +97,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 	xfrmState.Ifid = int(xfrmiId)
 	xfrmState.Auth = xfrmIntegrityAlgorithm
 	xfrmState.Crypt = xfrmEncryptionAlgorithm
-	xfrmState.ESN = childSecurityAssociation.ESN
+	xfrmState.ESN = childSecurityAssociation.EsnInfo.GetNeedESN()
 
 	if childSecurityAssociation.EnableEncapsulate {
 		xfrmState.Encap = &netlink.XfrmStateEncap{
@@ -148,12 +148,12 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 	// State
 	if n3iwf_is_initiator {
 		xfrmEncryptionAlgorithm.Key = childSecurityAssociation.InitiatorToResponderEncryptionKey
-		if childSecurityAssociation.IntegrityAlgorithm != 0 {
+		if childSecurityAssociation.IntegKInfo != nil {
 			xfrmIntegrityAlgorithm.Key = childSecurityAssociation.InitiatorToResponderIntegrityKey
 		}
 	} else {
 		xfrmEncryptionAlgorithm.Key = childSecurityAssociation.ResponderToInitiatorEncryptionKey
-		if childSecurityAssociation.IntegrityAlgorithm != 0 {
+		if childSecurityAssociation.IntegKInfo != nil {
 			xfrmIntegrityAlgorithm.Key = childSecurityAssociation.ResponderToInitiatorIntegrityKey
 		}
 	}
@@ -189,47 +189,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 	}
 
 	childSecurityAssociation.XfrmPolicyList = append(childSecurityAssociation.XfrmPolicyList, *xfrmPolicy)
-
-	printSAInfo(n3iwf_is_initiator, xfrmiId, childSecurityAssociation)
-
 	return nil
-}
-
-func printSAInfo(n3iwf_is_initiator bool, xfrmiId uint32, childSecurityAssociation *context.ChildSecurityAssociation) {
-	ikeLog := logger.IKELog
-	var InboundEncryptionKey, InboundIntegrityKey, OutboundEncryptionKey, OutboundIntegrityKey []byte
-
-	if n3iwf_is_initiator {
-		InboundEncryptionKey = childSecurityAssociation.ResponderToInitiatorEncryptionKey
-		InboundIntegrityKey = childSecurityAssociation.ResponderToInitiatorIntegrityKey
-		OutboundEncryptionKey = childSecurityAssociation.InitiatorToResponderEncryptionKey
-		OutboundIntegrityKey = childSecurityAssociation.InitiatorToResponderIntegrityKey
-	} else {
-		InboundEncryptionKey = childSecurityAssociation.InitiatorToResponderEncryptionKey
-		InboundIntegrityKey = childSecurityAssociation.InitiatorToResponderIntegrityKey
-		OutboundEncryptionKey = childSecurityAssociation.ResponderToInitiatorEncryptionKey
-		OutboundIntegrityKey = childSecurityAssociation.ResponderToInitiatorIntegrityKey
-	}
-	ikeLog.Debug("====== IPSec/Child SA Info ======")
-	// ====== Inbound ======
-	ikeLog.Debugf("XFRM interface if_id: %d", xfrmiId)
-	ikeLog.Debugf("IPSec Inbound  SPI: 0x%016x", childSecurityAssociation.InboundSPI)
-	ikeLog.Debugf("[UE:%+v] -> [N3IWF:%+v]",
-		childSecurityAssociation.PeerPublicIPAddr, childSecurityAssociation.LocalPublicIPAddr)
-	ikeLog.Debugf("IPSec Encryption Algorithm: %d", childSecurityAssociation.EncryptionAlgorithm)
-	ikeLog.Debugf("IPSec Encryption Key: 0x%x", InboundEncryptionKey)
-	ikeLog.Debugf("IPSec Integrity  Algorithm: %d", childSecurityAssociation.IntegrityAlgorithm)
-	ikeLog.Debugf("IPSec Integrity  Key: 0x%x", InboundIntegrityKey)
-	ikeLog.Debug("====== IPSec/Child SA Info ======")
-	// ====== Outbound ======
-	ikeLog.Debugf("XFRM interface if_id: %d", xfrmiId)
-	ikeLog.Debugf("IPSec Outbound  SPI: 0x%016x", childSecurityAssociation.OutboundSPI)
-	ikeLog.Debugf("[N3IWF:%+v] -> [UE:%+v]",
-		childSecurityAssociation.LocalPublicIPAddr, childSecurityAssociation.PeerPublicIPAddr)
-	ikeLog.Debugf("IPSec Encryption Algorithm: %d", childSecurityAssociation.EncryptionAlgorithm)
-	ikeLog.Debugf("IPSec Encryption Key: 0x%x", OutboundEncryptionKey)
-	ikeLog.Debugf("IPSec Integrity  Algorithm: %d", childSecurityAssociation.IntegrityAlgorithm)
-	ikeLog.Debugf("IPSec Integrity  Key: 0x%x", OutboundIntegrityKey)
 }
 
 func SetupIPsecXfrmi(xfrmIfaceName, parentIfaceName string, xfrmIfaceId uint32,

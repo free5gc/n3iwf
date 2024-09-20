@@ -2,6 +2,7 @@ package ngap
 
 import (
 	"encoding/binary"
+	"math"
 	"net"
 	"time"
 
@@ -853,8 +854,15 @@ func (s *Server) handlePDUSessionResourceSetupRequestTransfer(
 		qosFlow.Identifier = item.QosFlowIdentifier.Value
 		qosFlow.Parameters = item.QosFlowLevelQosParameters
 		pduSession.QosFlows[item.QosFlowIdentifier.Value] = qosFlow
+
+		value := item.QosFlowIdentifier.Value
+		if value < 0 || value > math.MaxUint8 {
+			ngapLog.Errorf("handlePDUSessionResourceSetupRequestTransfer() "+
+				"item.QosFlowIdentifier.Value exceeds uint8 range: %d", value)
+			return false, nil
+		}
 		// QFI List
-		pduSession.QFIList = append(pduSession.QFIList, uint8(item.QosFlowIdentifier.Value))
+		pduSession.QFIList = append(pduSession.QFIList, uint8(value))
 	}
 
 	// Setup GTP tunnel with UPF
@@ -1157,13 +1165,19 @@ func (s *Server) releaseIkeUeAndRanUe(ranUe *n3iwf_context.N3IWFRanUe) error {
 }
 
 func encapNasMsgToEnvelope(nasPDU *ngapType.NASPDU) []byte {
+	ngapLog := logger.NgapLog
 	// According to TS 24.502 8.2.4,
 	// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
 	// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
 	// According to TS 24.502 9.4,
 	// a NAS message envelope = Length | NAS Message
 	nasEnv := make([]byte, 2)
-	binary.BigEndian.PutUint16(nasEnv, uint16(len(nasPDU.Value)))
+	valueLen := len(nasPDU.Value)
+	if valueLen > math.MaxUint16 {
+		ngapLog.Errorf("encapNasMsgToEnvelope nasPDU Value length has out of uint16 range: %d", valueLen)
+		return nil
+	}
+	binary.BigEndian.PutUint16(nasEnv, uint16(valueLen))
 	nasEnv = append(nasEnv, nasPDU.Value...)
 	return nasEnv
 }
@@ -2886,7 +2900,14 @@ func (s *Server) HandleUnmarshalEAP5GData(
 			ranUe := n3iwfCtx.NewN3iwfRanUe()
 			ranUe.AMF = selectedAMF
 			if anParameters.EstablishmentCause != nil {
-				ranUe.RRCEstablishmentCause = int16(anParameters.EstablishmentCause.Value)
+				value := uint64(anParameters.EstablishmentCause.Value)
+				if value > uint64(math.MaxInt16) {
+					ngapLog.Errorf("HandleUnmarshalEAP5GData() anParameters.EstablishmentCause.Value "+
+						"exceeds int16: %+v", value)
+					return
+				} else {
+					ranUe.RRCEstablishmentCause = int16(value)
+				}
 			}
 
 			s.IkeEvtCh() <- n3iwf_context.NewUnmarshalEAP5GDataResponseEvt(spi,
@@ -2922,7 +2943,7 @@ func (s *Server) HandleSendInitialUEMessage(
 		return
 	}
 	ranUe.IPAddrv4 = ipv4Addr
-	ranUe.PortNumber = int32(ipv4Port)
+	ranUe.PortNumber = int32(ipv4Port) // #nosec G115
 	message.SendInitialUEMessage(ranUe.AMF, ranUe, nasPDU)
 }
 

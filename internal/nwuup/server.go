@@ -296,7 +296,11 @@ func (s *Server) forwardUL(ueInnerIP string, ifIndex int, rawData []byte, wg *sy
 
 	// Encapsulate UL PDU SESSION INFORMATION with extension header if the QoS parameters exist
 	if grePacket.GetKeyFlag() {
-		qfi := grePacket.GetQFI()
+		qfi, err := grePacket.GetQFI()
+		if err != nil {
+			nwuupLog.Errorf("forwardUL err: %+v", err)
+			return
+		}
 		gtpPacket, err := buildQoSGTPPacket(gtpConnection.OutgoingTEID, qfi, payload)
 		if err != nil {
 			nwuupLog.Errorf("buildQoSGTPPacket err: %+v", err)
