@@ -120,12 +120,12 @@ func (s *Server) server(wg *sync.WaitGroup) {
 				ikeLog.Warnln(err)
 				continue
 			}
+			if msg == nil {
+				continue
+			}
 			ikeMsg, ikeSA, err := s.checkIKEMessage(msg, &rcvPkt.Listener, &rcvPkt.LocalAddr, &rcvPkt.RemoteAddr)
 			if err != nil {
 				ikeLog.Warnln(err)
-				continue
-			}
-			if ikeMsg == nil {
 				continue
 			}
 			s.Dispatch(&rcvPkt.Listener, &rcvPkt.LocalAddr, &rcvPkt.RemoteAddr,
