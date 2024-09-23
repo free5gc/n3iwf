@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"

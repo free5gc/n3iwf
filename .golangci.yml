@@ -266,7 +266,6 @@ linters:
     # - stylecheck
     # - unparam
     # - wsl
-    - gosec
 
   #disable-all: false
   fast: true

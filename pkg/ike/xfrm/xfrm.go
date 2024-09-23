@@ -1,10 +1,10 @@
 package xfrm
 
 import (
-	"errors"
 	"fmt"
 	"net"
 
+	"github.com/pkg/errors"
 	"github.com/vishvananda/netlink"
 
 	"github.com/free5gc/ike/message"
@@ -55,7 +55,6 @@ func (xfrmIntegrityAlgorithmType XFRMIntegrityAlgorithmType) String() string {
 func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 	childSecurityAssociation *context.ChildSecurityAssociation,
 ) error {
-	ikeLog := logger.IKELog
 	// Build XFRM information data structure for incoming traffic.
 
 	// Direction: {private_network} -> this_server
@@ -99,19 +98,10 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 	xfrmState.Crypt = xfrmEncryptionAlgorithm
 	xfrmState.ESN = childSecurityAssociation.EsnInfo.GetNeedESN()
 
-	if childSecurityAssociation.EnableEncapsulate {
-		xfrmState.Encap = &netlink.XfrmStateEncap{
-			Type:    netlink.XFRM_ENCAP_ESPINUDP,
-			SrcPort: childSecurityAssociation.NATPort,
-			DstPort: childSecurityAssociation.N3IWFPort,
-		}
-	}
-
 	// Commit xfrm state to netlink
 	var err error
 	if err = netlink.XfrmStateAdd(xfrmState); err != nil {
-		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
-		return errors.New("Set XFRM state rule failed")
+		return errors.Wrapf(err, "Add XFRM state")
 	}
 
 	childSecurityAssociation.XfrmStateList = append(childSecurityAssociation.XfrmStateList, *xfrmState)
@@ -138,8 +128,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 
 	// Commit xfrm policy to netlink
 	if err = netlink.XfrmPolicyAdd(xfrmPolicy); err != nil {
-		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
-		return errors.New("Set XFRM policy rule failed")
+		return errors.Wrapf(err, "Add XFRM policy")
 	}
 
 	childSecurityAssociation.XfrmPolicyList = append(childSecurityAssociation.XfrmPolicyList, *xfrmPolicy)
@@ -160,14 +149,22 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 
 	xfrmState.Spi = int(childSecurityAssociation.OutboundSPI)
 	xfrmState.Src, xfrmState.Dst = xfrmState.Dst, xfrmState.Src
+
+	if childSecurityAssociation.EnableEncapsulate {
+		xfrmState.Encap = &netlink.XfrmStateEncap{
+			Type:    netlink.XFRM_ENCAP_ESPINUDP,
+			SrcPort: childSecurityAssociation.NATPort,
+			DstPort: childSecurityAssociation.N3IWFPort,
+		}
+	}
+
 	if xfrmState.Encap != nil {
 		xfrmState.Encap.SrcPort, xfrmState.Encap.DstPort = xfrmState.Encap.DstPort, xfrmState.Encap.SrcPort
 	}
 
 	// Commit xfrm state to netlink
 	if err = netlink.XfrmStateAdd(xfrmState); err != nil {
-		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
-		return errors.New("Set XFRM state rule failed")
+		return errors.Wrapf(err, "Add XFRM state")
 	}
 
 	childSecurityAssociation.XfrmStateList = append(childSecurityAssociation.XfrmStateList, *xfrmState)
@@ -184,8 +181,7 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 
 	// Commit xfrm policy to netlink
 	if err = netlink.XfrmPolicyAdd(xfrmPolicy); err != nil {
-		ikeLog.Errorf("Set XFRM rules failed: %+v", err)
-		return errors.New("Set XFRM policy rule failed")
+		return errors.Wrapf(err, "Add XFRM policy")
 	}
 
 	childSecurityAssociation.XfrmPolicyList = append(childSecurityAssociation.XfrmPolicyList, *xfrmPolicy)
