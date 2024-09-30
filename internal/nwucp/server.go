@@ -1,17 +1,18 @@
 package nwucp
 
 import (
+	"bufio"
 	"context"
 	"encoding/binary"
-	"encoding/hex"
+	"io"
 	"net"
 	"runtime/debug"
 	"strings"
 	"sync"
 
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 )
 
@@ -19,7 +20,8 @@ type n3iwf interface {
 	Config() *factory.Config
 	Context() *n3iwf_context.N3IWFContext
 	CancelContext() context.Context
-	NgapEvtCh() chan n3iwf_context.NgapEvt
+
+	SendNgapEvt(n3iwf_context.NgapEvt) error
 }
 
 type Server struct {
@@ -92,34 +94,27 @@ func (s *Server) listenAndServe(wg *sync.WaitGroup) {
 
 		ranUe, err := n3iwfCtx.RanUeLoadFromIkeSPI(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
 		if err != nil {
-			nwucpLog.Errorf("RanUe context not found : %+v", err)
+			nwucpLog.Errorf("RanUe context not found : %v", err)
 			continue
 		}
-		// Store connection
-		ranUe.TCPConnection = connection
 
-		s.NgapEvtCh() <- n3iwf_context.NewNASTCPConnEstablishedCompleteEvt(
-			ranUe.RanUeNgapId,
-		)
+		n3iwfUe, ok := ranUe.(*n3iwf_context.N3IWFRanUe)
+		if !ok {
+			nwucpLog.Errorf("listenAndServe(): [Type Assertion] RanUe -> N3iwfUe failed")
+			continue
+		}
+
+		// Store connection
+		n3iwfUe.TCPConnection = connection
+
+		err = s.SendNgapEvt(n3iwf_context.NewNASTCPConnEstablishedCompleteEvt(n3iwfUe.RanUeNgapId))
+		if err != nil {
+			nwucpLog.Errorf("SendNgapEvt failed: %v", err)
+		}
 
 		wg.Add(1)
-		go serveConn(ranUe, connection, wg)
+		go serveConn(n3iwfUe, connection, wg)
 	}
-}
-
-func decapNasMsgFromEnvelope(envelop []byte) []byte {
-	// According to TS 24.502 8.2.4,
-	// in order to transport a NAS message over the non-3GPP access between the UE and the N3IWF,
-	// the NAS message shall be framed in a NAS message envelope as defined in subclause 9.4.
-	// According to TS 24.502 9.4,
-	// a NAS message envelope = Length | NAS Message
-
-	// Get NAS Message Length
-	nasLen := binary.BigEndian.Uint16(envelop[:2])
-	nasMsg := make([]byte, nasLen)
-	copy(nasMsg, envelop[2:2+nasLen])
-
-	return nasMsg
 }
 
 func (s *Server) Stop() {
@@ -127,19 +122,21 @@ func (s *Server) Stop() {
 	nwucpLog.Infof("Close Nwucp server...")
 
 	if err := s.tcpListener.Close(); err != nil {
-		nwucpLog.Errorf("Stop nwuup server error : %+v", err)
+		nwucpLog.Errorf("Stop nwucp server error : %+v", err)
 	}
 
+	// TODO: [Bug] TCPConnection may close twice, need to check
 	s.Context().RANUePool.Range(
 		func(key, value interface{}) bool {
-			ranUe := value.(*n3iwf_context.N3IWFRanUe)
-			if ranUe.TCPConnection != nil {
+			ranUe, ok := value.(*n3iwf_context.N3IWFRanUe)
+			if ok && ranUe.TCPConnection != nil {
 				if err := ranUe.TCPConnection.Close(); err != nil {
 					logger.InitLog.Errorf("Stop nwucp server error : %+v", err)
 				}
 			}
 			return true
-		})
+		},
+	)
 }
 
 // serveConn handle accepted TCP connection. It reads NAS packets
@@ -160,21 +157,33 @@ func serveConn(ranUe *n3iwf_context.N3IWFRanUe, connection net.Conn, wg *sync.Wa
 		wg.Done()
 	}()
 
-	data := make([]byte, 65535)
+	connReader := bufio.NewReader(connection)
+	buf := make([]byte, factory.MAX_BUF_MSG_LEN)
 	for {
-		n, err := connection.Read(data)
+		// Read the length of NAS message
+		n, err := io.ReadFull(connReader, buf[:2])
 		if err != nil {
-			nwucpLog.Errorf("Read TCP connection failed: %+v", err)
+			nwucpLog.Errorf("Read the length of NAS message failed: %+v", err)
 			ranUe.TCPConnection = nil
 			return
 		}
-		nwucpLog.Tracef("Get NAS PDU from UE:\nNAS length: %d\nNAS content:\n%s", n, hex.Dump(data[:n]))
+		nasLen := binary.BigEndian.Uint16(buf[:n])
+		if uint64(nasLen) > uint64(cap(buf)) {
+			buf = make([]byte, 0, nasLen)
+		}
 
-		// Decap Nas envelope
-		forwardData := decapNasMsgFromEnvelope(data)
+		// Read the NAS message
+		n, err = io.ReadFull(connReader, buf[:nasLen])
+		if err != nil {
+			nwucpLog.Errorf("Read the NAS message failed: %+v", err)
+			ranUe.TCPConnection = nil
+			return
+		}
+		fwdNas := make([]byte, n)
+		copy(fwdNas, buf[:n])
 
 		wg.Add(1)
-		go forward(ranUe, forwardData, wg)
+		go forward(ranUe, fwdNas, wg)
 	}
 }
 

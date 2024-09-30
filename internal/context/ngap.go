@@ -1,19 +1,23 @@
 package context
 
+import "github.com/free5gc/ngap/ngapType"
+
 type NgapEventType int64
 
 // NGAP event type
 const (
 	UnmarshalEAP5GData NgapEventType = iota
+	NASTCPConnEstablishedComplete
+	GetNGAPContext
 	SendInitialUEMessage
 	SendPDUSessionResourceSetupResponse
 	SendNASMsg
 	StartTCPSignalNASMsg
-	NASTCPConnEstablishedComplete
 	SendUEContextReleaseRequest
 	SendUEContextReleaseComplete
 	SendPDUSessionResourceReleaseResponse
-	GetNGAPContext
+	SendUplinkNASTransport
+	SendInitialContextSetupResponse
 )
 
 type EvtError string
@@ -195,5 +199,46 @@ func NewGetNGAPContextEvt(ranUeNgapId int64, ngapCxtReqNumlist []int64) *GetNGAP
 	return &GetNGAPContextEvt{
 		RanUeNgapId:       ranUeNgapId,
 		NgapCxtReqNumlist: ngapCxtReqNumlist,
+	}
+}
+
+type SendUplinkNASTransportEvt struct {
+	RanUeNgapId int64
+	Pdu         []byte
+}
+
+func (e *SendUplinkNASTransportEvt) Type() NgapEventType {
+	return SendUplinkNASTransport
+}
+
+func NewSendUplinkNASTransportEvt(ranUeNgapId int64, pdu []byte) *SendUplinkNASTransportEvt {
+	return &SendUplinkNASTransportEvt{
+		RanUeNgapId: ranUeNgapId,
+		Pdu:         pdu,
+	}
+}
+
+type SendInitialContextSetupRespEvt struct {
+	RanUeNgapId            int64
+	ResponseList           *ngapType.PDUSessionResourceSetupListCxtRes
+	FailedList             *ngapType.PDUSessionResourceFailedToSetupListCxtRes
+	CriticalityDiagnostics *ngapType.CriticalityDiagnostics
+}
+
+func (e *SendInitialContextSetupRespEvt) Type() NgapEventType {
+	return SendInitialContextSetupResponse
+}
+
+func NewSendInitialContextSetupRespEvt(
+	ranUeNgapId int64,
+	responseList *ngapType.PDUSessionResourceSetupListCxtRes,
+	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtRes,
+	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
+) *SendInitialContextSetupRespEvt {
+	return &SendInitialContextSetupRespEvt{
+		RanUeNgapId:            ranUeNgapId,
+		ResponseList:           responseList,
+		FailedList:             failedList,
+		CriticalityDiagnostics: criticalityDiagnostics,
 	}
 }

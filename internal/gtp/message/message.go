@@ -79,3 +79,20 @@ func (p *QoSTPDUPacket) unmarshalExtensionHeader() error {
 
 	return nil
 }
+
+func BuildQoSGTPPacket(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
+	header := gtpMsg.NewHeader(0x34, gtpMsg.MsgTypeTPDU, teid, 0x00, payload).WithExtensionHeaders(
+		gtpMsg.NewExtensionHeader(
+			gtpMsg.ExtHeaderTypePDUSessionContainer,
+			[]byte{UL_PDU_SESSION_INFORMATION_TYPE, qfi},
+			gtpMsg.ExtHeaderTypeNoMoreExtensionHeaders,
+		),
+	)
+
+	b := make([]byte, header.MarshalLen())
+	if err := header.MarshalTo(b); err != nil {
+		return nil, errors.Wrapf(err, "go-gtp Marshal failed")
+	}
+
+	return b, nil
+}

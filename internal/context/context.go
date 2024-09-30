@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -20,8 +20,10 @@ import (
 	gtpv1 "github.com/wmnsk/go-gtp/gtpv1"
 
 	"github.com/free5gc/n3iwf/internal/logger"
+	"github.com/free5gc/n3iwf/internal/util"
 	"github.com/free5gc/n3iwf/pkg/factory"
 	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/openapi/models"
 	"github.com/free5gc/sctp"
 	"github.com/free5gc/util/idgenerator"
 )
@@ -34,36 +36,44 @@ type n3iwf interface {
 type N3IWFContext struct {
 	n3iwf
 
-	// ID generator
+	/* ID generator */
 	RANUENGAPIDGenerator *idgenerator.IDGenerator
 	TEIDGenerator        *idgenerator.IDGenerator
 
-	// Pools
+	/* Pools */
 	AMFPool                sync.Map // map[string]*N3IWFAMF, SCTPAddr as key
 	AMFReInitAvailableList sync.Map // map[string]bool, SCTPAddr as key
 	IKESA                  sync.Map // map[uint64]*IKESecurityAssociation, SPI as key
 	ChildSA                sync.Map // map[uint32]*ChildSecurityAssociation, inboundSPI as key
 	GTPConnectionWithUPF   sync.Map // map[string]*gtpv1.UPlaneConn, UPF address as key
 	AllocatedUEIPAddress   sync.Map // map[string]*N3IWFIkeUe, IPAddr as key
-	AllocatedUETEID        sync.Map // map[uint32]*N3IWFRanUe, TEID as key
+	AllocatedUETEID        sync.Map // map[uint32]*RanUe, TEID as key
 	IKEUePool              sync.Map // map[uint64]*N3IWFIkeUe, SPI as key
-	RANUePool              sync.Map // map[int64]*N3IWFRanUe, RanUeNgapID as key
+	RANUePool              sync.Map // map[int64]*RanUe, RanUeNgapID as key
 	IKESPIToNGAPId         sync.Map // map[uint64]RanUeNgapID, SPI as key
 	NGAPIdToIKESPI         sync.Map // map[uint64]SPI, RanUeNgapID as key
+	MacOrIpAddrToNGAPID    sync.Map // map[uint64]RanUeNgapID, MAC or IP address as key
 
-	// Security data
+	/* Security data */
 	CertificateAuthority []byte
 	N3IWFCertificate     []byte
 	N3IWFPrivateKey      *rsa.PrivateKey
 
 	UeIPRange *net.IPNet
 
-	// XFRM interface
+	/* XFRM interface */
 	XfrmIfaces          sync.Map // map[uint32]*netlink.Link, XfrmIfaceId as key
 	XfrmParentIfaceName string
-
 	// Every UE's first UP IPsec will use default XFRM interface, additoinal UP IPsec will offset its XFRM id
 	XfrmIfaceIdOffsetForUP uint32
+
+	/* CMI */
+	SBIPort      int
+	RegisterIPv4 string
+	BindingIPv4  string
+	UriScheme    models.UriScheme
+	Url          string
+	NrfUri       string
 }
 
 func NewContext(n3iwf n3iwf) (*N3IWFContext, error) {
@@ -190,11 +200,12 @@ func (c *N3IWFContext) NewN3iwfRanUe() *N3IWFRanUe {
 		return nil
 	}
 	n3iwfRanUe := &N3IWFRanUe{
-		N3iwfCtx: c,
+		RanUeSharedCtx: RanUeSharedCtx{
+			N3iwfCtx: c,
+		},
 	}
 	n3iwfRanUe.init(ranUeNgapId)
 	c.RANUePool.Store(ranUeNgapId, n3iwfRanUe)
-	n3iwfRanUe.TemporaryPDUSessionSetupData = new(PDUSessionSetupTemporaryData)
 
 	return n3iwfRanUe
 }
@@ -202,6 +213,7 @@ func (c *N3IWFContext) NewN3iwfRanUe() *N3IWFRanUe {
 func (c *N3IWFContext) DeleteRanUe(ranUeNgapId int64) {
 	c.RANUePool.Delete(ranUeNgapId)
 	c.DeleteIkeSPIFromNgapId(ranUeNgapId)
+	c.DeleteMacOrIpFromNgapId(ranUeNgapId)
 }
 
 func (c *N3IWFContext) DeleteIKEUe(spi uint64) {
@@ -218,13 +230,74 @@ func (c *N3IWFContext) IkeUePoolLoad(spi uint64) (*N3IWFIkeUe, bool) {
 	}
 }
 
-func (c *N3IWFContext) RanUePoolLoad(ranUeNgapId int64) (*N3IWFRanUe, bool) {
+func (c *N3IWFContext) RanUePoolLoad(id interface{}) (RanUe, bool) {
+	var ranUeNgapId int64
+
+	cfgLog := logger.CfgLog
+	switch id := id.(type) {
+	case int64:
+		ranUeNgapId = id
+	case net.HardwareAddr:
+		key, err := util.HashCRC32(id.String())
+		if err != nil {
+			cfgLog.Errorf("RanUePoolLoad(): Hash UE MAC[%s] failed: %+v", id.String(), err)
+			return nil, false
+		}
+
+		val, ok := c.MacOrIpAddrToNGAPID.Load(key)
+		if !ok {
+			return nil, ok
+		}
+
+		ranUeNgapId = val.(int64)
+	case net.IP:
+		key, err := util.HashCRC32(id.String())
+		if err != nil {
+			cfgLog.Errorf("RanUePoolLoad(): Hash UE IP[%s] failed: %+v", id.String(), err)
+			return nil, false
+		}
+
+		val, ok := c.MacOrIpAddrToNGAPID.Load(key)
+		if !ok {
+			return nil, ok
+		}
+
+		ranUeNgapId = val.(int64)
+	default:
+		cfgLog.Warnf("RanUePoolLoad unhandle type: %t", id)
+		return nil, false
+	}
+
 	ranUe, ok := c.RANUePool.Load(ranUeNgapId)
 	if ok {
-		return ranUe.(*N3IWFRanUe), ok
+		return ranUe.(RanUe), ok
 	} else {
 		return nil, ok
 	}
+}
+
+func (c *N3IWFContext) MacOrIpNgapIdMapping(id interface{}, ranUengapId int64) {
+	var key uint32
+	var err error
+
+	cfgLog := logger.CfgLog
+	switch id := id.(type) {
+	case net.HardwareAddr:
+		key, err = util.HashCRC32(id.String())
+		if err != nil {
+			cfgLog.Errorf("MacOrIpNgapIdMapping(): Hash UE MAC[%s] failed: %+v", id.String(), err)
+		}
+	case net.IP:
+		key, err = util.HashCRC32(id.String())
+		if err != nil {
+			cfgLog.Errorf("MacOrIpNgapIdMapping(): Hash UE IP[%s] failed: %+v", id.String(), err)
+		}
+	default:
+		cfgLog.Warnf("MacOrIpNgapIdMapping unhandle type: %t", id)
+		return
+	}
+
+	c.MacOrIpAddrToNGAPID.Store(key, ranUengapId)
 }
 
 func (c *N3IWFContext) IkeSpiNgapIdMapping(spi uint64, ranUeNgapId int64) {
@@ -256,7 +329,24 @@ func (c *N3IWFContext) DeleteIkeSPIFromNgapId(ranUeNgapId int64) {
 	c.NGAPIdToIKESPI.Delete(ranUeNgapId)
 }
 
-func (c *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (*N3IWFRanUe, error) {
+func (c *N3IWFContext) DeleteMacOrIpFromNgapId(ranUeNgapId int64) {
+	deleteKeys := make([]any, 0)
+
+	c.MacOrIpAddrToNGAPID.Range(
+		func(key, val any) bool {
+			if val.(int64) == ranUeNgapId {
+				deleteKeys = append(deleteKeys, key)
+			}
+			return true
+		},
+	)
+
+	for _, key := range deleteKeys {
+		c.MacOrIpAddrToNGAPID.Delete(key)
+	}
+}
+
+func (c *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (RanUe, error) {
 	ranNgapId, ok := c.IKESPIToNGAPId.Load(spi)
 	if ok {
 		ranUe, err := c.RanUePoolLoad(ranNgapId.(int64))
@@ -405,10 +495,14 @@ func (c *N3IWFContext) AllocatedUEIPAddressLoad(ipAddr string) (*N3IWFIkeUe, boo
 	return nil, false
 }
 
-func (c *N3IWFContext) NewTEID(ranUe *N3IWFRanUe) uint32 {
+func (c *N3IWFContext) NewTEID(ranUe RanUe) uint32 {
 	teid64, err := c.TEIDGenerator.Allocate()
 	if err != nil {
 		logger.CtxLog.Errorf("New TEID failed: %+v", err)
+		return 0
+	}
+	if teid64 < 0 || teid64 > math.MaxUint32 {
+		logger.CtxLog.Warnf("NewTEID teid64 out of uint32 range: %d, use maxUint32", teid64)
 		return 0
 	}
 	teid32 := uint32(teid64)
@@ -423,10 +517,10 @@ func (c *N3IWFContext) DeleteTEID(teid uint32) {
 	c.AllocatedUETEID.Delete(teid)
 }
 
-func (c *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (*N3IWFRanUe, bool) {
+func (c *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (RanUe, bool) {
 	ranUe, ok := c.AllocatedUETEID.Load(teid)
 	if ok {
-		return ranUe.(*N3IWFRanUe), ok
+		return ranUe.(RanUe), ok
 	}
 	return nil, false
 }
@@ -435,9 +529,12 @@ func (c *N3IWFContext) AMFSelection(
 	ueSpecifiedGUAMI *ngapType.GUAMI,
 	ueSpecifiedPLMNId *ngapType.PLMNIdentity,
 ) *N3IWFAMF {
-	var availableAMF *N3IWFAMF
+	var availableAMF, defaultAMF *N3IWFAMF
 	c.AMFPool.Range(func(key, value interface{}) bool {
 		amf := value.(*N3IWFAMF)
+		if defaultAMF == nil {
+			defaultAMF = amf
+		}
 		if amf.FindAvalibleAMFByCompareGUAMI(ueSpecifiedGUAMI) {
 			availableAMF = amf
 			return false
@@ -451,6 +548,10 @@ func (c *N3IWFContext) AMFSelection(
 			return true
 		}
 	})
+	if availableAMF == nil &&
+		defaultAMF != nil {
+		availableAMF = defaultAMF
+	}
 	return availableAMF
 }
 

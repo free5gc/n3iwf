@@ -18,10 +18,10 @@ type N3IWFAMF struct {
 	RelativeAMFCapacity   *ngapType.RelativeAMFCapacity
 	PLMNSupportList       *ngapType.PLMNSupportList
 	AMFTNLAssociationList map[string]*AMFTNLAssociationItem // v4+v6 as key
-	// Overload related
+	/* Overload related */
 	AMFOverloadContent *AMFOverloadContent
-	// Relative Context
-	N3iwfRanUeList map[int64]*N3IWFRanUe // ranUeNgapId as key
+	/* Relative Context */
+	N3iwfRanUeList map[int64]RanUe // ranUeNgapId as key
 }
 
 type AMFTNLAssociationItem struct {
@@ -47,12 +47,12 @@ func (amf *N3IWFAMF) init(sctpAddr string, conn *sctp.SCTPConn) {
 	amf.SCTPAddr = sctpAddr
 	amf.SCTPConn = conn
 	amf.AMFTNLAssociationList = make(map[string]*AMFTNLAssociationItem)
-	amf.N3iwfRanUeList = make(map[int64]*N3IWFRanUe)
+	amf.N3iwfRanUeList = make(map[int64]RanUe)
 }
 
-func (amf *N3IWFAMF) FindUeByAmfUeNgapID(id int64) *N3IWFRanUe {
+func (amf *N3IWFAMF) FindUeByAmfUeNgapID(id int64) RanUe {
 	for _, ranUe := range amf.N3iwfRanUeList {
-		if ranUe.AmfUeNgapId == id {
+		if ranUe.GetSharedCtx().AmfUeNgapId == id {
 			return ranUe
 		}
 	}

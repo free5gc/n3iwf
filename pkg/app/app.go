@@ -1,7 +1,7 @@
 package app
 
 import (
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 )
 

@@ -3,8 +3,8 @@ package message
 import (
 	"runtime/debug"
 
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/logger"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/sctp"
 )
@@ -12,7 +12,7 @@ import (
 func SendToAmf(amf *n3iwf_context.N3IWFAMF, pkt []byte) {
 	ngapLog := logger.NgapLog
 	if amf == nil {
-		ngapLog.Errorf("[N3IWF] AMF Context is nil ")
+		ngapLog.Errorf("AMF Context is nil ")
 	} else {
 		if n, err := amf.SCTPConn.Write(pkt); err != nil {
 			ngapLog.Errorf("Write to SCTP socket failed: %+v", err)
@@ -34,14 +34,14 @@ func SendNGSetupRequest(
 		}
 	}()
 
-	ngapLog.Infoln("[N3IWF] Send NG Setup Request")
+	ngapLog.Infoln("Send NG Setup Request")
 
 	cfg := n3iwfCtx.Config()
 	sctpAddr := conn.RemoteAddr().String()
 
 	if available, _ := n3iwfCtx.AMFReInitAvailableListLoad(sctpAddr); !available {
 		ngapLog.Warnf(
-			"[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
+			"Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
 			sctpAddr)
 		return
 	}
@@ -69,7 +69,7 @@ func SendNGReset(
 	partOfNGInterface *ngapType.UEAssociatedLogicalNGConnectionList,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send NG Reset")
+	ngapLog.Infoln("Send NG Reset")
 
 	pkt, err := BuildNGReset(cause, partOfNGInterface)
 	if err != nil {
@@ -86,7 +86,7 @@ func SendNGResetAcknowledge(
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send NG Reset Acknowledge")
+	ngapLog.Infoln("Send NG Reset Acknowledge")
 
 	if partOfNGInterface != nil && len(partOfNGInterface.List) == 0 {
 		ngapLog.Error("length of partOfNGInterface is 0")
@@ -103,13 +103,13 @@ func SendNGResetAcknowledge(
 }
 
 func SendInitialContextSetupResponse(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	responseList *ngapType.PDUSessionResourceSetupListCxtRes,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Initial Context Setup Response")
+	ngapLog.Infoln("Send Initial Context Setup Response")
 
 	if responseList != nil && len(responseList.List) > n3iwf_context.MaxNumOfPDUSessions {
 		ngapLog.Errorln("Pdu List out of range")
@@ -127,17 +127,17 @@ func SendInitialContextSetupResponse(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendInitialContextSetupFailure(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	cause ngapType.Cause,
 	failedList *ngapType.PDUSessionResourceFailedToSetupListCxtFail,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Initial Context Setup Failure")
+	ngapLog.Infoln("Send Initial Context Setup Failure")
 
 	if failedList != nil && len(failedList.List) > n3iwf_context.MaxNumOfPDUSessions {
 		ngapLog.Errorln("Pdu List out of range")
@@ -150,15 +150,15 @@ func SendInitialContextSetupFailure(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendUEContextModificationResponse(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send UE Context Modification Response")
+	ngapLog.Infoln("Send UE Context Modification Response")
 
 	pkt, err := BuildUEContextModificationResponse(ranUe, criticalityDiagnostics)
 	if err != nil {
@@ -166,16 +166,16 @@ func SendUEContextModificationResponse(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendUEContextModificationFailure(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	cause ngapType.Cause,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send UE Context Modification Failure")
+	ngapLog.Infoln("Send UE Context Modification Failure")
 
 	pkt, err := BuildUEContextModificationFailure(ranUe, cause, criticalityDiagnostics)
 	if err != nil {
@@ -183,15 +183,15 @@ func SendUEContextModificationFailure(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendUEContextReleaseComplete(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send UE Context Release Complete")
+	ngapLog.Infoln("Send UE Context Release Complete")
 
 	pkt, err := BuildUEContextReleaseComplete(ranUe, criticalityDiagnostics)
 	if err != nil {
@@ -199,14 +199,14 @@ func SendUEContextReleaseComplete(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendUEContextReleaseRequest(
-	ranUe *n3iwf_context.N3IWFRanUe, cause ngapType.Cause,
+	ranUe n3iwf_context.RanUe, cause ngapType.Cause,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send UE Context Release Request")
+	ngapLog.Infoln("Send UE Context Release Request")
 
 	pkt, err := BuildUEContextReleaseRequest(ranUe, cause)
 	if err != nil {
@@ -214,14 +214,14 @@ func SendUEContextReleaseRequest(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendInitialUEMessage(amf *n3iwf_context.N3IWFAMF,
-	ranUe *n3iwf_context.N3IWFRanUe, nasPdu []byte,
+	ranUe n3iwf_context.RanUe, nasPdu []byte,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Initial UE Message")
+	ngapLog.Infoln("Send Initial UE Message")
 	// Attach To AMF
 
 	pkt, err := BuildInitialUEMessage(ranUe, nasPdu, nil)
@@ -230,16 +230,16 @@ func SendInitialUEMessage(amf *n3iwf_context.N3IWFAMF,
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
-	// ranUe.AttachAMF()
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	// ranUe.AttachAMF() // TODO: Check AttachAMF if is necessary
 }
 
 func SendUplinkNASTransport(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	nasPdu []byte,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Uplink NAS Transport")
+	ngapLog.Infoln("Send Uplink NAS Transport")
 
 	if len(nasPdu) == 0 {
 		ngapLog.Errorln("NAS Pdu is nil")
@@ -252,16 +252,16 @@ func SendUplinkNASTransport(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendNASNonDeliveryIndication(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	nasPdu []byte,
 	cause ngapType.Cause,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send NAS NonDelivery Indication")
+	ngapLog.Infoln("Send NAS NonDelivery Indication")
 
 	if len(nasPdu) == 0 {
 		ngapLog.Errorln("NAS Pdu is nil")
@@ -270,26 +270,26 @@ func SendNASNonDeliveryIndication(
 
 	pkt, err := BuildNASNonDeliveryIndication(ranUe, nasPdu, cause)
 	if err != nil {
-		ngapLog.Errorf("Build Uplink NAS Transport failed : %+v\n", err)
+		ngapLog.Errorf("Build NAS Non Delivery Indication failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendRerouteNASRequest() {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Reroute NAS Request")
+	ngapLog.Infoln("Send Reroute NAS Request")
 }
 
 func SendPDUSessionResourceSetupResponse(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	responseList *ngapType.PDUSessionResourceSetupListSURes,
 	failedListSURes *ngapType.PDUSessionResourceFailedToSetupListSURes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send PDU Session Resource Setup Response")
+	ngapLog.Infoln("Send PDU Session Resource Setup Response")
 
 	if ranUe == nil {
 		ngapLog.Error("UE context is nil, this information is mandatory.")
@@ -302,17 +302,17 @@ func SendPDUSessionResourceSetupResponse(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendPDUSessionResourceModifyResponse(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	responseList *ngapType.PDUSessionResourceModifyListModRes,
 	failedList *ngapType.PDUSessionResourceFailedToModifyListModRes,
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send PDU Session Resource Modify Response")
+	ngapLog.Infoln("Send PDU Session Resource Modify Response")
 
 	if ranUe == nil && criticalityDiagnostics == nil {
 		ngapLog.Error("UE context is nil, this information is mandatory")
@@ -325,15 +325,15 @@ func SendPDUSessionResourceModifyResponse(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendPDUSessionResourceModifyIndication(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	modifyList []ngapType.PDUSessionResourceModifyItemModInd,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send PDU Session Resource Modify Indication")
+	ngapLog.Infoln("Send PDU Session Resource Modify Indication")
 
 	if ranUe == nil {
 		ngapLog.Error("UE context is nil, this information is mandatory")
@@ -351,16 +351,16 @@ func SendPDUSessionResourceModifyIndication(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendPDUSessionResourceNotify(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	notiList *ngapType.PDUSessionResourceNotifyList,
 	relList *ngapType.PDUSessionResourceReleasedListNot,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send PDU Session Resource Notify")
+	ngapLog.Infoln("Send PDU Session Resource Notify")
 
 	if ranUe == nil {
 		ngapLog.Error("UE context is nil, this information is mandatory")
@@ -373,16 +373,16 @@ func SendPDUSessionResourceNotify(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendPDUSessionResourceReleaseResponse(
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	relList ngapType.PDUSessionResourceReleasedListRelRes,
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send PDU Session Resource Release Response")
+	ngapLog.Infoln("Send PDU Session Resource Release Response")
 
 	if ranUe == nil {
 		ngapLog.Error("UE context is nil, this information is mandatory")
@@ -400,7 +400,7 @@ func SendPDUSessionResourceReleaseResponse(
 		return
 	}
 
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendErrorIndication(
@@ -411,7 +411,7 @@ func SendErrorIndication(
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Error Indication")
+	ngapLog.Infoln("Send Error Indication")
 
 	if (cause == nil) && (criticalityDiagnostics == nil) {
 		ngapLog.Errorln("Both cause and criticality is nil. This message shall contain at least one of them.")
@@ -435,7 +435,7 @@ func SendErrorIndicationWithSctpConn(
 	criticalityDiagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Error Indication")
+	ngapLog.Infoln("Send Error Indication")
 
 	if (cause == nil) && (criticalityDiagnostics == nil) {
 		ngapLog.Errorln("Both cause and criticality is nil. This message shall contain at least one of them.")
@@ -457,23 +457,23 @@ func SendErrorIndicationWithSctpConn(
 
 func SendUERadioCapabilityInfoIndication() {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send UE Radio Capability Info Indication")
+	ngapLog.Infoln("Send UE Radio Capability Info Indication")
 }
 
 func SendUERadioCapabilityCheckResponse(
 	amf *n3iwf_context.N3IWFAMF,
-	ranUe *n3iwf_context.N3IWFRanUe,
+	ranUe n3iwf_context.RanUe,
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send UE Radio Capability Check Response")
+	ngapLog.Infoln("Send UE Radio Capability Check Response")
 
 	pkt, err := BuildUERadioCapabilityCheckResponse(ranUe, diagnostics)
 	if err != nil {
 		ngapLog.Errorf("Build UERadio Capability Check Response failed : %+v\n", err)
 		return
 	}
-	SendToAmf(ranUe.AMF, pkt)
+	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendAMFConfigurationUpdateAcknowledge(
@@ -483,7 +483,7 @@ func SendAMFConfigurationUpdateAcknowledge(
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send AMF Configuration Update Acknowledge")
+	ngapLog.Infoln("Send AMF Configuration Update Acknowledge")
 
 	pkt, err := BuildAMFConfigurationUpdateAcknowledge(setupList, failList, diagnostics)
 	if err != nil {
@@ -501,7 +501,7 @@ func SendAMFConfigurationUpdateFailure(
 	diagnostics *ngapType.CriticalityDiagnostics,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send AMF Configuration Update Failure")
+	ngapLog.Infoln("Send AMF Configuration Update Failure")
 	pkt, err := BuildAMFConfigurationUpdateFailure(ngCause, time, diagnostics)
 	if err != nil {
 		ngapLog.Errorf("Build AMF Configuration Update Failure failed : %+v\n", err)
@@ -516,12 +516,12 @@ func SendRANConfigurationUpdate(
 	amf *n3iwf_context.N3IWFAMF,
 ) {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send RAN Configuration Update")
+	ngapLog.Infoln("Send RAN Configuration Update")
 
 	available, _ := n3iwfCtx.AMFReInitAvailableListLoad(amf.SCTPAddr)
 	if !available {
 		ngapLog.Warnf(
-			"[N3IWF] Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
+			"Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
 			amf.SCTPAddr)
 		return
 	}
@@ -540,25 +540,25 @@ func SendRANConfigurationUpdate(
 
 func SendUplinkRANConfigurationTransfer() {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Uplink RAN Configuration Transfer")
+	ngapLog.Infoln("Send Uplink RAN Configuration Transfer")
 }
 
 func SendUplinkRANStatusTransfer() {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Uplink RAN Status Transfer")
+	ngapLog.Infoln("Send Uplink RAN Status Transfer")
 }
 
 func SendLocationReportingFailureIndication() {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Location Reporting Failure Indication")
+	ngapLog.Infoln("Send Location Reporting Failure Indication")
 }
 
 func SendLocationReport() {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send Location Report")
+	ngapLog.Infoln("Send Location Report")
 }
 
 func SendRRCInactiveTransitionReport() {
 	ngapLog := logger.NgapLog
-	ngapLog.Infoln("[N3IWF] Send RRC Inactive Transition Report")
+	ngapLog.Infoln("Send RRC Inactive Transition Report")
 }
