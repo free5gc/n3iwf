@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	ike_message "github.com/free5gc/ike/message"
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/ngap"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 )
 
@@ -38,8 +38,8 @@ func (a *n3iwfTestApp) CancelContext() context.Context {
 	return a.ctx
 }
 
-func (a *n3iwfTestApp) NgapEvtCh() chan n3iwf_context.NgapEvt {
-	return a.ngapServer.RcvEventCh
+func (a *n3iwfTestApp) SendNgapEvt(evt n3iwf_context.NgapEvt) error {
+	return a.ngapServer.SendNgapEvt(evt)
 }
 
 func NewN3iwfTestApp(cfg *factory.Config) (*n3iwfTestApp, error) {
@@ -66,26 +66,7 @@ func NewTestCfg() *factory.Config {
 	}
 }
 
-func TestCheckMessage(t *testing.T) {
-	n3iwf, err := NewN3iwfTestApp(NewTestCfg())
-	require.NoError(t, err)
-
-	n3iwf.ikeServer, err = NewServer(n3iwf)
-	require.NoError(t, err)
-	ikeServer := n3iwf.ikeServer
-
-	srcIP := &net.UDPAddr{
-		IP:   net.ParseIP("10.100.100.1"),
-		Port: 500,
-	}
-	dstIP := &net.UDPAddr{
-		IP:   net.ParseIP("10.100.100.2"),
-		Port: 500,
-	}
-
-	mockConn, err := net.DialUDP("udp", nil, dstIP)
-	require.NoError(t, err)
-
+func TestHandleNattMsg(t *testing.T) {
 	initiatorSPI := uint64(0x123)
 	ikeMessage := new(ike_message.IKEMessage)
 	ikeMessage.BuildIKEHeader(initiatorSPI, 0,
@@ -97,61 +78,62 @@ func TestCheckMessage(t *testing.T) {
 	NonESPPkt := append([]byte{0, 0, 0, 0}, pkt...)
 
 	tests := []struct {
-		name        string
-		conn        *net.UDPConn
-		rcvPkt      IkeReceivePacket
-		msg         *ike_message.IKEMessage
-		expectedErr bool
+		name         string
+		conn         *net.UDPConn
+		rcvPkt       []byte
+		lAddr, rAddr *net.UDPAddr
+		msg          *ike_message.IKEMessage
+		expectedErr  bool
 	}{
 		{
-			name: "Received NAT-T Keepalive",
-			rcvPkt: IkeReceivePacket{
-				Listener:   *mockConn,
-				LocalAddr:  *dstIP,
-				RemoteAddr: *srcIP,
-				Msg: []byte{
-					0xff,
-				},
+			name:   "Received NAT-T Keepalive",
+			rcvPkt: []byte{0xff},
+			lAddr: &net.UDPAddr{
+				IP:   net.ParseIP("10.100.100.2"),
+				Port: 4500,
+			},
+			rAddr: &net.UDPAddr{
+				IP:   net.ParseIP("10.100.100.1"),
+				Port: 4500,
 			},
 			expectedErr: false,
 		},
 		{
-			name: "Received packet is too short",
-			rcvPkt: IkeReceivePacket{
-				Listener:   *mockConn,
-				LocalAddr:  *dstIP,
-				RemoteAddr: *srcIP,
-				Msg: []byte{
-					1, 2,
-				},
+			name:   "Received NAT-T Msg is too short",
+			rcvPkt: []byte{0x01, 0x02},
+			lAddr: &net.UDPAddr{
+				IP:   net.ParseIP("10.100.100.2"),
+				Port: 4500,
+			},
+			rAddr: &net.UDPAddr{
+				IP:   net.ParseIP("10.100.100.1"),
+				Port: 4500,
 			},
 			expectedErr: true,
 		},
 		{
-			name: "Received IKE packet from port 4500, and no need to drop",
-			rcvPkt: IkeReceivePacket{
-				Listener: *mockConn,
-				LocalAddr: net.UDPAddr{
-					IP:   net.ParseIP("10.100.100.2"),
-					Port: 4500,
-				},
-				RemoteAddr: *srcIP,
-				Msg:        NonESPPkt,
+			name:   "Received IKE packet from port 4500, and no need to drop",
+			rcvPkt: NonESPPkt,
+			lAddr: &net.UDPAddr{
+				IP:   net.ParseIP("10.100.100.2"),
+				Port: 4500,
+			},
+			rAddr: &net.UDPAddr{
+				IP:   net.ParseIP("10.100.100.1"),
+				Port: 4500,
 			},
 			expectedErr: false,
 		},
 		{
-			name: "Received ESP packet from port 4500",
-			rcvPkt: IkeReceivePacket{
-				Listener: *mockConn,
-				LocalAddr: net.UDPAddr{
-					IP:   net.ParseIP("10.100.100.2"),
-					Port: 4500,
-				},
-				RemoteAddr: *srcIP,
-				Msg: []byte{
-					1, 2, 3, 4, 5,
-				},
+			name:   "Received ESP packet from port 4500",
+			rcvPkt: []byte{0x1, 0x2, 0x3, 0x4, 0x5},
+			lAddr: &net.UDPAddr{
+				IP:   net.ParseIP("10.100.100.2"),
+				Port: 4500,
+			},
+			rAddr: &net.UDPAddr{
+				IP:   net.ParseIP("10.100.100.1"),
+				Port: 4500,
 			},
 			expectedErr: false,
 		},
@@ -159,7 +141,7 @@ func TestCheckMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ikeServer.checkMessage(tt.rcvPkt, nil)
+			_, err := handleNattMsg(tt.rcvPkt, tt.rAddr, tt.lAddr, nil)
 			if tt.expectedErr {
 				require.Error(t, err)
 			} else {

@@ -8,8 +8,8 @@ import (
 	"github.com/vishvananda/netlink"
 
 	"github.com/free5gc/ike/message"
+	"github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/n3iwf/pkg/context"
 )
 
 type XFRMEncryptionAlgorithmType uint16

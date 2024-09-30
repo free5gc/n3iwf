@@ -34,34 +34,33 @@ type n3iwf interface {
 type N3IWFContext struct {
 	n3iwf
 
-	// ID generator
+	/* ID generator */
 	RANUENGAPIDGenerator *idgenerator.IDGenerator
 	TEIDGenerator        *idgenerator.IDGenerator
 
-	// Pools
+	/* Pools */
 	AMFPool                sync.Map // map[string]*N3IWFAMF, SCTPAddr as key
 	AMFReInitAvailableList sync.Map // map[string]bool, SCTPAddr as key
 	IKESA                  sync.Map // map[uint64]*IKESecurityAssociation, SPI as key
 	ChildSA                sync.Map // map[uint32]*ChildSecurityAssociation, inboundSPI as key
 	GTPConnectionWithUPF   sync.Map // map[string]*gtpv1.UPlaneConn, UPF address as key
 	AllocatedUEIPAddress   sync.Map // map[string]*N3IWFIkeUe, IPAddr as key
-	AllocatedUETEID        sync.Map // map[uint32]*N3IWFRanUe, TEID as key
+	AllocatedUETEID        sync.Map // map[uint32]*RanUe, TEID as key
 	IKEUePool              sync.Map // map[uint64]*N3IWFIkeUe, SPI as key
-	RANUePool              sync.Map // map[int64]*N3IWFRanUe, RanUeNgapID as key
+	RANUePool              sync.Map // map[int64]*RanUe, RanUeNgapID as key
 	IKESPIToNGAPId         sync.Map // map[uint64]RanUeNgapID, SPI as key
 	NGAPIdToIKESPI         sync.Map // map[uint64]SPI, RanUeNgapID as key
 
-	// Security data
+	/* Security data */
 	CertificateAuthority []byte
 	N3IWFCertificate     []byte
 	N3IWFPrivateKey      *rsa.PrivateKey
 
 	UeIPRange *net.IPNet
 
-	// XFRM interface
+	/* XFRM interface */
 	XfrmIfaces          sync.Map // map[uint32]*netlink.Link, XfrmIfaceId as key
 	XfrmParentIfaceName string
-
 	// Every UE's first UP IPsec will use default XFRM interface, additoinal UP IPsec will offset its XFRM id
 	XfrmIfaceIdOffsetForUP uint32
 }
@@ -190,11 +189,12 @@ func (c *N3IWFContext) NewN3iwfRanUe() *N3IWFRanUe {
 		return nil
 	}
 	n3iwfRanUe := &N3IWFRanUe{
-		N3iwfCtx: c,
+		RanUeSharedCtx: RanUeSharedCtx{
+			N3iwfCtx: c,
+		},
 	}
 	n3iwfRanUe.init(ranUeNgapId)
 	c.RANUePool.Store(ranUeNgapId, n3iwfRanUe)
-	n3iwfRanUe.TemporaryPDUSessionSetupData = new(PDUSessionSetupTemporaryData)
 
 	return n3iwfRanUe
 }
@@ -218,10 +218,21 @@ func (c *N3IWFContext) IkeUePoolLoad(spi uint64) (*N3IWFIkeUe, bool) {
 	}
 }
 
-func (c *N3IWFContext) RanUePoolLoad(ranUeNgapId int64) (*N3IWFRanUe, bool) {
+func (c *N3IWFContext) RanUePoolLoad(id interface{}) (RanUe, bool) {
+	var ranUeNgapId int64
+
+	cfgLog := logger.CfgLog
+	switch id := id.(type) {
+	case int64:
+		ranUeNgapId = id
+	default:
+		cfgLog.Warnf("RanUePoolLoad unhandle type: %t", id)
+		return nil, false
+	}
+
 	ranUe, ok := c.RANUePool.Load(ranUeNgapId)
 	if ok {
-		return ranUe.(*N3IWFRanUe), ok
+		return ranUe.(RanUe), ok
 	} else {
 		return nil, ok
 	}
@@ -256,7 +267,7 @@ func (c *N3IWFContext) DeleteIkeSPIFromNgapId(ranUeNgapId int64) {
 	c.NGAPIdToIKESPI.Delete(ranUeNgapId)
 }
 
-func (c *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (*N3IWFRanUe, error) {
+func (c *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (RanUe, error) {
 	ranNgapId, ok := c.IKESPIToNGAPId.Load(spi)
 	if ok {
 		ranUe, err := c.RanUePoolLoad(ranNgapId.(int64))
@@ -405,7 +416,7 @@ func (c *N3IWFContext) AllocatedUEIPAddressLoad(ipAddr string) (*N3IWFIkeUe, boo
 	return nil, false
 }
 
-func (c *N3IWFContext) NewTEID(ranUe *N3IWFRanUe) uint32 {
+func (c *N3IWFContext) NewTEID(ranUe RanUe) uint32 {
 	teid64, err := c.TEIDGenerator.Allocate()
 	if err != nil {
 		logger.CtxLog.Errorf("New TEID failed: %+v", err)
@@ -427,10 +438,10 @@ func (c *N3IWFContext) DeleteTEID(teid uint32) {
 	c.AllocatedUETEID.Delete(teid)
 }
 
-func (c *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (*N3IWFRanUe, bool) {
+func (c *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (RanUe, bool) {
 	ranUe, ok := c.AllocatedUETEID.Load(teid)
 	if ok {
-		return ranUe.(*N3IWFRanUe), ok
+		return ranUe.(RanUe), ok
 	}
 	return nil, false
 }
@@ -439,9 +450,12 @@ func (c *N3IWFContext) AMFSelection(
 	ueSpecifiedGUAMI *ngapType.GUAMI,
 	ueSpecifiedPLMNId *ngapType.PLMNIdentity,
 ) *N3IWFAMF {
-	var availableAMF *N3IWFAMF
+	var availableAMF, defaultAMF *N3IWFAMF
 	c.AMFPool.Range(func(key, value interface{}) bool {
 		amf := value.(*N3IWFAMF)
+		if defaultAMF == nil {
+			defaultAMF = amf
+		}
 		if amf.FindAvalibleAMFByCompareGUAMI(ueSpecifiedGUAMI) {
 			availableAMF = amf
 			return false
@@ -455,6 +469,10 @@ func (c *N3IWFContext) AMFSelection(
 			return true
 		}
 	})
+	if availableAMF == nil &&
+		defaultAMF != nil {
+		availableAMF = defaultAMF
+	}
 	return availableAMF
 }
 

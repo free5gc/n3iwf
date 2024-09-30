@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	ike_message "github.com/free5gc/ike/message"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 )
 

@@ -4,12 +4,26 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/pkg/errors"
-
 	"github.com/free5gc/ngap/ngapType"
 )
 
-type N3IWFRanUe struct {
+type RanUe interface {
+	/* Get Attributes */
+	GetUserLocationInformation() *ngapType.UserLocationInformation
+	GetSharedCtx() *RanUeSharedCtx
+
+	/* User Plane Traffic */
+	// ForwardDL(gtpQoSMsg.QoSTPDUPacket)
+	// ForwardUL()
+
+	/* Others */
+	CreatePDUSession(int64, ngapType.SNSSAI) (*PDUSession, error)
+	DeletePDUSession(int64)
+	FindPDUSession(int64) *PDUSession
+	Remove() error
+}
+
+type RanUeSharedCtx struct {
 	/* UE identity */
 	RanUeNgapId  int64
 	AmfUeNgapId  int64
@@ -31,20 +45,6 @@ type N3IWFRanUe struct {
 
 	/* PDU Session Setup Temporary Data */
 	TemporaryPDUSessionSetupData *PDUSessionSetupTemporaryData
-
-	/* Temporary cached NAS message */
-	// Used when NAS registration accept arrived before
-	// UE setup NAS TCP connection with N3IWF, and
-	// Forward pduSessionEstablishmentAccept to UE after
-	// UE send CREATE_CHILD_SA response
-	TemporaryCachedNASMessage []byte
-
-	/* NAS TCP Connection Established */
-	IsNASTCPConnEstablished         bool
-	IsNASTCPConnEstablishedComplete bool
-
-	/* NAS TCP Connection */
-	TCPConnection net.Conn
 
 	/* Others */
 	Guami                            *ngapType.GUAMI
@@ -68,7 +68,7 @@ type PDUSession struct {
 	SecurityIntegrity                bool
 	MaximumIntegrityDataRateUplink   *ngapType.MaximumIntegrityProtectedDataRate
 	MaximumIntegrityDataRateDownlink *ngapType.MaximumIntegrityProtectedDataRate
-	GTPConnection                    *GTPConnectionInfo
+	GTPConnInfo                      *GTPConnectionInfo
 	QFIList                          []uint8
 	QosFlows                         map[int64]*QosFlow // QosFlowIdentifier as key
 }
@@ -102,36 +102,11 @@ type PDUSessionSetupTemporaryData struct {
 	Index int
 }
 
-func (ranUe *N3IWFRanUe) init(ranUeNgapId int64) {
-	ranUe.RanUeNgapId = ranUeNgapId
-	ranUe.AmfUeNgapId = AmfUeNgapIdUnspecified
-	ranUe.PduSessionList = make(map[int64]*PDUSession)
-	ranUe.IsNASTCPConnEstablished = false
-	ranUe.IsNASTCPConnEstablishedComplete = false
+func (ranUe *RanUeSharedCtx) GetSharedCtx() *RanUeSharedCtx {
+	return ranUe
 }
 
-func (ranUe *N3IWFRanUe) Remove() error {
-	// remove from AMF context
-	ranUe.DetachAMF()
-
-	// remove from RAN UE context
-	n3iwfCtx := ranUe.N3iwfCtx
-	n3iwfCtx.DeleteRanUe(ranUe.RanUeNgapId)
-
-	for _, pduSession := range ranUe.PduSessionList {
-		n3iwfCtx.DeleteTEID(pduSession.GTPConnection.IncomingTEID)
-	}
-
-	if ranUe.TCPConnection != nil {
-		if err := ranUe.TCPConnection.Close(); err != nil {
-			return errors.Errorf("Close TCP conn error : %v", err)
-		}
-	}
-
-	return nil
-}
-
-func (ranUe *N3IWFRanUe) FindPDUSession(pduSessionID int64) *PDUSession {
+func (ranUe *RanUeSharedCtx) FindPDUSession(pduSessionID int64) *PDUSession {
 	if pduSession, ok := ranUe.PduSessionList[pduSessionID]; ok {
 		return pduSession
 	} else {
@@ -139,7 +114,7 @@ func (ranUe *N3IWFRanUe) FindPDUSession(pduSessionID int64) *PDUSession {
 	}
 }
 
-func (ranUe *N3IWFRanUe) CreatePDUSession(pduSessionID int64, snssai ngapType.SNSSAI) (*PDUSession, error) {
+func (ranUe *RanUeSharedCtx) CreatePDUSession(pduSessionID int64, snssai ngapType.SNSSAI) (*PDUSession, error) {
 	if _, exists := ranUe.PduSessionList[pduSessionID]; exists {
 		return nil, fmt.Errorf("PDU Session[ID:%d] is already exists", pduSessionID)
 	}
@@ -152,19 +127,6 @@ func (ranUe *N3IWFRanUe) CreatePDUSession(pduSessionID int64, snssai ngapType.SN
 	return pduSession, nil
 }
 
-func (ranUe *N3IWFRanUe) AttachAMF(sctpAddr string) bool {
-	if amf, ok := ranUe.N3iwfCtx.AMFPoolLoad(sctpAddr); ok {
-		amf.N3iwfRanUeList[ranUe.RanUeNgapId] = ranUe
-		ranUe.AMF = amf
-		return true
-	} else {
-		return false
-	}
-}
-
-func (ranUe *N3IWFRanUe) DetachAMF() {
-	if ranUe.AMF == nil {
-		return
-	}
-	delete(ranUe.AMF.N3iwfRanUeList, ranUe.RanUeNgapId)
+func (ranUe *RanUeSharedCtx) DeletePDUSession(pduSessionId int64) {
+	delete(ranUe.PduSessionList, pduSessionId)
 }

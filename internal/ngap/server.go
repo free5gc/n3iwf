@@ -8,15 +8,15 @@ import (
 	"sync"
 	"time"
 
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 	lib_ngap "github.com/free5gc/ngap"
 	"github.com/free5gc/sctp"
 )
 
-var (
+const (
 	RECEIVE_NGAPPACKET_CHANNEL_LEN = 512
 	RECEIVE_NGAPEVENT_CHANNEL_LEN  = 512
 )
@@ -25,15 +25,16 @@ type n3iwf interface {
 	Config() *factory.Config
 	Context() *n3iwf_context.N3IWFContext
 	CancelContext() context.Context
-	IkeEvtCh() chan n3iwf_context.IkeEvt
+
+	SendIkeEvt(n3iwf_context.IkeEvt) error
 }
 
 type Server struct {
 	n3iwf
 
-	Conn         []*sctp.SCTPConn
-	RcvNgapPktCh chan ReceiveNGAPPacket
-	RcvEventCh   chan n3iwf_context.NgapEvt
+	conn         []*sctp.SCTPConn
+	rcvNgapPktCh chan ReceiveNGAPPacket
+	safeRcvEvtCh *n3iwf_context.SafeEvtCh[n3iwf_context.NgapEvt]
 }
 
 type ReceiveNGAPPacket struct {
@@ -44,9 +45,10 @@ type ReceiveNGAPPacket struct {
 func NewServer(n3iwf n3iwf) (*Server, error) {
 	s := &Server{
 		n3iwf:        n3iwf,
-		RcvNgapPktCh: make(chan ReceiveNGAPPacket, RECEIVE_NGAPPACKET_CHANNEL_LEN),
-		RcvEventCh:   make(chan n3iwf_context.NgapEvt, RECEIVE_NGAPEVENT_CHANNEL_LEN),
+		rcvNgapPktCh: make(chan ReceiveNGAPPacket, RECEIVE_NGAPPACKET_CHANNEL_LEN),
 	}
+	s.safeRcvEvtCh = new(n3iwf_context.SafeEvtCh[n3iwf_context.NgapEvt])
+	s.safeRcvEvtCh.Init(make(chan n3iwf_context.NgapEvt, RECEIVE_NGAPEVENT_CHANNEL_LEN))
 	return s, nil
 }
 
@@ -80,19 +82,19 @@ func (s *Server) runNgapEventHandler(wg *sync.WaitGroup) {
 			ngapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 		ngapLog.Infof("NGAP server stopped")
-		close(s.RcvEventCh)
-		close(s.RcvNgapPktCh)
+		s.safeRcvEvtCh.Close()
+		close(s.rcvNgapPktCh)
 		wg.Done()
 	}()
 
 	for {
 		select {
-		case rcvPkt := <-s.RcvNgapPktCh:
+		case rcvPkt := <-s.rcvNgapPktCh:
 			if len(rcvPkt.Buf) == 0 { // receiver closed
 				return
 			}
 			s.NGAPDispatch(rcvPkt.Conn, rcvPkt.Buf)
-		case rcvEvt := <-s.RcvEventCh:
+		case rcvEvt := <-s.safeRcvEvtCh.RecvEvtCh():
 			s.HandleEvent(rcvEvt)
 		}
 	}
@@ -175,12 +177,11 @@ func (s *Server) listenAndServe(
 
 	close(errChan)
 
-	s.Conn = append(s.Conn, conn)
+	s.conn = append(s.conn, conn)
 
-	data := make([]byte, 65535)
+	buf := make([]byte, factory.MAX_BUF_MSG_LEN)
 	for {
-		n, info, _, err := conn.SCTPRead(data)
-
+		n, info, _, err := conn.SCTPRead(buf)
 		if err != nil {
 			ngapLog.Debugf("[SCTP] AMF SCTP address: %s", remoteAddr)
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -189,34 +190,39 @@ func (s *Server) listenAndServe(
 				if errConn != nil {
 					ngapLog.Errorf("conn close error: %+v", errConn)
 				}
-				s.RcvNgapPktCh <- ReceiveNGAPPacket{}
+				s.rcvNgapPktCh <- ReceiveNGAPPacket{}
 				return
 			}
 			ngapLog.Errorf("[SCTP] Read from SCTP connection failed: %+v", err)
-		} else {
-			ngapLog.Tracef("[SCTP] Successfully read %d bytes.", n)
+			return
+		}
 
-			if info == nil || info.PPID != lib_ngap.PPID {
-				ngapLog.Warn("Received SCTP PPID != 60")
-				continue
-			}
+		ngapLog.Tracef("[SCTP] Successfully read %d bytes.", n)
 
-			forwardData := make([]byte, n)
-			copy(forwardData, data[:n])
+		if info == nil || info.PPID != lib_ngap.PPID {
+			ngapLog.Warn("Received SCTP PPID != 60")
+			continue
+		}
 
-			s.RcvNgapPktCh <- ReceiveNGAPPacket{
-				Conn: conn,
-				Buf:  forwardData[:n],
-			}
+		forwardData := make([]byte, n)
+		copy(forwardData, buf[:n])
+
+		s.rcvNgapPktCh <- ReceiveNGAPPacket{
+			Conn: conn,
+			Buf:  forwardData[:n],
 		}
 	}
+}
+
+func (s *Server) SendNgapEvt(evt n3iwf_context.NgapEvt) error {
+	return s.safeRcvEvtCh.SendEvt(evt)
 }
 
 func (s *Server) Stop() {
 	ngapLog := logger.NgapLog
 	ngapLog.Infof("Close NGAP server....")
 
-	for _, ngapServerConn := range s.Conn {
+	for _, ngapServerConn := range s.conn {
 		if err := ngapServerConn.Close(); err != nil {
 			ngapLog.Errorf("Stop ngap server error : %+v", err)
 		}

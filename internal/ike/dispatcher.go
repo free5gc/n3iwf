@@ -5,8 +5,8 @@ import (
 	"runtime/debug"
 
 	ike_message "github.com/free5gc/ike/message"
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/logger"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 )
 
 func (s *Server) Dispatch(

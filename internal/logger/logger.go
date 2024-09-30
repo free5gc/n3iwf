@@ -8,12 +8,13 @@ import (
 
 var (
 	Log      *logrus.Logger
-	NfLog    *logrus.Entry
+	N3iwfLog *logrus.Entry
 	MainLog  *logrus.Entry
 	InitLog  *logrus.Entry
 	CfgLog   *logrus.Entry
 	CtxLog   *logrus.Entry
 	GinLog   *logrus.Entry
+	NasLog   *logrus.Entry
 	NgapLog  *logrus.Entry
 	IKELog   *logrus.Entry
 	GTPLog   *logrus.Entry
@@ -21,23 +22,24 @@ var (
 	NWuUPLog *logrus.Entry
 	RelayLog *logrus.Entry
 	UtilLog  *logrus.Entry
+	GmmLog   *logrus.Entry
 )
 
-func UpdateNfLog(s string) {
-	NfLog = Log.WithField(logger_util.FieldNF, s)
-	// update logs created from NfLog
-	MainLog = NfLog.WithField(logger_util.FieldCategory, "Main")
-	InitLog = NfLog.WithField(logger_util.FieldCategory, "Init")
-	CfgLog = NfLog.WithField(logger_util.FieldCategory, "CFG")
-	CtxLog = NfLog.WithField(logger_util.FieldCategory, "CTX")
-	GinLog = NfLog.WithField(logger_util.FieldCategory, "GIN")
-	NgapLog = NfLog.WithField(logger_util.FieldCategory, "NGAP")
-	IKELog = NfLog.WithField(logger_util.FieldCategory, "IKE")
-	GTPLog = NfLog.WithField(logger_util.FieldCategory, "GTP")
-	NWuCPLog = NfLog.WithField(logger_util.FieldCategory, "NWuCP")
-	NWuUPLog = NfLog.WithField(logger_util.FieldCategory, "NWuUP")
-	RelayLog = NfLog.WithField(logger_util.FieldCategory, "Relay")
-	UtilLog = NfLog.WithField(logger_util.FieldCategory, "Util")
+func UpdateN3iwfLog() {
+	N3iwfLog = Log.WithField(logger_util.FieldNF, "N3IWF")
+	// update logs created from N3iwfLog
+	MainLog = N3iwfLog.WithField(logger_util.FieldCategory, "Main")
+	InitLog = N3iwfLog.WithField(logger_util.FieldCategory, "Init")
+	CfgLog = N3iwfLog.WithField(logger_util.FieldCategory, "CFG")
+	CtxLog = N3iwfLog.WithField(logger_util.FieldCategory, "CTX")
+	GinLog = N3iwfLog.WithField(logger_util.FieldCategory, "GIN")
+	NgapLog = N3iwfLog.WithField(logger_util.FieldCategory, "NGAP")
+	IKELog = N3iwfLog.WithField(logger_util.FieldCategory, "IKE")
+	GTPLog = N3iwfLog.WithField(logger_util.FieldCategory, "GTP")
+	NWuCPLog = N3iwfLog.WithField(logger_util.FieldCategory, "NWuCP")
+	NWuUPLog = N3iwfLog.WithField(logger_util.FieldCategory, "NWuUP")
+	RelayLog = N3iwfLog.WithField(logger_util.FieldCategory, "Relay")
+	UtilLog = N3iwfLog.WithField(logger_util.FieldCategory, "Util")
 }
 
 func init() {
@@ -46,5 +48,5 @@ func init() {
 		logger_util.FieldCategory,
 	}
 	Log = logger_util.New(fieldsOrder)
-	UpdateNfLog("N3IWF")
+	UpdateN3iwfLog()
 }

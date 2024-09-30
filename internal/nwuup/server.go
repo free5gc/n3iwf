@@ -7,14 +7,15 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/wmnsk/go-gtp/gtpv1"
 	gtpMsg "github.com/wmnsk/go-gtp/gtpv1/message"
 	"golang.org/x/net/ipv4"
 
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/gre"
 	gtpQoSMsg "github.com/free5gc/n3iwf/internal/gtp/message"
 	"github.com/free5gc/n3iwf/internal/logger"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 )
 
@@ -27,13 +28,15 @@ type n3iwf interface {
 type Server struct {
 	n3iwf
 
-	gtpuConn *gtpv1.UPlaneConn
 	greConn  *ipv4.PacketConn
+	gtpuConn *gtpv1.UPlaneConn
+	log      *logrus.Entry
 }
 
 func NewServer(n3iwf n3iwf) (*Server, error) {
 	s := &Server{
 		n3iwf: n3iwf,
+		log:   logger.NWuUPLog,
 	}
 	return s, nil
 }
@@ -62,8 +65,7 @@ func (s *Server) Run(wg *sync.WaitGroup) error {
 }
 
 func (s *Server) newGreConn() error {
-	cfg := s.Config()
-	listenAddr := cfg.GetIPSecGatewayAddr()
+	listenAddr := s.Config().GetIPSecGatewayAddr()
 
 	// Setup IPv4 packet connection socket
 	// This socket will only capture GRE encapsulated packet
@@ -79,8 +81,7 @@ func (s *Server) newGreConn() error {
 }
 
 func (s *Server) newGtpuConn() error {
-	cfg := s.Config()
-	gtpuAddr := cfg.GetGTPBindAddr() + gtpv1.GTPUPort
+	gtpuAddr := s.Config().GetN3iwfGtpBindAddress() + gtpv1.GTPUPort
 
 	laddr, err := net.ResolveUDPAddr("udp", gtpuAddr)
 	if err != nil {
@@ -94,93 +95,49 @@ func (s *Server) newGtpuConn() error {
 	return nil
 }
 
-// Parse the fields not supported by go-gtp and forward data to UE.
-func (s *Server) handleQoSTPDU(c gtpv1.Conn, senderAddr net.Addr, msg gtpMsg.Message) error {
-	pdu := gtpQoSMsg.QoSTPDUPacket{}
-	err := pdu.Unmarshal(msg.(*gtpMsg.TPDU))
-	if err != nil {
-		return err
-	}
-
-	s.forwardDL(pdu)
-	return nil
-}
-
-// Forward user plane packets from N3 to UE with GRE header and new IP header encapsulated
-func (s *Server) forwardDL(packet gtpQoSMsg.QoSTPDUPacket) {
-	gtpLog := logger.GTPLog
-
+// listenAndServe read from socket and call forward() to
+// forward packet.
+func (s *Server) greListenAndServe(wg *sync.WaitGroup) {
+	nwuupLog := s.log
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			gtpLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			nwuupLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
+
+		err := s.greConn.Close()
+		if err != nil {
+			nwuupLog.Errorf("Error closing raw socket: %+v", err)
+		}
+		wg.Done()
 	}()
 
-	n3iwfCtx := s.Context()
+	buf := make([]byte, factory.MAX_BUF_MSG_LEN)
 
-	pktTEID := packet.GetTEID()
-	gtpLog.Tracef("pkt teid : %d", pktTEID)
-
-	// Find UE information
-	ranUe, ok := n3iwfCtx.AllocatedUETEIDLoad(pktTEID)
-	if !ok {
-		gtpLog.Errorf("Cannot find RanUE context from QosPacket TEID : %+v", pktTEID)
-		return
-	}
-
-	ikeUe, err := n3iwfCtx.IkeUeLoadFromNgapId(ranUe.RanUeNgapId)
+	err := s.greConn.SetControlMessage(ipv4.FlagInterface|ipv4.FlagTTL, true)
 	if err != nil {
-		gtpLog.Errorf("Cannot find IkeUe context from RanUe , NgapID : %+v", ranUe.RanUeNgapId)
+		nwuupLog.Errorf("Set control message visibility for IPv4 packet connection fail: %+v", err)
 		return
 	}
 
-	// UE inner IP in IPSec
-	ueInnerIPAddr := ikeUe.IPSecInnerIPAddr
-
-	var cm *ipv4.ControlMessage
-	for _, childSA := range ikeUe.N3IWFChildSecurityAssociation {
-		pdusession := ranUe.FindPDUSession(childSA.PDUSessionIds[0])
-		if pdusession != nil && pdusession.GTPConnection.IncomingTEID == pktTEID {
-			gtpLog.Tracef("forwarding IPSec xfrm interfaceid : %d", childSA.XfrmIface.Attrs().Index)
-			cm = &ipv4.ControlMessage{
-				IfIndex: childSA.XfrmIface.Attrs().Index,
-			}
-			break
+	for {
+		n, cm, src, err := s.greConn.ReadFrom(buf)
+		nwuupLog.Tracef("Read %d bytes, %s", n, cm)
+		if err != nil {
+			nwuupLog.Errorf("Error read from IPv4 packet connection: %+v", err)
+			return
 		}
-	}
 
-	var (
-		qfi uint8
-		rqi bool
-	)
+		forwardData := make([]byte, n)
+		copy(forwardData, buf)
 
-	// QoS Related Parameter
-	if packet.HasQoS() {
-		qfi, rqi = packet.GetQoSParameters()
-		gtpLog.Tracef("QFI: %v, RQI: %v", qfi, rqi)
-	}
-
-	// Encasulate IPv4 packet with GRE header before forward to UE through IPsec
-	grePacket := gre.GREPacket{}
-
-	// TODO:[24.502(v15.7) 9.3.3 ] The Protocol Type field should be set to zero
-	grePacket.SetPayload(packet.GetPayload(), gre.IPv4)
-	grePacket.SetQoS(qfi, rqi)
-	forwardData := grePacket.Marshal()
-
-	// Send to UE through Nwu
-	if n, err := s.greConn.WriteTo(forwardData, cm, ueInnerIPAddr); err != nil {
-		gtpLog.Errorf("Write to UE failed: %+v", err)
-		return
-	} else {
-		gtpLog.Trace("Forward NWu <- N3")
-		gtpLog.Tracef("Wrote %d bytes", n)
+		wg.Add(1)
+		go s.forwardUL(src.String(), cm.IfIndex, forwardData, wg)
 	}
 }
 
 func (s *Server) gtpuListenAndServe(wg *sync.WaitGroup) {
-	nwuupLog := logger.NWuUPLog
+	nwuupLog := s.log
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
@@ -195,51 +152,10 @@ func (s *Server) gtpuListenAndServe(wg *sync.WaitGroup) {
 	}
 }
 
-// listenAndServe read from socket and call forward() to
-// forward packet.
-func (s *Server) greListenAndServe(wg *sync.WaitGroup) {
-	nwuupLog := logger.NWuUPLog
-	defer func() {
-		if p := recover(); p != nil {
-			// Print stack for panic to log. Fatalf() will let program exit.
-			nwuupLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
-		}
-
-		err := s.greConn.Close()
-		if err != nil {
-			nwuupLog.Errorf("Error closing raw socket: %+v", err)
-		}
-		wg.Done()
-	}()
-
-	buffer := make([]byte, 65535)
-
-	err := s.greConn.SetControlMessage(ipv4.FlagInterface|ipv4.FlagTTL, true)
-	if err != nil {
-		nwuupLog.Errorf("Set control message visibility for IPv4 packet connection fail: %+v", err)
-		return
-	}
-
-	for {
-		n, cm, src, err := s.greConn.ReadFrom(buffer)
-		nwuupLog.Tracef("Read %d bytes, %s", n, cm)
-		if err != nil {
-			nwuupLog.Errorf("Error read from IPv4 packet connection: %+v", err)
-			return
-		}
-
-		forwardData := make([]byte, n)
-		copy(forwardData, buffer)
-
-		wg.Add(1)
-		go s.forwardUL(src.String(), cm.IfIndex, forwardData, wg)
-	}
-}
-
 // forward forwards user plane packets from NWu to UPF
 // with GTP header encapsulated
 func (s *Server) forwardUL(ueInnerIP string, ifIndex int, rawData []byte, wg *sync.WaitGroup) {
-	nwuupLog := logger.NWuUPLog
+	nwuupLog := s.log
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
@@ -268,7 +184,7 @@ func (s *Server) forwardUL(ueInnerIP string, ifIndex int, rawData []byte, wg *sy
 		// Check which child SA the packet come from with interface index,
 		// and find the corresponding PDU session
 		if childSA.XfrmIface != nil && childSA.XfrmIface.Attrs().Index == ifIndex {
-			pduSession = ranUe.PduSessionList[childSA.PDUSessionIds[0]]
+			pduSession = ranUe.GetSharedCtx().PduSessionList[childSA.PDUSessionIds[0]]
 			break
 		}
 	}
@@ -278,7 +194,7 @@ func (s *Server) forwardUL(ueInnerIP string, ifIndex int, rawData []byte, wg *sy
 		return
 	}
 
-	gtpConnection := pduSession.GTPConnection
+	gtpConnection := pduSession.GTPConnInfo
 
 	// Decapsulate GRE header and extract QoS Parameters if exist
 	grePacket := gre.GREPacket{}
@@ -301,7 +217,7 @@ func (s *Server) forwardUL(ueInnerIP string, ifIndex int, rawData []byte, wg *sy
 			nwuupLog.Errorf("forwardUL err: %+v", err)
 			return
 		}
-		gtpPacket, err := buildQoSGTPPacket(gtpConnection.OutgoingTEID, qfi, payload)
+		gtpPacket, err := gtpQoSMsg.BuildQoSGTPPacket(gtpConnection.OutgoingTEID, qfi, payload)
 		if err != nil {
 			nwuupLog.Errorf("buildQoSGTPPacket err: %+v", err)
 			return
@@ -325,34 +241,100 @@ func (s *Server) forwardUL(ueInnerIP string, ifIndex int, rawData []byte, wg *sy
 	nwuupLog.Tracef("Wrote %d bytes", n)
 }
 
-func buildQoSGTPPacket(teid uint32, qfi uint8, payload []byte) ([]byte, error) {
-	nwuupLog := logger.NWuUPLog
-	header := gtpMsg.NewHeader(0x34, gtpMsg.MsgTypeTPDU, teid, 0x00, payload).WithExtensionHeaders(
-		gtpMsg.NewExtensionHeader(
-			gtpMsg.ExtHeaderTypePDUSessionContainer,
-			[]byte{gtpQoSMsg.UL_PDU_SESSION_INFORMATION_TYPE, qfi},
-			gtpMsg.ExtHeaderTypeNoMoreExtensionHeaders,
-		),
-	)
-
-	b := make([]byte, header.MarshalLen())
-
-	if err := header.MarshalTo(b); err != nil {
-		nwuupLog.Errorf("go-gtp MarshalTo err: %v", err)
-		return nil, err
-	}
-
-	return b, nil
-}
-
 func (s *Server) Stop() {
-	nwuupLog := logger.NWuUPLog
+	nwuupLog := s.log
 	nwuupLog.Infof("Close Nwuup server...")
 
 	if err := s.greConn.Close(); err != nil {
 		nwuupLog.Errorf("Stop nwuup greConn error : %v", err)
 	}
+
 	if err := s.gtpuConn.Close(); err != nil {
 		nwuupLog.Errorf("Stop nwuup gtpuConn error : %v", err)
+	}
+}
+
+// Parse the fields not supported by go-gtp and forward data to UE.
+func (s *Server) handleQoSTPDU(c gtpv1.Conn, senderAddr net.Addr, msg gtpMsg.Message) error {
+	pdu := gtpQoSMsg.QoSTPDUPacket{}
+	err := pdu.Unmarshal(msg.(*gtpMsg.TPDU))
+	if err != nil {
+		return err
+	}
+
+	s.forwardDL(pdu)
+	return nil
+}
+
+// Forward user plane packets from N3 to UE with GRE header and new IP header encapsulated
+func (s *Server) forwardDL(packet gtpQoSMsg.QoSTPDUPacket) {
+	nwuupLog := s.log
+
+	defer func() {
+		if p := recover(); p != nil {
+			// Print stack for panic to log. Fatalf() will let program exit.
+			nwuupLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		}
+	}()
+
+	n3iwfCtx := s.Context()
+	pktTEID := packet.GetTEID()
+	nwuupLog.Tracef("pkt teid : %d", pktTEID)
+
+	// Find UE information
+	ranUe, ok := n3iwfCtx.AllocatedUETEIDLoad(pktTEID)
+	if !ok {
+		nwuupLog.Errorf("Cannot find RanUE context from QosPacket TEID : %+v", pktTEID)
+		return
+	}
+	ranUeNgapID := ranUe.GetSharedCtx().RanUeNgapId
+
+	ikeUe, err := n3iwfCtx.IkeUeLoadFromNgapId(ranUeNgapID)
+	if err != nil {
+		nwuupLog.Errorf("Cannot find IkeUe context from RanUe , NgapID : %+v", ranUeNgapID)
+		return
+	}
+
+	// UE inner IP in IPSec
+	ueInnerIPAddr := ikeUe.IPSecInnerIPAddr
+
+	var cm *ipv4.ControlMessage
+	for _, childSA := range ikeUe.N3IWFChildSecurityAssociation {
+		pdusession := ranUe.FindPDUSession(childSA.PDUSessionIds[0])
+		if pdusession != nil && pdusession.GTPConnInfo.IncomingTEID == pktTEID {
+			nwuupLog.Tracef("forwarding IPSec xfrm interfaceid : %d", childSA.XfrmIface.Attrs().Index)
+			cm = &ipv4.ControlMessage{
+				IfIndex: childSA.XfrmIface.Attrs().Index,
+			}
+			break
+		}
+	}
+
+	var (
+		qfi uint8
+		rqi bool
+	)
+
+	// QoS Related Parameter
+	if packet.HasQoS() {
+		qfi, rqi = packet.GetQoSParameters()
+		nwuupLog.Tracef("QFI: %v, RQI: %v", qfi, rqi)
+	}
+
+	// Encasulate IPv4 packet with GRE header before forward to UE through IPsec
+	grePacket := gre.GREPacket{}
+
+	// TODO:[24.502(v15.7) 9.3.3 ] The Protocol Type field should be set to zero
+	grePacket.SetPayload(packet.GetPayload(), gre.IPv4)
+	grePacket.SetQoS(qfi, rqi)
+	forwardData := grePacket.Marshal()
+
+	// Send to UE through Nwu
+	if n, err := s.greConn.WriteTo(forwardData, cm, ueInnerIPAddr); err != nil {
+		nwuupLog.Errorf("Write to UE failed: %+v", err)
+		return
+	} else {
+		nwuupLog.Trace("Forward NWu <- N3")
+		nwuupLog.Tracef("Wrote %d bytes", n)
 	}
 }

@@ -3,6 +3,7 @@ package ike
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"runtime/debug"
 	"sync"
@@ -14,21 +15,25 @@ import (
 
 	"github.com/free5gc/ike"
 	ike_message "github.com/free5gc/ike/message"
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/logger"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
 )
 
-var (
+const (
 	RECEIVE_IKEPACKET_CHANNEL_LEN = 512
 	RECEIVE_IKEEVENT_CHANNEL_LEN  = 512
+
+	DEFAULT_IKE_PORT  = 500
+	DEFAULT_NATT_PORT = 4500
 )
 
 type n3iwf interface {
 	Config() *factory.Config
 	Context() *n3iwf_context.N3IWFContext
 	CancelContext() context.Context
-	NgapEvtCh() chan n3iwf_context.NgapEvt
+
+	SendNgapEvt(n3iwf_context.NgapEvt) error
 }
 
 type EspHandler func(srcIP, dstIP *net.UDPAddr, espPkt []byte) error
@@ -36,10 +41,10 @@ type EspHandler func(srcIP, dstIP *net.UDPAddr, espPkt []byte) error
 type Server struct {
 	n3iwf
 
-	Listener    map[int]*net.UDPConn
-	RcvIkePktCh chan IkeReceivePacket
-	RcvEventCh  chan n3iwf_context.IkeEvt
-	StopServer  chan struct{}
+	Listener     map[int]*net.UDPConn
+	RcvIkePktCh  chan IkeReceivePacket
+	StopServer   chan struct{}
+	safeRcvEvtCh *n3iwf_context.SafeEvtCh[n3iwf_context.IkeEvt]
 }
 
 type IkeReceivePacket struct {
@@ -54,9 +59,10 @@ func NewServer(n3iwf n3iwf) (*Server, error) {
 		n3iwf:       n3iwf,
 		Listener:    make(map[int]*net.UDPConn),
 		RcvIkePktCh: make(chan IkeReceivePacket, RECEIVE_IKEPACKET_CHANNEL_LEN),
-		RcvEventCh:  make(chan n3iwf_context.IkeEvt, RECEIVE_IKEEVENT_CHANNEL_LEN),
 		StopServer:  make(chan struct{}),
 	}
+	s.safeRcvEvtCh = new(n3iwf_context.SafeEvtCh[n3iwf_context.IkeEvt])
+	s.safeRcvEvtCh.Init(make(chan n3iwf_context.IkeEvt, RECEIVE_IKEEVENT_CHANNEL_LEN))
 	return s, nil
 }
 
@@ -65,32 +71,30 @@ func (s *Server) Run(wg *sync.WaitGroup) error {
 
 	// Resolve UDP addresses
 	ip := cfg.GetIKEBindAddr()
-	udpAddrPort500, err := net.ResolveUDPAddr("udp", ip+":500")
+	ikeAddrPort, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, DEFAULT_IKE_PORT))
 	if err != nil {
-		return errors.Wrapf(err, "ResolveUDPAddr (%s:500)", ip)
+		return err
 	}
-	udpAddrPort4500, err := net.ResolveUDPAddr("udp", ip+":4500")
+	nattAddrPort, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", ip, DEFAULT_NATT_PORT))
 	if err != nil {
-		return errors.Wrapf(err, "ResolveUDPAddr (%s:4500)", ip)
+		return err
 	}
 
 	// Listen and serve
 	var errChan chan error
 
-	// Port 500
 	wg.Add(1)
 	errChan = make(chan error)
-	go s.receiver(udpAddrPort500, errChan, wg)
+	go s.receiver(ikeAddrPort, errChan, wg)
 	if err, ok := <-errChan; ok {
-		return errors.Wrapf(err, "udp 500")
+		return errors.Wrapf(err, "ikeAddrPort")
 	}
 
-	// Port 4500
 	wg.Add(1)
 	errChan = make(chan error)
-	go s.receiver(udpAddrPort4500, errChan, wg)
+	go s.receiver(nattAddrPort, errChan, wg)
 	if err, ok := <-errChan; ok {
-		return errors.Wrapf(err, "udp 4500")
+		return errors.Wrapf(err, "nattAddrPort")
 	}
 
 	wg.Add(1)
@@ -108,6 +112,7 @@ func (s *Server) server(wg *sync.WaitGroup) {
 		}
 		ikeLog.Infof("Ike server stopped")
 		close(s.RcvIkePktCh)
+		s.safeRcvEvtCh.Close()
 		close(s.StopServer)
 		wg.Done()
 	}()
@@ -115,22 +120,15 @@ func (s *Server) server(wg *sync.WaitGroup) {
 	for {
 		select {
 		case rcvPkt := <-s.RcvIkePktCh:
-			msg, err := s.checkMessage(rcvPkt, handleESPPacket)
-			if err != nil {
-				ikeLog.Warnln(err)
-				continue
-			}
-			if msg == nil {
-				continue
-			}
-			ikeMsg, ikeSA, err := s.checkIKEMessage(msg, &rcvPkt.Listener, &rcvPkt.LocalAddr, &rcvPkt.RemoteAddr)
+			ikeMsg, ikeSA, err := s.checkIKEMessage(
+				rcvPkt.Msg, &rcvPkt.Listener, &rcvPkt.LocalAddr, &rcvPkt.RemoteAddr)
 			if err != nil {
 				ikeLog.Warnln(err)
 				continue
 			}
 			s.Dispatch(&rcvPkt.Listener, &rcvPkt.LocalAddr, &rcvPkt.RemoteAddr,
 				ikeMsg, rcvPkt.Msg, ikeSA)
-		case rcvIkeEvent := <-s.RcvEventCh:
+		case rcvIkeEvent := <-s.safeRcvEvtCh.RecvEvtCh():
 			s.HandleEvent(rcvIkeEvent)
 		case <-s.StopServer:
 			return
@@ -164,24 +162,78 @@ func (s *Server) receiver(
 
 	s.Listener[localAddr.Port] = listener
 
-	data := make([]byte, 65535)
+	buf := make([]byte, factory.MAX_BUF_MSG_LEN)
 
 	for {
-		n, remoteAddr, err := listener.ReadFromUDP(data)
+		n, remoteAddr, err := listener.ReadFromUDP(buf)
 		if err != nil {
 			ikeLog.Errorf("ReadFromUDP failed: %+v", err)
 			return
 		}
 
-		forwardData := make([]byte, n)
-		copy(forwardData, data[:n])
+		msgBuf := make([]byte, n)
+		copy(msgBuf, buf)
+
+		// As specified in RFC 7296 section 3.1, the IKE message send from/to UDP port 4500
+		// should prepend a 4 bytes zero
+		if localAddr.Port == DEFAULT_NATT_PORT {
+			msgBuf, err = handleNattMsg(msgBuf, remoteAddr, localAddr, handleESPPacket)
+			if err != nil {
+				ikeLog.Errorf("Handle NATT msg: %v", err)
+				continue
+			}
+			if msgBuf == nil {
+				continue
+			}
+		}
+
+		if len(msgBuf) < ike_message.IKE_HEADER_LEN {
+			ikeLog.Warnf("Received IKE msg is too short from %s", remoteAddr)
+			continue
+		}
+
 		s.RcvIkePktCh <- IkeReceivePacket{
 			RemoteAddr: *remoteAddr,
 			Listener:   *listener,
 			LocalAddr:  *localAddr,
-			Msg:        forwardData,
+			Msg:        msgBuf,
 		}
 	}
+}
+
+func handleNattMsg(
+	msgBuf []byte,
+	rAddr, lAddr *net.UDPAddr,
+	espHandler EspHandler,
+) ([]byte, error) {
+	if len(msgBuf) == 1 && msgBuf[0] == 0xff {
+		// skip NAT-T Keepalive
+		return nil, nil
+	}
+
+	nonEspMarker := []byte{0, 0, 0, 0} // Non-ESP Marker
+	nonEspMarkerLen := len(nonEspMarker)
+	if len(msgBuf) < nonEspMarkerLen {
+		return nil, errors.Errorf("Received msg is too short")
+	}
+	if !bytes.Equal(msgBuf[:nonEspMarkerLen], nonEspMarker) {
+		// ESP packet
+		if espHandler != nil {
+			err := espHandler(rAddr, lAddr, msgBuf)
+			if err != nil {
+				return nil, errors.Wrapf(err, "Handle ESP")
+			}
+		}
+		return nil, nil
+	}
+
+	// IKE message: skip Non-ESP Marker
+	msgBuf = msgBuf[nonEspMarkerLen:]
+	return msgBuf, nil
+}
+
+func (s *Server) SendIkeEvt(evt n3iwf_context.IkeEvt) error {
+	return s.safeRcvEvtCh.SendEvt(evt)
 }
 
 func (s *Server) Stop() {
@@ -195,41 +247,6 @@ func (s *Server) Stop() {
 	}
 
 	s.StopServer <- struct{}{}
-}
-
-func (s *Server) checkMessage(
-	rcvPkt IkeReceivePacket,
-	espHandler EspHandler,
-) ([]byte, error) {
-	ikeLog := logger.IKELog
-	localAddr := &rcvPkt.LocalAddr
-	remoteAddr := &rcvPkt.RemoteAddr
-	msg := rcvPkt.Msg
-	marker := []byte{0, 0, 0, 0} // Non-ESP Marker
-
-	if len(msg) == 1 && msg[0] == 0xff {
-		ikeLog.Tracef("Get NAT-T Keepalive from IP: %v", remoteAddr.IP.String())
-		return nil, nil
-	} else if len(msg) < len(marker) {
-		return nil, errors.Errorf("Received packet is too short from IP: %v", remoteAddr.IP.String())
-	}
-
-	// As specified in RFC 7296 section 3.1, the IKE message send from/to UDP port 4500
-	// should prepend a 4 bytes zero
-	if localAddr.Port == 4500 {
-		if !bytes.Equal(msg[:4], marker) {
-			if espHandler != nil {
-				err := espHandler(remoteAddr, localAddr, msg)
-				if err != nil {
-					return nil, errors.Wrapf(err, "Handle ESP")
-				}
-			}
-			return nil, nil
-		}
-		msg = msg[4:]
-	}
-
-	return msg, nil
 }
 
 func (s *Server) checkIKEMessage(

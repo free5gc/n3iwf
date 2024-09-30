@@ -13,15 +13,15 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
+	"github.com/free5gc/n3iwf/internal/ike"
+	"github.com/free5gc/n3iwf/internal/ike/xfrm"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap"
 	"github.com/free5gc/n3iwf/internal/nwucp"
 	"github.com/free5gc/n3iwf/internal/nwuup"
 	"github.com/free5gc/n3iwf/pkg/app"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
-	"github.com/free5gc/n3iwf/pkg/ike"
-	"github.com/free5gc/n3iwf/pkg/ike/xfrm"
 )
 
 var N3IWF *N3iwfApp
@@ -106,12 +106,13 @@ func (a *N3iwfApp) SetLogEnable(enable bool) {
 
 func (a *N3iwfApp) SetLogLevel(level string) {
 	lvl, err := logrus.ParseLevel(level)
+	mainLog := logger.MainLog
 	if err != nil {
-		logger.MainLog.Warnf("Log level [%s] is invalid", level)
+		mainLog.Warnf("Log level [%s] is invalid", level)
 		return
 	}
 
-	logger.MainLog.Infof("Log level is set to [%s]", level)
+	mainLog.Infof("Log level is set to [%s]", level)
 	if lvl == logger.Log.GetLevel() {
 		return
 	}
@@ -134,6 +135,7 @@ func (a *N3iwfApp) Run() error {
 	if err := a.initDefaultXfrmInterface(); err != nil {
 		return err
 	}
+	mainLog := logger.MainLog
 
 	a.wg.Add(1)
 	go a.listenShutdownEvent()
@@ -142,28 +144,28 @@ func (a *N3iwfApp) Run() error {
 	if err := a.ngapServer.Run(&a.wg); err != nil {
 		return errors.Wrapf(err, "Run()")
 	}
-	logger.MainLog.Infof("NGAP service running.")
+	mainLog.Infof("NGAP service running.")
 
 	// Relay listeners
 	// Control plane
 	if err := a.nwucpServer.Run(&a.wg); err != nil {
 		return errors.Wrapf(err, "Listen NWu control plane traffic failed")
 	}
-	logger.MainLog.Infof("NAS TCP server successfully started.")
+	mainLog.Infof("NAS TCP server successfully started.")
 
-	// User plane
+	// User plane of N3IWF
 	if err := a.nwuupServer.Run(&a.wg); err != nil {
 		return errors.Wrapf(err, "Listen NWu user plane traffic failed")
 	}
-	logger.MainLog.Infof("Listening NWu user plane traffic")
+	mainLog.Infof("Listening NWu user plane traffic")
 
 	// IKE
 	if err := a.ikeServer.Run(&a.wg); err != nil {
 		return errors.Wrapf(err, "Start IKE service failed")
 	}
-	logger.MainLog.Infof("IKE service running")
+	mainLog.Infof("IKE service running")
 
-	logger.MainLog.Infof("N3IWF started")
+	mainLog.Infof("N3IWF started")
 
 	a.WaitRoutineStopped()
 	return nil
@@ -201,13 +203,14 @@ func (a *N3iwfApp) initDefaultXfrmInterface() error {
 	var err error
 	n3iwfCtx := a.n3iwfCtx
 	cfg := a.Config()
+	mainLog := logger.MainLog
 	n3iwfIPAddr := net.ParseIP(cfg.GetIPSecGatewayAddr()).To4()
 	n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfCtx.UeIPRange.Mask}
 	newXfrmiName := fmt.Sprintf("%s-default", cfg.GetXfrmIfaceName())
 
 	if linkIPSec, err = xfrm.SetupIPsecXfrmi(newXfrmiName, n3iwfCtx.XfrmParentIfaceName,
 		cfg.GetXfrmIfaceId(), n3iwfIPAddrAndSubnet); err != nil {
-		logger.MainLog.Errorf("Setup XFRM interface %s fail: %+v", newXfrmiName, err)
+		mainLog.Errorf("Setup XFRM interface %s fail: %+v", newXfrmiName, err)
 		return err
 	}
 
@@ -217,10 +220,10 @@ func (a *N3iwfApp) initDefaultXfrmInterface() error {
 	}
 
 	if err := netlink.RouteAdd(route); err != nil {
-		logger.MainLog.Warnf("netlink.RouteAdd: %+v", err)
+		mainLog.Warnf("netlink.RouteAdd: %+v", err)
 	}
 
-	logger.MainLog.Infof("Setup XFRM interface %s ", newXfrmiName)
+	mainLog.Infof("Setup XFRM interface %s ", newXfrmiName)
 
 	n3iwfCtx.XfrmIfaces.LoadOrStore(cfg.GetXfrmIfaceId(), linkIPSec)
 	n3iwfCtx.XfrmIfaceIdOffsetForUP = 1
@@ -229,16 +232,18 @@ func (a *N3iwfApp) initDefaultXfrmInterface() error {
 }
 
 func (a *N3iwfApp) removeIPsecInterfaces() {
+	mainLog := logger.MainLog
 	a.n3iwfCtx.XfrmIfaces.Range(
 		func(key, value interface{}) bool {
 			iface := value.(netlink.Link)
 			if err := netlink.LinkDel(iface); err != nil {
-				logger.MainLog.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
+				mainLog.Errorf("Delete interface %s fail: %+v", iface.Attrs().Name, err)
 			} else {
-				logger.MainLog.Infof("Delete interface: %s", iface.Attrs().Name)
+				mainLog.Infof("Delete interface: %s", iface.Attrs().Name)
 			}
 			return true
-		})
+		},
+	)
 }
 
 func (a *N3iwfApp) Terminate() {
@@ -249,18 +254,15 @@ func (a *N3iwfApp) terminateProcedure() {
 	logger.MainLog.Info("Stopping service created by N3IWF")
 
 	a.ngapServer.Stop()
-
 	a.nwucpServer.Stop()
-
 	a.nwuupServer.Stop()
-
 	a.ikeServer.Stop()
 }
 
-func (a *N3iwfApp) NgapEvtCh() chan n3iwf_context.NgapEvt {
-	return a.ngapServer.RcvEventCh
+func (a *N3iwfApp) SendNgapEvt(evt n3iwf_context.NgapEvt) error {
+	return a.ngapServer.SendNgapEvt(evt)
 }
 
-func (a *N3iwfApp) IkeEvtCh() chan n3iwf_context.IkeEvt {
-	return a.ikeServer.RcvEventCh
+func (a *N3iwfApp) SendIkeEvt(evt n3iwf_context.IkeEvt) error {
+	return a.ikeServer.SendIkeEvt(evt)
 }

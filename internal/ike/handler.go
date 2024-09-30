@@ -25,9 +25,9 @@ import (
 	"github.com/free5gc/ike/security/encr"
 	"github.com/free5gc/ike/security/integ"
 	"github.com/free5gc/ike/security/prf"
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
+	"github.com/free5gc/n3iwf/internal/ike/xfrm"
 	"github.com/free5gc/n3iwf/internal/logger"
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
-	"github.com/free5gc/n3iwf/pkg/ike/xfrm"
 )
 
 func (s *Server) HandleIKESAINIT(
@@ -161,7 +161,7 @@ func (s *Server) HandleIKESAINIT(
 		return
 	}
 
-	ikeLog.Debugf(ikeSecurityAssociation.String())
+	ikeLog.Debugln(ikeSecurityAssociation.String())
 
 	// Record concatenated nonce
 	ikeSecurityAssociation.ConcatenatedNonce = append(
@@ -505,7 +505,9 @@ func (s *Server) HandleIKEAUTH(
 			return
 		}
 
-		signedAuth, err := rsa.SignPKCS1v15(
+		var signedAuth []byte
+
+		signedAuth, err = rsa.SignPKCS1v15(
 			rand.Reader, n3iwfCtx.N3IWFPrivateKey,
 			crypto.SHA1, sha1HashFunction.Sum(nil))
 		if err != nil {
@@ -616,12 +618,16 @@ func (s *Server) HandleIKEAUTH(
 				ranNgapId = 0
 			}
 
-			s.NgapEvtCh() <- n3iwf_context.NewUnmarshalEAP5GDataEvt(
+			err := s.SendNgapEvt(n3iwf_context.NewUnmarshalEAP5GDataEvt(
 				ikeSecurityAssociation.LocalSPI,
 				eapExpanded.VendorData,
 				ikeSecurityAssociation.IkeUE != nil,
 				ranNgapId,
-			)
+			))
+			if err != nil {
+				ikeLog.Errorf("SendNgapEvt[Unmarshal EAP5G Data] failed: %+v", err)
+				return
+			}
 
 			ikeSecurityAssociation.IKEConnection = &n3iwf_context.UDPSocketInfo{
 				Conn:      udpConn,
@@ -888,14 +894,20 @@ func (s *Server) HandleIKEAUTH(
 		ikeSecurityAssociation.State++
 
 		// After this, N3IWF will forward NAS with Child SA (IPSec SA)
-		s.NgapEvtCh() <- n3iwf_context.NewStartTCPSignalNASMsgEvt(
-			ranNgapId,
-		)
+		err = s.SendNgapEvt(n3iwf_context.NewStartTCPSignalNASMsgEvt(ranNgapId))
+		if err != nil {
+			ikeLog.Errorf("SendNgapEvt[Start TCP Signal NAS Msg] failed: %+v", err)
+			return
+		}
 
 		// Get TempPDUSessionSetupData from NGAP to setup PDU session if needed
-		s.NgapEvtCh() <- n3iwf_context.NewGetNGAPContextEvt(
+		err = s.SendNgapEvt(n3iwf_context.NewGetNGAPContextEvt(
 			ranNgapId, []int64{n3iwf_context.CxtTempPDUSessionSetupData},
-		)
+		))
+		if err != nil {
+			ikeLog.Errorf("SendNgapEvt[Get NGAP Context] failed: %+v", err)
+			return
+		}
 	}
 }
 
@@ -979,8 +991,11 @@ func (s *Server) HandleCREATECHILDSA(
 
 	ngapCxtReqNumlist := []int64{n3iwf_context.CxtTempPDUSessionSetupData}
 
-	s.NgapEvtCh() <- n3iwf_context.NewGetNGAPContextEvt(ranNgapId,
-		ngapCxtReqNumlist)
+	err := s.SendNgapEvt(n3iwf_context.NewGetNGAPContextEvt(ranNgapId, ngapCxtReqNumlist))
+	if err != nil {
+		ikeLog.Errorf("SendNgapEvt[Get NGAP Context] failed: %+v", err)
+		return
+	}
 }
 
 func (s *Server) continueCreateChildSA(
@@ -1109,7 +1124,7 @@ func (s *Server) continueCreateChildSA(
 		ikeLog.Errorf("Applying XFRM rules failed: %v", err)
 		return
 	}
-	ikeLog.Debugf(childSecurityAssociationContext.String(newXfrmiId))
+	ikeLog.Debugln(childSecurityAssociationContext.String(newXfrmiId))
 
 	ranNgapId, ok := n3iwfCtx.NgapIdLoad(ikeSecurityAssociation.LocalSPI)
 	if !ok {
@@ -1118,9 +1133,11 @@ func (s *Server) continueCreateChildSA(
 		return
 	}
 	// Forward PDU Seesion Establishment Accept to UE
-	s.NgapEvtCh() <- n3iwf_context.NewSendNASMsgEvt(
-		ranNgapId,
-	)
+	err = s.SendNgapEvt(n3iwf_context.NewSendNASMsgEvt(ranNgapId))
+	if err != nil {
+		ikeLog.Errorf("SendNgapEvt[Send NAS Msg] failed: %+v", err)
+		return
+	}
 
 	temporaryPDUSessionSetupData.FailedErrStr = append(temporaryPDUSessionSetupData.FailedErrStr, n3iwf_context.ErrNil)
 
@@ -1156,8 +1173,9 @@ func (s *Server) HandleInformational(
 	for _, ikePayload := range message.Payloads {
 		switch ikePayload.Type() {
 		case ike_message.TypeD:
-			deletePayload := ikePayload.(*ike_message.Delete)
+			var err error
 
+			deletePayload := ikePayload.(*ike_message.Delete)
 			ranNgapId, ok := n3iwfCtx.NgapIdLoad(n3iwfIke.N3IWFIKESecurityAssociation.LocalSPI)
 			if !ok {
 				ikeLog.Errorf("Cannot get RanNgapId from SPI : %+v",
@@ -1166,17 +1184,21 @@ func (s *Server) HandleInformational(
 			}
 
 			if deletePayload.ProtocolID == ike_message.TypeIKE { // Check if UE is response to a request that delete the ike SA
-				err := n3iwfIke.Remove()
+				err = n3iwfIke.Remove()
 				if err != nil {
 					ikeLog.Errorf("Delete IkeUe Context error : %v", err)
 				}
-				s.NgapEvtCh() <- n3iwf_context.NewSendUEContextReleaseCompleteEvt(
-					ranNgapId,
-				)
+				err = s.SendNgapEvt(n3iwf_context.NewSendUEContextReleaseCompleteEvt(ranNgapId))
+				if err != nil {
+					ikeLog.Errorf("SendNgapEvt[Send UE Ctx Release Complete] failed: %+v", err)
+					return
+				}
 			} else if deletePayload.ProtocolID == ike_message.TypeESP {
-				s.NgapEvtCh() <- n3iwf_context.NewSendPDUSessionResourceReleaseResEvt(
-					ranNgapId,
-				)
+				err = s.SendNgapEvt(n3iwf_context.NewSendPDUSessionResourceReleaseResEvt(ranNgapId))
+				if err != nil {
+					ikeLog.Errorf("SendNgapEvt[Send PDU Sess Resource Release] failed: %+v", err)
+					return
+				}
 			}
 		default:
 			ikeLog.Warnf(
@@ -1247,12 +1269,16 @@ func (s *Server) HandleUnmarshalEAP5GDataResponse(ikeEvt n3iwf_context.IkeEvt) {
 
 	n3iwfCtx.IkeSpiNgapIdMapping(ikeUe.N3IWFIKESecurityAssociation.LocalSPI, ranUeNgapId)
 
-	s.NgapEvtCh() <- n3iwf_context.NewSendInitialUEMessageEvt(
+	err := s.SendNgapEvt(n3iwf_context.NewSendInitialUEMessageEvt(
 		ranUeNgapId,
 		ikeSecurityAssociation.IKEConnection.UEAddr.IP.To4().String(),
 		ikeSecurityAssociation.IKEConnection.UEAddr.Port,
 		nasPDU,
-	)
+	))
+	if err != nil {
+		ikeLog.Errorf("SendNgapEvt[Send Init UE Message] failed: %+v", err)
+		return
+	}
 }
 
 func (s *Server) HandleSendEAP5GFailureMsg(ikeEvt n3iwf_context.IkeEvt) {
@@ -1667,9 +1693,10 @@ func (s *Server) CreatePDUSessionChildSA(
 				break
 			}
 		} else {
-			s.NgapEvtCh() <- n3iwf_context.NewSendPDUSessionResourceSetupResEvt(
-				ranNgapId,
-			)
+			err := s.SendNgapEvt(n3iwf_context.NewSendPDUSessionResourceSetupResEvt(ranNgapId))
+			if err != nil {
+				ikeLog.Errorf("SendNgapEvt[Send PDU Sess Resource Setup Res] failed: %+v", err)
+			}
 			break
 		}
 	}
@@ -1718,9 +1745,13 @@ func (s *Server) StartDPD(ikeUe *n3iwf_context.N3IWFIkeUe) {
 							return
 						}
 
-						s.NgapEvtCh() <- n3iwf_context.NewSendUEContextReleaseRequestEvt(
+						err := s.SendNgapEvt(n3iwf_context.NewSendUEContextReleaseRequestEvt(
 							ranNgapId, n3iwf_context.ErrRadioConnWithUeLost,
-						)
+						))
+						if err != nil {
+							ikeLog.Errorf("SendNgapEvt[Send UE Ctx Release Request] failed: %+v", err)
+							return
+						}
 
 						ikeSA.DPDReqRetransTimer = nil
 						timer.Stop()
