@@ -19,7 +19,7 @@ func TestSafeEvtCh(t *testing.T) {
 	// Two senders
 	wg.Add(2)
 	for i := 0; i < 2; i++ {
-		go func() {
+		go func(i int) {
 			if i == 0 {
 				// Case: send failed
 				time.Sleep(1 * time.Second)
@@ -32,7 +32,7 @@ func TestSafeEvtCh(t *testing.T) {
 				require.NoError(t, err)
 			}
 			wg.Done()
-		}()
+		}(i)
 	}
 
 	// One receiver
