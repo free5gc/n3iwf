@@ -119,7 +119,7 @@ type Info struct {
 type Configuration struct {
 	N3IWFInfo        *N3IWFNFInfo       `yaml:"n3iwfInformation"        valid:"required"`
 	LocalSctpAddr    string             `yaml:"localSctpAddr,omitempty" valid:"optional,host"`
-	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"AMFSCTPAddresses"        valid:"required"`
+	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"amfSCTPAddresses"        valid:"required"`
 
 	TCPPort              int         `yaml:"nasTcpPort"           valid:"required,port"`
 	IKEBindAddr          string      `yaml:"ikeBindAddress"       valid:"required,host"`
