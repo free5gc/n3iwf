@@ -8,7 +8,7 @@ require (
 	github.com/free5gc/ike v1.1.1-0.20241014015325-083f89768f43
 	github.com/free5gc/ngap v1.0.9-0.20240708062829-734d184eed74
 	github.com/free5gc/sctp v1.0.1
-	github.com/free5gc/util v1.0.7-0.20241016064137-5698cc626593
+	github.com/free5gc/util v1.0.7-0.20241017071924-da29aef99a1c
 	github.com/gin-contrib/pprof v1.5.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/gopacket v1.1.19

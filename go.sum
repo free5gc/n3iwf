@@ -24,8 +24,8 @@ github.com/free5gc/openapi v1.0.9-0.20240503143645-eac9f06c2f6b h1:+VcgZq+3apB6X
 github.com/free5gc/openapi v1.0.9-0.20240503143645-eac9f06c2f6b/go.mod h1:0qRW+H1/Nyzw5tjjvyp+90m+2SOZZefGQC9QV8iPwu8=
 github.com/free5gc/sctp v1.0.1 h1:g8WDO97r8B9ubkT5Hyk9b4I1fZUOii9Z39gQ2eRaASo=
 github.com/free5gc/sctp v1.0.1/go.mod h1:7QXfRWCmlkBGD0EIu3qL5o71bslfIakydz4h2QDZdjQ=
-github.com/free5gc/util v1.0.7-0.20241016064137-5698cc626593 h1:Wp32mLckyP25feOmwHBTS32pSkIAjuZgq8iP7njbe/k=
-github.com/free5gc/util v1.0.7-0.20241016064137-5698cc626593/go.mod h1:IHKIBd4OM9rwSJ0fG/hv6pXbVC+Eu4Lcaq++BWkfSsY=
+github.com/free5gc/util v1.0.7-0.20241017071924-da29aef99a1c h1:vJ3IJPvW4gt7i7d3y8KMp42jypeKsfUG+CqSiFRoXAU=
+github.com/free5gc/util v1.0.7-0.20241017071924-da29aef99a1c/go.mod h1:IHKIBd4OM9rwSJ0fG/hv6pXbVC+Eu4Lcaq++BWkfSsY=
 github.com/gabriel-vasile/mimetype v1.4.3 h1:in2uUcidCuFcDKtdcBxlR0rJ1+fsokWf+uqxgUFjbI0=
 github.com/gabriel-vasile/mimetype v1.4.3/go.mod h1:d8uq/6HKRL6CGdk+aubisF/M5GcPfT7nKyLpA0lbSSk=
 github.com/gin-contrib/pprof v1.5.0 h1:E/Oy7g+kNw94KfdCy3bZxQFtyDnAX2V7axRS7sNYVrU=
