@@ -3,6 +3,7 @@ package ike
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"runtime/debug"
@@ -173,6 +174,7 @@ func (s *Server) receiver(
 
 		msgBuf := make([]byte, n)
 		copy(msgBuf, buf)
+		ikeLog.Tracef("recv from port(%d):\n%s", localAddr.Port, hex.Dump(msgBuf))
 
 		// As specified in RFC 7296 section 3.1, the IKE message send from/to UDP port 4500
 		// should prepend a 4 bytes zero
@@ -349,6 +351,9 @@ func constructPacketWithESP(srcIP, dstIP *net.UDPAddr, espPacket []byte) ([]byte
 }
 
 func handleESPPacket(srcIP, dstIP *net.UDPAddr, espPacket []byte) error {
+	ikeLog := logger.IKELog
+	ikeLog.Tracef("Handle ESPPacket")
+
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_RAW)
 	if err != nil {
 		return errors.Errorf("socket error: %v", err)
@@ -356,7 +361,7 @@ func handleESPPacket(srcIP, dstIP *net.UDPAddr, espPacket []byte) error {
 
 	defer func() {
 		if err = syscall.Close(fd); err != nil {
-			logger.IKELog.Errorf("Close fd error : %v", err)
+			ikeLog.Errorf("Close fd error : %v", err)
 		}
 	}()
 

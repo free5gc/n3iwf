@@ -9,6 +9,7 @@ import (
 	ike_message "github.com/free5gc/ike/message"
 	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/pkg/factory"
+	"github.com/free5gc/util/ippool"
 )
 
 func TestRemoveIkeUe(t *testing.T) {
@@ -22,7 +23,13 @@ func TestRemoveIkeUe(t *testing.T) {
 	ikeSA := n3iwfCtx.NewIKESecurityAssociation()
 	ikeUe := n3iwfCtx.NewN3iwfIkeUe(ikeSA.LocalSPI)
 	ikeUe.N3IWFIKESecurityAssociation = ikeSA
+	ikeUe.IPSecInnerIP = net.ParseIP("10.0.0.1")
 	ikeSA.IsUseDPD = false
+
+	n3iwfCtx.IPSecInnerIPPool, err = ippool.NewIPPool("10.0.0.0/24")
+	require.NoError(t, err)
+	_, err = n3iwfCtx.IPSecInnerIPPool.Allocate(nil)
+	require.NoError(t, err)
 
 	ikeUe.CreateHalfChildSA(1, 123, 1)
 

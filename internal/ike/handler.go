@@ -737,7 +737,13 @@ func (s *Server) HandleIKEAUTH(
 		var ueIPAddr, n3iwfIPAddr net.IP
 		if addrRequest {
 			// IP addresses (IPSec)
-			ueIPAddr = n3iwfCtx.NewInternalUEIPAddr(ikeUE).To4()
+			var ueIp net.IP
+			ueIp, err = n3iwfCtx.NewIPsecInnerUEIP(ikeUE)
+			if err != nil {
+				ikeLog.Errorf("HandleIKEAUTH(): %v", err)
+				return
+			}
+			ueIPAddr = ueIp.To4()
 			n3iwfIPAddr = net.ParseIP(ipsecGwAddr).To4()
 
 			responseConfiguration := responseIKEPayload.BuildConfiguration(
@@ -745,7 +751,7 @@ func (s *Server) HandleIKEAUTH(
 			responseConfiguration.ConfigurationAttribute.BuildConfigurationAttribute(
 				ike_message.INTERNAL_IP4_ADDRESS, ueIPAddr)
 			responseConfiguration.ConfigurationAttribute.BuildConfigurationAttribute(
-				ike_message.INTERNAL_IP4_NETMASK, n3iwfCtx.UeIPRange.Mask)
+				ike_message.INTERNAL_IP4_NETMASK, n3iwfCtx.IPSecInnerIPPool.IPSubnet.Mask)
 
 			var ipsecInnerIPAddr *net.IPAddr
 			ikeUE.IPSecInnerIP = ueIPAddr
@@ -1072,7 +1078,7 @@ func (s *Server) continueCreateChildSA(
 		// Setup XFRM interface for ipsec
 		var linkIPSec netlink.Link
 		n3iwfIPAddr := net.ParseIP(ipsecGwAddr).To4()
-		n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfCtx.UeIPRange.Mask}
+		n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfCtx.IPSecInnerIPPool.IPSubnet.Mask}
 		newXfrmiId += cfg.GetXfrmIfaceId() + n3iwfCtx.XfrmIfaceIdOffsetForUP
 		newXfrmiName := fmt.Sprintf("%s-%d", cfg.GetXfrmIfaceName(), newXfrmiId)
 
@@ -1152,7 +1158,6 @@ func (s *Server) HandleInformational(
 		switch ikePayload.Type() {
 		case ike_message.TypeD:
 			deletePayload = ikePayload.(*ike_message.Delete)
-
 		default:
 			ikeLog.Warnf(
 				"Get IKE payload (type %d) in Inoformational message, this payload will not be handled by IKE handler",

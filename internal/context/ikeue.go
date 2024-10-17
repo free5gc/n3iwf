@@ -217,6 +217,11 @@ func (ikeUe *N3IWFIkeUe) Remove() error {
 	n3iwfCtx.DeleteIKESecurityAssociation(ikeUe.N3IWFIKESecurityAssociation.LocalSPI)
 	n3iwfCtx.DeleteInternalUEIPAddr(ikeUe.IPSecInnerIP.String())
 
+	err := n3iwfCtx.IPSecInnerIPPool.Release(net.ParseIP(ikeUe.IPSecInnerIP.String()).To4())
+	if err != nil {
+		return errors.Wrapf(err, "N3IWFIkeUe Remove()")
+	}
+
 	for _, childSA := range ikeUe.N3IWFChildSecurityAssociation {
 		if err := ikeUe.DeleteChildSA(childSA); err != nil {
 			return err

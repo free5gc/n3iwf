@@ -24,6 +24,7 @@ import (
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/sctp"
 	"github.com/free5gc/util/idgenerator"
+	"github.com/free5gc/util/ippool"
 )
 
 type n3iwf interface {
@@ -56,7 +57,8 @@ type N3IWFContext struct {
 	N3IWFCertificate     []byte
 	N3IWFPrivateKey      *rsa.PrivateKey
 
-	UeIPRange *net.IPNet
+	IPSecInnerIPPool *ippool.IPPool
+	// TODO: [TWIF] TwifUe may has its own IP address pool
 
 	/* XFRM interface */
 	XfrmIfaces          sync.Map // map[uint32]*netlink.Link, XfrmIfaceId as key
@@ -119,11 +121,11 @@ func NewContext(n3iwf n3iwf) (*N3IWFContext, error) {
 	n.N3IWFCertificate = block.Bytes
 
 	// UE IP address range
-	_, ueIPRange, err := net.ParseCIDR(cfg.GetUEIPAddrRange())
+	ueIPPool, err := ippool.NewIPPool(cfg.GetUEIPAddrRange())
 	if err != nil {
-		return nil, errors.Errorf("Parse CIDR failed: %+v", err)
+		return nil, errors.Errorf("NewContext(): %+v", err)
 	}
-	n.UeIPRange = ueIPRange
+	n.IPSecInnerIPPool = ueIPPool
 
 	// XFRM related
 	ikeBindIfaceName, err := getInterfaceName(cfg.GetIKEBindAddr())
@@ -382,26 +384,30 @@ func (c *N3IWFContext) GTPConnectionWithUPFStore(upfAddr string, conn *gtpv1.UPl
 	c.GTPConnectionWithUPF.Store(upfAddr, conn)
 }
 
-func (c *N3IWFContext) NewInternalUEIPAddr(ikeUe *N3IWFIkeUe) net.IP {
+func (c *N3IWFContext) NewIPsecInnerUEIP(ikeUe *N3IWFIkeUe) (net.IP, error) {
 	var ueIPAddr net.IP
-
+	var err error
 	cfg := c.Config()
 	ipsecGwAddr := cfg.GetIPSecGatewayAddr()
-	// TODO: Check number of allocated IP to detect running out of IPs
+
 	for {
-		ueIPAddr = generateRandomIPinRange(c.UeIPRange)
-		if ueIPAddr != nil {
-			if ueIPAddr.String() == ipsecGwAddr {
-				continue
-			}
-			_, ok := c.AllocatedUEIPAddress.LoadOrStore(ueIPAddr.String(), ikeUe)
-			if !ok {
-				break
-			}
+		ueIPAddr, err = c.IPSecInnerIPPool.Allocate(nil)
+		if err != nil {
+			return nil, errors.Wrapf(err, "NewIPsecInnerUEIP()")
+		}
+		if ueIPAddr.String() == ipsecGwAddr {
+			continue
+		}
+		_, ok := c.AllocatedUEIPAddress.LoadOrStore(ueIPAddr.String(), ikeUe)
+		if ok {
+			logger.CtxLog.Warnf("NewIPsecInnerUEIP(): IP(%v) is used by other IkeUE",
+				ueIPAddr.String())
+		} else {
+			break
 		}
 	}
 
-	return ueIPAddr
+	return ueIPAddr, nil
 }
 
 func (c *N3IWFContext) DeleteInternalUEIPAddr(ipAddr string) {
@@ -474,23 +480,4 @@ func (c *N3IWFContext) AMFSelection(
 		availableAMF = defaultAMF
 	}
 	return availableAMF
-}
-
-func generateRandomIPinRange(subnet *net.IPNet) net.IP {
-	ipAddr := make([]byte, 4)
-	randomNumber := make([]byte, 4)
-
-	_, err := rand.Read(randomNumber)
-	if err != nil {
-		logger.CtxLog.Errorf("Generate random number for IP address failed: %+v", err)
-		return nil
-	}
-
-	// TODO: elimenate network name, gateway, and broadcast
-	for i := 0; i < 4; i++ {
-		alter := randomNumber[i] & (subnet.Mask[i] ^ 255)
-		ipAddr[i] = subnet.IP[i] + alter
-	}
-
-	return net.IPv4(ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
 }

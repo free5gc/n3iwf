@@ -205,7 +205,7 @@ func (a *N3iwfApp) initDefaultXfrmInterface() error {
 	cfg := a.Config()
 	mainLog := logger.MainLog
 	n3iwfIPAddr := net.ParseIP(cfg.GetIPSecGatewayAddr()).To4()
-	n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfCtx.UeIPRange.Mask}
+	n3iwfIPAddrAndSubnet := net.IPNet{IP: n3iwfIPAddr, Mask: n3iwfCtx.IPSecInnerIPPool.IPSubnet.Mask}
 	newXfrmiName := fmt.Sprintf("%s-default", cfg.GetXfrmIfaceName())
 
 	if linkIPSec, err = xfrm.SetupIPsecXfrmi(newXfrmiName, n3iwfCtx.XfrmParentIfaceName,
@@ -216,7 +216,7 @@ func (a *N3iwfApp) initDefaultXfrmInterface() error {
 
 	route := &netlink.Route{
 		LinkIndex: linkIPSec.Attrs().Index,
-		Dst:       n3iwfCtx.UeIPRange,
+		Dst:       n3iwfCtx.IPSecInnerIPPool.IPSubnet,
 	}
 
 	if err := netlink.RouteAdd(route); err != nil {
