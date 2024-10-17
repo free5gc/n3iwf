@@ -1,7 +1,6 @@
 package ike
 
 import (
-	"encoding/binary"
 	"math"
 	"net"
 
@@ -18,7 +17,7 @@ import (
 func SendIKEMessageToUE(
 	udpConn *net.UDPConn,
 	srcAddr, dstAddr *net.UDPAddr,
-	message *message.IKEMessage,
+	message *ike_message.IKEMessage,
 	ikeSAKey *security.IKESAKey,
 ) error {
 	ikeLog := logger.IKELog
@@ -49,21 +48,19 @@ func SendIKEMessageToUE(
 
 func SendUEInformationExchange(
 	ikeSA *n3iwf_context.IKESecurityAssociation,
-	payload *message.IKEPayloadContainer, ike_flag uint8, messageID uint32,
-	conn *net.UDPConn, ueAddr *net.UDPAddr, n3iwfAddr *net.UDPAddr,
+	ikeSAKey *security.IKESAKey,
+	payload *ike_message.IKEPayloadContainer, initiator bool,
+	response bool, messageID uint32, conn *net.UDPConn,
+	ueAddr *net.UDPAddr, n3iwfAddr *net.UDPAddr,
 ) {
 	ikeLog := logger.IKELog
-	responseIKEMessage := new(message.IKEMessage)
-	var ikeSAKey *security.IKESAKey
+
 	// Build IKE message
-	responseIKEMessage.BuildIKEHeader(
-		ikeSA.RemoteSPI, ikeSA.LocalSPI,
-		message.INFORMATIONAL, ike_flag,
-		messageID)
+	responseIKEMessage := ike_message.NewMessage(ikeSA.RemoteSPI, ikeSA.LocalSPI,
+		ike_message.INFORMATIONAL, response, initiator, messageID, nil)
 
 	if payload != nil && len(*payload) > 0 {
 		responseIKEMessage.Payloads = append(responseIKEMessage.Payloads, *payload...)
-		ikeSAKey = ikeSA.IKESAKey
 	}
 
 	err := SendIKEMessageToUE(conn, n3iwfAddr, ueAddr, responseIKEMessage, ikeSAKey)
@@ -83,9 +80,9 @@ func SendIKEDeleteRequest(n3iwfCtx *n3iwf_context.N3IWFContext, localSPI uint64)
 
 	var deletePayload message.IKEPayloadContainer
 	deletePayload.BuildDeletePayload(message.TypeIKE, 0, 0, nil)
-	SendUEInformationExchange(ikeUe.N3IWFIKESecurityAssociation, &deletePayload, 0,
-		ikeUe.N3IWFIKESecurityAssociation.ResponderMessageID, ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr,
-		ikeUe.IKEConnection.N3IWFAddr)
+	SendUEInformationExchange(ikeUe.N3IWFIKESecurityAssociation, ikeUe.N3IWFIKESecurityAssociation.IKESAKey,
+		&deletePayload, false, false, ikeUe.N3IWFIKESecurityAssociation.ResponderMessageID,
+		ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr, ikeUe.IKEConnection.N3IWFAddr)
 }
 
 func SendChildSADeleteRequest(
@@ -93,19 +90,17 @@ func SendChildSADeleteRequest(
 	relaseList []int64,
 ) {
 	ikeLog := logger.IKELog
-	var deleteSPIs []byte
+	var deleteSPIs []uint32
 	spiLen := uint16(0)
 	for _, releaseItem := range relaseList {
 		for _, childSA := range ikeUe.N3IWFChildSecurityAssociation {
 			if childSA.PDUSessionIds[0] == releaseItem {
-				spiByte := make([]byte, 4)
 				spi := childSA.XfrmStateList[0].Spi
 				if spi < 0 || spi > math.MaxUint32 {
 					ikeLog.Errorf("SendChildSADeleteRequest spi out of uint32 range : %d", spi)
 					return
 				}
-				binary.BigEndian.PutUint32(spiByte, uint32(spi))
-				deleteSPIs = append(deleteSPIs, spiByte...)
+				deleteSPIs = append(deleteSPIs, uint32(spi))
 				spiLen += 1
 				err := ikeUe.DeleteChildSA(childSA)
 				if err != nil {
@@ -118,7 +113,7 @@ func SendChildSADeleteRequest(
 
 	var deletePayload message.IKEPayloadContainer
 	deletePayload.BuildDeletePayload(message.TypeESP, 4, spiLen, deleteSPIs)
-	SendUEInformationExchange(ikeUe.N3IWFIKESecurityAssociation, &deletePayload, 0,
-		ikeUe.N3IWFIKESecurityAssociation.ResponderMessageID, ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr,
-		ikeUe.IKEConnection.N3IWFAddr)
+	SendUEInformationExchange(ikeUe.N3IWFIKESecurityAssociation, ikeUe.N3IWFIKESecurityAssociation.IKESAKey,
+		&deletePayload, false, false, ikeUe.N3IWFIKESecurityAssociation.ResponderMessageID,
+		ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr, ikeUe.IKEConnection.N3IWFAddr)
 }

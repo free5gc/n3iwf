@@ -68,10 +68,8 @@ func NewTestCfg() *factory.Config {
 
 func TestHandleNattMsg(t *testing.T) {
 	initiatorSPI := uint64(0x123)
-	ikeMessage := new(ike_message.IKEMessage)
-	ikeMessage.BuildIKEHeader(initiatorSPI, 0,
-		ike_message.IKE_SA_INIT, ike_message.ResponseBitCheck, 0)
-
+	ikeMessage := ike_message.NewMessage(initiatorSPI, 0, ike_message.IKE_SA_INIT,
+		true, false, 0, nil)
 	pkt, err := ikeMessage.Encode()
 	require.NoError(t, err)
 
@@ -172,12 +170,12 @@ func TestCheckIKEMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	initiatorSPI := uint64(0x123)
-	ikeMsg := new(ike_message.IKEMessage)
 	nonceData := []byte("randomNonce")
-	ikeMsg.BuildIKEHeader(initiatorSPI, 0,
-		ike_message.IKE_SA_INIT, ike_message.ResponseBitCheck, 0)
-	ikeMsg.Payloads.Reset()
-	ikeMsg.Payloads.BuildNonce(nonceData)
+	payload := new(ike_message.IKEPayloadContainer)
+	payload.BuildNonce(nonceData)
+
+	ikeMsg := ike_message.NewMessage(initiatorSPI, 0, ike_message.IKE_SA_INIT,
+		true, false, 0, *payload)
 
 	tests := []struct {
 		name        string
@@ -196,7 +194,7 @@ func TestCheckIKEMessage(t *testing.T) {
 				IKEHeader: &ike_message.IKEHeader{
 					InitiatorSPI: initiatorSPI,
 					ExchangeType: ike_message.IKE_SA_INIT,
-					Flags:        ike_message.ResponseBitCheck,
+					Flags:        0,
 					MajorVersion: 3,
 					MinorVersion: 0,
 				},

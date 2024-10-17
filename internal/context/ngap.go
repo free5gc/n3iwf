@@ -1,6 +1,8 @@
 package context
 
-import "github.com/free5gc/ngap/ngapType"
+import (
+	"github.com/free5gc/ngap/ngapType"
+)
 
 type NgapEventType int64
 
@@ -13,8 +15,10 @@ const (
 	SendPDUSessionResourceSetupResponse
 	SendNASMsg
 	StartTCPSignalNASMsg
+	SendUEContextRelease
 	SendUEContextReleaseRequest
 	SendUEContextReleaseComplete
+	SendPDUSessionResourceRelease
 	SendPDUSessionResourceReleaseResponse
 	SendUplinkNASTransport
 	SendInitialContextSetupResponse
@@ -240,5 +244,35 @@ func NewSendInitialContextSetupRespEvt(
 		ResponseList:           responseList,
 		FailedList:             failedList,
 		CriticalityDiagnostics: criticalityDiagnostics,
+	}
+}
+
+type SendUEContextReleaseEvt struct {
+	RanUeNgapId int64
+}
+
+func (e *SendUEContextReleaseEvt) Type() NgapEventType {
+	return SendUEContextRelease
+}
+
+func NewSendUEContextReleaseEvt(ranUeNgapId int64) *SendUEContextReleaseEvt {
+	return &SendUEContextReleaseEvt{
+		RanUeNgapId: ranUeNgapId,
+	}
+}
+
+type SendPDUSessionResourceReleaseEvt struct {
+	RanUeNgapId int64
+	DeletPduIds []int64
+}
+
+func (e *SendPDUSessionResourceReleaseEvt) Type() NgapEventType {
+	return SendPDUSessionResourceRelease
+}
+
+func NewendPDUSessionResourceReleaseEvt(ranUeNgapId int64, deletPduIds []int64) *SendPDUSessionResourceReleaseEvt {
+	return &SendPDUSessionResourceReleaseEvt{
+		RanUeNgapId: ranUeNgapId,
+		DeletPduIds: deletPduIds,
 	}
 }

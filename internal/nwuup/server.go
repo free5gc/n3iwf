@@ -309,6 +309,10 @@ func (s *Server) forwardDL(packet gtpQoSMsg.QoSTPDUPacket) {
 			break
 		}
 	}
+	if cm == nil {
+		nwuupLog.Warnf("forwardDL(): Cannot match TEID(%d) to ChildSA", pktTEID)
+		return
+	}
 
 	var (
 		qfi uint8

@@ -1156,19 +1156,14 @@ func (s *Server) HandleUEContextReleaseCommand(
 		printAndGetCause(cause)
 	}
 
-	ranUeCtx := ranUe.GetSharedCtx()
+	ranUe.GetSharedCtx().UeCtxRelState = n3iwf_context.UeCtxRelStateOngoing
 
-	localSPI, ok := n3iwfCtx.IkeSpiLoad(ranUeCtx.RanUeNgapId)
-	if !ok {
-		ngapLog.Errorf("Cannot get SPI from RanUeNgapID : %+v", ranUeCtx.RanUeNgapId)
-		return
-	}
+	message.SendUEContextReleaseComplete(ranUe, nil)
 
-	err := s.SendIkeEvt(n3iwf_context.NewIKEDeleteRequestEvt(localSPI))
+	err := s.releaseIkeUeAndRanUe(ranUe)
 	if err != nil {
-		ngapLog.Errorf("SendIkeEvt[IKE Delete Req] failed: %+v", err)
+		ngapLog.Warnf("HandleUEContextReleaseCommand(): %v", err)
 	}
-	// TODO: release pdu session and gtp info for ue
 }
 
 func (s *Server) releaseIkeUeAndRanUe(ranUe n3iwf_context.RanUe) error {
@@ -2142,6 +2137,7 @@ func (s *Server) HandlePDUSessionResourceReleaseCommand(
 		ngapLog.Errorf("Cannot get SPI from RanUeNgapID : %+v", rANUENGAPID.Value)
 		return
 	}
+	ranUe.GetSharedCtx().PduSessResRelState = n3iwf_context.PduSessResRelStateOngoing
 
 	err := s.SendIkeEvt(n3iwf_context.NewSendChildSADeleteRequestEvt(localSPI, releaseIdList))
 	if err != nil {
@@ -2830,10 +2826,14 @@ func (s *Server) HandleEvent(ngapEvent n3iwf_context.NgapEvt) {
 		s.HandleStartTCPSignalNASMsg(ngapEvent)
 	case n3iwf_context.NASTCPConnEstablishedComplete:
 		s.HandleNASTCPConnEstablishedComplete(ngapEvent)
+	case n3iwf_context.SendUEContextRelease:
+		s.HandleSendSendUEContextRelease(ngapEvent)
 	case n3iwf_context.SendUEContextReleaseRequest:
 		s.HandleSendUEContextReleaseRequest(ngapEvent)
 	case n3iwf_context.SendUEContextReleaseComplete:
 		s.HandleSendUEContextReleaseComplete(ngapEvent)
+	case n3iwf_context.SendPDUSessionResourceRelease:
+		s.HandleSendSendPDUSessionResourceRelease(ngapEvent)
 	case n3iwf_context.SendPDUSessionResourceReleaseResponse:
 		s.HandleSendPDUSessionResourceReleaseRes(ngapEvent)
 	case n3iwf_context.GetNGAPContext:
@@ -3288,4 +3288,60 @@ func (s *Server) HandleSendInitialContextSetupResponse(
 	}
 
 	message.SendInitialContextSetupResponse(ranUe, evt.ResponseList, evt.FailedList, evt.CriticalityDiagnostics)
+}
+
+func (s *Server) HandleSendSendUEContextRelease(
+	ngapEvent n3iwf_context.NgapEvt,
+) {
+	ngapLog := logger.NgapLog
+	ngapLog.Tracef("Handle SendSendUEContextRelease Event")
+
+	evt := ngapEvent.(*n3iwf_context.SendUEContextReleaseEvt)
+	ranUeNgapId := evt.RanUeNgapId
+	n3iwfCtx := s.Context()
+	ranUe, ok := n3iwfCtx.RanUePoolLoad(ranUeNgapId)
+	if !ok {
+		ngapLog.Errorf("Cannot get RanUE from ranUeNgapId : %+v", ranUeNgapId)
+		return
+	}
+
+	if ranUe.GetSharedCtx().UeCtxRelState {
+		if err := ranUe.Remove(); err != nil {
+			ngapLog.Errorf("Delete RanUe Context error : %v", err)
+		}
+		message.SendUEContextReleaseComplete(ranUe, nil)
+		ranUe.GetSharedCtx().UeCtxRelState = n3iwf_context.UeCtxRelStateNone
+	} else {
+		cause := message.BuildCause(ngapType.CausePresentRadioNetwork,
+			ngapType.CauseRadioNetworkPresentRadioConnectionWithUeLost)
+		message.SendUEContextReleaseRequest(ranUe, *cause)
+		ranUe.GetSharedCtx().UeCtxRelState = n3iwf_context.UeCtxRelStateOngoing
+	}
+}
+
+func (s *Server) HandleSendSendPDUSessionResourceRelease(
+	ngapEvent n3iwf_context.NgapEvt,
+) {
+	ngapLog := logger.NgapLog
+	ngapLog.Tracef("Handle SendSendPDUSessionResourceRelease Event")
+
+	evt := ngapEvent.(*n3iwf_context.SendPDUSessionResourceReleaseEvt)
+	ranUeNgapId := evt.RanUeNgapId
+	deletPduIds := evt.DeletPduIds
+	n3iwfCtx := s.Context()
+	ranUe, ok := n3iwfCtx.RanUePoolLoad(ranUeNgapId)
+	if !ok {
+		ngapLog.Errorf("Cannot get RanUE from ranUeNgapId : %+v", ranUeNgapId)
+		return
+	}
+
+	if ranUe.GetSharedCtx().PduSessResRelState {
+		message.SendPDUSessionResourceReleaseResponse(ranUe, ranUe.GetSharedCtx().PduSessionReleaseList, nil)
+		ranUe.GetSharedCtx().PduSessResRelState = n3iwf_context.PduSessResRelStateNone
+	} else {
+		for _, id := range deletPduIds {
+			ranUe.GetSharedCtx().DeletePDUSession(id)
+		}
+		ranUe.GetSharedCtx().PduSessResRelState = n3iwf_context.PduSessResRelStateOngoing
+	}
 }

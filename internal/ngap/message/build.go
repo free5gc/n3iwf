@@ -631,22 +631,24 @@ func BuildUEContextReleaseRequest(ranUe n3iwf_context.RanUe, cause ngapType.Caus
 	uEContextReleaseRequestIEs.List = append(uEContextReleaseRequestIEs.List, ie)
 
 	// PDU Session Resource List
-	ie = ngapType.UEContextReleaseRequestIEs{}
-	ie.Id.Value = ngapType.ProtocolIEIDPDUSessionResourceListCxtRelReq
-	ie.Criticality.Value = ngapType.CriticalityPresentReject
-	ie.Value.Present = ngapType.UEContextReleaseRequestIEsPresentPDUSessionResourceListCxtRelReq
-	ie.Value.PDUSessionResourceListCxtRelReq = new(ngapType.PDUSessionResourceListCxtRelReq)
+	if len(ranUeCtx.PduSessionList) > 0 {
+		ie = ngapType.UEContextReleaseRequestIEs{}
+		ie.Id.Value = ngapType.ProtocolIEIDPDUSessionResourceListCxtRelReq
+		ie.Criticality.Value = ngapType.CriticalityPresentReject
+		ie.Value.Present = ngapType.UEContextReleaseRequestIEsPresentPDUSessionResourceListCxtRelReq
+		ie.Value.PDUSessionResourceListCxtRelReq = new(ngapType.PDUSessionResourceListCxtRelReq)
 
-	pDUSessionResourceListCxtRelReq := ie.Value.PDUSessionResourceListCxtRelReq
+		pDUSessionResourceListCxtRelReq := ie.Value.PDUSessionResourceListCxtRelReq
 
-	// PDU Session Resource Item in PDU session Resource List
-	for _, pduSession := range ranUeCtx.PduSessionList {
-		pDUSessionResourceItem := ngapType.PDUSessionResourceItemCxtRelReq{}
-		pDUSessionResourceItem.PDUSessionID.Value = pduSession.Id
-		pDUSessionResourceListCxtRelReq.List = append(pDUSessionResourceListCxtRelReq.List,
-			pDUSessionResourceItem)
+		// PDU Session Resource Item in PDU session Resource List
+		for _, pduSession := range ranUeCtx.PduSessionList {
+			pDUSessionResourceItem := ngapType.PDUSessionResourceItemCxtRelReq{}
+			pDUSessionResourceItem.PDUSessionID.Value = pduSession.Id
+			pDUSessionResourceListCxtRelReq.List = append(pDUSessionResourceListCxtRelReq.List,
+				pDUSessionResourceItem)
+		}
+		uEContextReleaseRequestIEs.List = append(uEContextReleaseRequestIEs.List, ie)
 	}
-	uEContextReleaseRequestIEs.List = append(uEContextReleaseRequestIEs.List, ie)
 
 	// Cause
 	ie = ngapType.UEContextReleaseRequestIEs{}

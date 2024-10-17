@@ -261,7 +261,7 @@ func (s *Server) checkIKEMessage(
 	var err error
 
 	// parse IKE header and setup IKE context
-	ikeHeader, err = ike_message.ParseIkeHeader(msg)
+	ikeHeader, err = ike_message.ParseHeader(msg)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "IKE msg decode header")
 	}
@@ -270,11 +270,11 @@ func (s *Server) checkIKEMessage(
 	if ikeHeader.MajorVersion > 2 {
 		// send INFORMATIONAL type message with INVALID_MAJOR_VERSION Notify payload
 		// For response or needed data
-		responseIKEMessage := new(ike_message.IKEMessage)
-		responseIKEMessage.BuildIKEHeader(ikeHeader.InitiatorSPI, ikeHeader.ResponderSPI,
-			ike_message.INFORMATIONAL, ike_message.ResponseBitCheck, ikeHeader.MessageID)
-		responseIKEMessage.Payloads.BuildNotification(ike_message.TypeNone,
+		payload := new(ike_message.IKEPayloadContainer)
+		payload.BuildNotification(ike_message.TypeNone,
 			ike_message.INVALID_MAJOR_VERSION, nil, nil)
+		responseIKEMessage := ike_message.NewMessage(ikeHeader.InitiatorSPI, ikeHeader.ResponderSPI,
+			ike_message.INFORMATIONAL, true, false, ikeHeader.MessageID, *payload)
 
 		err = SendIKEMessageToUE(udpConn, localAddr, remoteAddr, responseIKEMessage, nil)
 		if err != nil {
@@ -297,12 +297,11 @@ func (s *Server) checkIKEMessage(
 
 		ikeSA, ok = n3iwfCtx.IKESALoad(localSPI)
 		if !ok {
-			responseIKEMessage := new(ike_message.IKEMessage)
+			payload := new(ike_message.IKEPayloadContainer)
 			// send INFORMATIONAL type message with INVALID_IKE_SPI Notify payload ( OUTSIDE IKE SA )
-			responseIKEMessage.BuildIKEHeader(ikeHeader.InitiatorSPI, 0, ike_message.INFORMATIONAL,
-				ike_message.ResponseBitCheck, ikeHeader.MessageID)
-			responseIKEMessage.Payloads.Reset()
-			responseIKEMessage.Payloads.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
+			payload.BuildNotification(ike_message.TypeNone, ike_message.INVALID_IKE_SPI, nil, nil)
+			responseIKEMessage := ike_message.NewMessage(ikeHeader.InitiatorSPI, ikeHeader.ResponderSPI,
+				ike_message.INFORMATIONAL, true, false, ikeHeader.MessageID, *payload)
 
 			err = SendIKEMessageToUE(udpConn, localAddr, remoteAddr, responseIKEMessage, nil)
 			if err != nil {

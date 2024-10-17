@@ -7,6 +7,22 @@ import (
 	"github.com/free5gc/ngap/ngapType"
 )
 
+type UeCtxRelState bool
+
+const (
+	// NGAP has already received UE Context release command
+	UeCtxRelStateNone    UeCtxRelState = false
+	UeCtxRelStateOngoing UeCtxRelState = true
+)
+
+type PduSessResRelState bool
+
+const (
+	// NGAP has not received Pdu Session resouces release request
+	PduSessResRelStateNone    PduSessResRelState = false
+	PduSessResRelStateOngoing PduSessResRelState = true
+)
+
 type RanUe interface {
 	/* Get Attributes */
 	GetUserLocationInformation() *ngapType.UserLocationInformation
@@ -56,6 +72,8 @@ type RanUeSharedCtx struct {
 	IMSVoiceSupported                int32
 	RRCEstablishmentCause            int16
 	PduSessionReleaseList            ngapType.PDUSessionResourceReleasedListRelRes
+	UeCtxRelState                    UeCtxRelState
+	PduSessResRelState               PduSessResRelState
 }
 
 type PDUSession struct {

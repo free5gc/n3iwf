@@ -162,7 +162,7 @@ func (childSA *ChildSecurityAssociation) String(xfrmiId uint32) string {
 	return fmt.Sprintf("====== IPSec/Child SA Info ======"+
 		"\n====== Inbound ======"+
 		"\nXFRM interface if_id: %d"+
-		"\nIPSec Inbound  SPI: 0x%016x"+
+		"\nIPSec Inbound  SPI: 0x%08x"+
 		"\n[UE:%+v] -> [N3IWF:%+v]"+
 		"\nIPSec Encryption Algorithm: %d"+
 		"\nIPSec Encryption Key: 0x%x"+
@@ -171,7 +171,7 @@ func (childSA *ChildSecurityAssociation) String(xfrmiId uint32) string {
 		"\n====== IPSec/Child SA Info ======"+
 		"\n====== Outbound ======"+
 		"\nXFRM interface if_id: %d"+
-		"\nIPSec Outbound  SPI: 0x%016x"+
+		"\nIPSec Outbound  SPI: 0x%08x"+
 		"\n[N3IWF:%+v] -> [UE:%+v]"+
 		"\nIPSec Encryption Algorithm: %d"+
 		"\nIPSec Encryption Key: 0x%x"+
