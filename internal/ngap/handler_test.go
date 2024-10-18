@@ -35,13 +35,14 @@ func TestReleaseIkeUeAndRanUe(t *testing.T) {
 	n3iwfCtx.IKESPIToNGAPId.Store(spi, ranUeNgapId)
 
 	stopCh := make(chan struct{})
+	rcvIkeEvtCh := n3iwf.mockIkeEvtCh.GetRcvChan()
 
 	go func() {
 		for {
 			select {
 			case <-stopCh:
 				return
-			case rcvEvt := <-n3iwf.mockIkeEvtCh.RecvEvtCh():
+			case rcvEvt := <-rcvIkeEvtCh:
 				if rcvEvt.Type() != n3iwf_context.IKEDeleteRequest {
 					t.Errorf("Receive Wrong Event")
 				}

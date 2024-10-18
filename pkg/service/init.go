@@ -259,10 +259,10 @@ func (a *N3iwfApp) terminateProcedure() {
 	a.ikeServer.Stop()
 }
 
-func (a *N3iwfApp) SendNgapEvt(evt n3iwf_context.NgapEvt) error {
-	return a.ngapServer.SendNgapEvt(evt)
+func (a *N3iwfApp) SendNgapEvt(evt n3iwf_context.NgapEvt) {
+	a.ngapServer.SendNgapEvt(evt)
 }
 
-func (a *N3iwfApp) SendIkeEvt(evt n3iwf_context.IkeEvt) error {
-	return a.ikeServer.SendIkeEvt(evt)
+func (a *N3iwfApp) SendIkeEvt(evt n3iwf_context.IkeEvt) {
+	a.ikeServer.SendIkeEvt(evt)
 }

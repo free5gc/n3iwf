@@ -114,21 +114,21 @@ func BuildNGSetupRequest(
 	nGSetupRequestIEs.List = append(nGSetupRequestIEs.List, ie)
 
 	/*
-		* The reason PagingDRX ie was commented is that in TS23.501
-		* PagingDRX was mentioned to be used only for 3GPP access.
-		* However, the question that if the paging function for N3IWF
-		* is needed requires verification.
+		// The reason PagingDRX ie was commented is that in TS23.501
+		// PagingDRX was mentioned to be used only for 3GPP access.
+		// However, the question that if the paging function for N3IWF
+		// is needed requires verification.
 
-			// PagingDRX
-			ie = ngapType.NGSetupRequestIEs{}
-			ie.Id.Value = ngapType.ProtocolIEIDDefaultPagingDRX
-			ie.Criticality.Value = ngapType.CriticalityPresentIgnore
-			ie.Value.Present = ngapType.NGSetupRequestIEsPresentDefaultPagingDRX
-			ie.Value.DefaultPagingDRX = new(ngapType.PagingDRX)
+		// PagingDRX
+		ie = ngapType.NGSetupRequestIEs{}
+		ie.Id.Value = ngapType.ProtocolIEIDDefaultPagingDRX
+		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+		ie.Value.Present = ngapType.NGSetupRequestIEsPresentDefaultPagingDRX
+		ie.Value.DefaultPagingDRX = new(ngapType.PagingDRX)
 
-			pagingDRX := ie.Value.DefaultPagingDRX
-			pagingDRX.Value = ngapType.PagingDRXPresentV128
-			nGSetupRequestIEs.List = append(nGSetupRequestIEs.List, ie)
+		pagingDRX := ie.Value.DefaultPagingDRX
+		pagingDRX.Value = ngapType.PagingDRXPresentV128
+		nGSetupRequestIEs.List = append(nGSetupRequestIEs.List, ie)
 	*/
 
 	return ngap.Encoder(pdu)

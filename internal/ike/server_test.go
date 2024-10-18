@@ -38,8 +38,8 @@ func (a *n3iwfTestApp) CancelContext() context.Context {
 	return a.ctx
 }
 
-func (a *n3iwfTestApp) SendNgapEvt(evt n3iwf_context.NgapEvt) error {
-	return a.ngapServer.SendNgapEvt(evt)
+func (a *n3iwfTestApp) SendNgapEvt(evt n3iwf_context.NgapEvt) {
+	a.ngapServer.SendNgapEvt(evt)
 }
 
 func NewN3iwfTestApp(cfg *factory.Config) (*n3iwfTestApp, error) {

@@ -35,11 +35,11 @@ type n3iwf interface {
 type N3IWFContext struct {
 	n3iwf
 
-	/* ID generator */
+	// ID generator
 	RANUENGAPIDGenerator *idgenerator.IDGenerator
 	TEIDGenerator        *idgenerator.IDGenerator
 
-	/* Pools */
+	// Pools
 	AMFPool                sync.Map // map[string]*N3IWFAMF, SCTPAddr as key
 	AMFReInitAvailableList sync.Map // map[string]bool, SCTPAddr as key
 	IKESA                  sync.Map // map[uint64]*IKESecurityAssociation, SPI as key
@@ -52,7 +52,7 @@ type N3IWFContext struct {
 	IKESPIToNGAPId         sync.Map // map[uint64]RanUeNgapID, SPI as key
 	NGAPIdToIKESPI         sync.Map // map[uint64]SPI, RanUeNgapID as key
 
-	/* Security data */
+	// Security data
 	CertificateAuthority []byte
 	N3IWFCertificate     []byte
 	N3IWFPrivateKey      *rsa.PrivateKey
@@ -60,7 +60,7 @@ type N3IWFContext struct {
 	IPSecInnerIPPool *ippool.IPPool
 	// TODO: [TWIF] TwifUe may has its own IP address pool
 
-	/* XFRM interface */
+	// XFRM interface
 	XfrmIfaces          sync.Map // map[uint32]*netlink.Link, XfrmIfaceId as key
 	XfrmParentIfaceName string
 	// Every UE's first UP IPsec will use default XFRM interface, additoinal UP IPsec will offset its XFRM id

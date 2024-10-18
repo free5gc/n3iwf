@@ -19,23 +19,23 @@ const (
 type N3IWFIkeUe struct {
 	N3iwfCtx *N3IWFContext
 
-	/* UE identity */
+	// UE identity
 	IPSecInnerIP     net.IP
 	IPSecInnerIPAddr *net.IPAddr // Used to send UP packets to UE
 
-	/* IKE Security Association */
+	// IKE Security Association
 	N3IWFIKESecurityAssociation   *IKESecurityAssociation
 	N3IWFChildSecurityAssociation map[uint32]*ChildSecurityAssociation // inbound SPI as key
 
-	/* Temporary Mapping of two SPIs */
+	// Temporary Mapping of two SPIs
 	// Exchange Message ID(including a SPI) and ChildSA(including a SPI)
 	// Mapping of Message ID of exchange in IKE and Child SA when creating new child SA
 	TemporaryExchangeMsgIDChildSAMapping map[uint32]*ChildSecurityAssociation // Message ID as a key
 
-	/* Security */
+	// Security
 	Kn3iwf []uint8 // 32 bytes (256 bits), value is from NGAP IE "Security Key"
 
-	/* NAS IKE Connection */
+	// NAS IKE Connection
 	IKEConnection *UDPSocketInfo
 
 	// Length of PDU Session List

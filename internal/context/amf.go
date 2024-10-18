@@ -18,9 +18,9 @@ type N3IWFAMF struct {
 	RelativeAMFCapacity   *ngapType.RelativeAMFCapacity
 	PLMNSupportList       *ngapType.PLMNSupportList
 	AMFTNLAssociationList map[string]*AMFTNLAssociationItem // v4+v6 as key
-	/* Overload related */
+	// Overload related
 	AMFOverloadContent *AMFOverloadContent
-	/* Relative Context */
+	// Relative Context
 	N3iwfRanUeList map[int64]RanUe // ranUeNgapId as key
 }
 

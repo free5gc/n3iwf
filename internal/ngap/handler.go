@@ -731,12 +731,9 @@ func (s *Server) HandleInitialContextSetupRequest(
 			return
 		}
 
-		err := s.SendIkeEvt(n3iwf_context.NewSendEAPSuccessMsgEvt(
+		s.SendIkeEvt(n3iwf_context.NewSendEAPSuccessMsgEvt(
 			spi, securityKey.Value.Bytes, len(ranUeCtx.PduSessionList),
 		))
-		if err != nil {
-			ngapLog.Errorf("SendIkeEvt[Send EAP Success Msg] failed: %+v", err)
-		}
 	default:
 		ngapLog.Errorf("Unknown UE type: %T", ue)
 	}
@@ -886,10 +883,12 @@ func (s *Server) handlePDUSessionResourceSetupRequestTransfer(
 		upfAddr := upfIPv4 + gtpv1.GTPUPort
 		upfUDPAddr, err := net.ResolveUDPAddr("udp", upfAddr)
 		if err != nil {
+			var responseTransfer []byte
+
 			ngapLog.Errorf("Resolve UPF addr [%s] failed: %v", upfAddr, err)
 			cause := message.BuildCause(ngapType.CausePresentTransport,
 				ngapType.CauseTransportPresentTransportResourceUnavailable)
-			responseTransfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+			responseTransfer, err = message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
 			if err != nil {
 				ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %v\n", err)
 			}
@@ -899,11 +898,13 @@ func (s *Server) handlePDUSessionResourceSetupRequestTransfer(
 		// UE TEID
 		ueTEID := n3iwfCtx.NewTEID(ranUe)
 		if ueTEID == 0 {
+			var responseTransfer []byte
+
 			ngapLog.Error("Invalid TEID (0).")
 			cause := message.BuildCause(
 				ngapType.CausePresentProtocol,
 				ngapType.CauseProtocolPresentUnspecified)
-			responseTransfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
+			responseTransfer, err = message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
 			if err != nil {
 				ngapLog.Errorf("Build PDUSessionResourceSetupUnsuccessfulTransfer Error: %v\n", err)
 			}
@@ -1068,10 +1069,7 @@ func (s *Server) HandleUEContextModificationRequest(
 		return
 	}
 
-	err := s.SendIkeEvt(n3iwf_context.NewIKEContextUpdateEvt(spi, securityKey.Value.Bytes)) // Kn3iwf
-	if err != nil {
-		ngapLog.Errorf("SendIkeEvt[IKE Ctx Update] failed: %+v", err)
-	}
+	s.SendIkeEvt(n3iwf_context.NewIKEContextUpdateEvt(spi, securityKey.Value.Bytes)) // Kn3iwf
 }
 
 func (s *Server) HandleUEContextReleaseCommand(
@@ -1172,10 +1170,7 @@ func (s *Server) releaseIkeUeAndRanUe(ranUe n3iwf_context.RanUe) error {
 
 	localSPI, ok := n3iwfCtx.IkeSpiLoad(ranUeNgapID)
 	if ok {
-		err := s.SendIkeEvt(n3iwf_context.NewIKEDeleteRequestEvt(localSPI))
-		if err != nil {
-			return errors.Wrapf(err, "SendIkeEvt[IKE Delete Req] failed")
-		}
+		s.SendIkeEvt(n3iwf_context.NewIKEDeleteRequestEvt(localSPI))
 	}
 
 	if err := ranUe.Remove(); err != nil {
@@ -1322,10 +1317,7 @@ func (s *Server) HandleDownlinkNASTransport(
 			}
 
 			if !ue.IsNASTCPConnEstablished {
-				err := s.SendIkeEvt(n3iwf_context.NewSendEAPNASMsgEvt(spi, []byte(nasPDU.Value)))
-				if err != nil {
-					ngapLog.Errorf("SendIkeEvt[Send EAP NAS Msg] failed: %+v", err)
-				}
+				s.SendIkeEvt(n3iwf_context.NewSendEAPNASMsgEvt(spi, []byte(nasPDU.Value)))
 			} else {
 				// Using a "NAS message envelope" to transport a NAS message
 				// over the non-3GPP access between the UE and the N3IWF
@@ -1538,14 +1530,10 @@ func (s *Server) HandlePDUSessionResourceSetupRequest(
 				return
 			}
 
-			err := s.SendIkeEvt(n3iwf_context.NewCreatePDUSessionEvt(spi,
+			s.SendIkeEvt(n3iwf_context.NewCreatePDUSessionEvt(spi,
 				len(ue.PduSessionList),
 				ue.TemporaryPDUSessionSetupData),
 			)
-			if err != nil {
-				ngapLog.Errorf("SendIkeEvt[Create PDU Session] failed: %+v", err)
-				return
-			}
 
 			// TS 23.501 4.12.5 Requested PDU Session Establishment via Untrusted non-3GPP Access
 			// After all IPsec Child SAs are established, the N3IWF shall forward to UE via the signalling IPsec SA
@@ -2139,11 +2127,7 @@ func (s *Server) HandlePDUSessionResourceReleaseCommand(
 	}
 	ranUe.GetSharedCtx().PduSessResRelState = n3iwf_context.PduSessResRelStateOngoing
 
-	err := s.SendIkeEvt(n3iwf_context.NewSendChildSADeleteRequestEvt(localSPI, releaseIdList))
-	if err != nil {
-		ngapLog.Errorf("SendIkeEvt[Send ChildSA Delete Request] failed: %+v", err)
-		return
-	}
+	s.SendIkeEvt(n3iwf_context.NewSendChildSADeleteRequestEvt(localSPI, releaseIdList))
 
 	ranUeCtx.PduSessionReleaseList = releaseList
 	// if nASPDU != nil {
@@ -2882,11 +2866,7 @@ func (s *Server) HandleGetNGAPContext(
 		return
 	}
 
-	err := s.SendIkeEvt(n3iwf_context.NewGetNGAPContextRepEvt(spi, ngapCxtReqNumlist, ngapCxt))
-	if err != nil {
-		ngapLog.Errorf("SendIkeEvt[Get NGAP Context Rep] failed: %+v", err)
-		return
-	}
+	s.SendIkeEvt(n3iwf_context.NewGetNGAPContextRepEvt(spi, ngapCxtReqNumlist, ngapCxt))
 }
 
 func (s *Server) HandleUnmarshalEAP5GData(
@@ -2942,11 +2922,7 @@ func (s *Server) HandleUnmarshalEAP5GData(
 
 		selectedAMF := n3iwfCtx.AMFSelection(anParameters.GUAMI, anParameters.SelectedPLMNID)
 		if selectedAMF == nil {
-			err := s.SendIkeEvt(n3iwf_context.NewSendEAP5GFailureMsgEvt(spi, n3iwf_context.ErrAMFSelection))
-			if err != nil {
-				ngapLog.Errorf("SendIkeEvt[Send EAP5G Failure Msg] failed: %+v", err)
-				return
-			}
+			s.SendIkeEvt(n3iwf_context.NewSendEAP5GFailureMsgEvt(spi, n3iwf_context.ErrAMFSelection))
 		} else {
 			n3iwfUe := n3iwfCtx.NewN3iwfRanUe()
 			n3iwfUe.AMF = selectedAMF
@@ -2961,11 +2937,7 @@ func (s *Server) HandleUnmarshalEAP5GData(
 				}
 			}
 
-			err := s.SendIkeEvt(n3iwf_context.NewUnmarshalEAP5GDataResponseEvt(spi, n3iwfUe.RanUeNgapId, nasPDU))
-			if err != nil {
-				ngapLog.Errorf("SendIkeEvt[Unmarshal EAP5G Data Response] failed: %+v", err)
-				return
-			}
+			s.SendIkeEvt(n3iwf_context.NewUnmarshalEAP5GDataResponseEvt(spi, n3iwfUe.RanUeNgapId, nasPDU))
 		}
 	} else {
 		ranUeNgapId := evt.RanUeNgapId

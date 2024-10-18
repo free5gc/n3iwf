@@ -21,7 +21,7 @@ type n3iwf interface {
 	Context() *n3iwf_context.N3IWFContext
 	CancelContext() context.Context
 
-	SendNgapEvt(n3iwf_context.NgapEvt) error
+	SendNgapEvt(n3iwf_context.NgapEvt)
 }
 
 type Server struct {
@@ -107,10 +107,7 @@ func (s *Server) listenAndServe(wg *sync.WaitGroup) {
 		// Store connection
 		n3iwfUe.TCPConnection = connection
 
-		err = s.SendNgapEvt(n3iwf_context.NewNASTCPConnEstablishedCompleteEvt(n3iwfUe.RanUeNgapId))
-		if err != nil {
-			nwucpLog.Errorf("SendNgapEvt failed: %v", err)
-		}
+		s.SendNgapEvt(n3iwf_context.NewNASTCPConnEstablishedCompleteEvt(n3iwfUe.RanUeNgapId))
 
 		wg.Add(1)
 		go serveConn(n3iwfUe, connection, wg)

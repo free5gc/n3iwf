@@ -19,6 +19,7 @@ import (
 	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/factory"
+	"github.com/free5gc/util/safe_channel"
 )
 
 const (
@@ -34,7 +35,7 @@ type n3iwf interface {
 	Context() *n3iwf_context.N3IWFContext
 	CancelContext() context.Context
 
-	SendNgapEvt(n3iwf_context.NgapEvt) error
+	SendNgapEvt(n3iwf_context.NgapEvt)
 }
 
 type EspHandler func(srcIP, dstIP *net.UDPAddr, espPkt []byte) error
@@ -42,10 +43,10 @@ type EspHandler func(srcIP, dstIP *net.UDPAddr, espPkt []byte) error
 type Server struct {
 	n3iwf
 
-	Listener     map[int]*net.UDPConn
-	RcvIkePktCh  chan IkeReceivePacket
-	StopServer   chan struct{}
-	safeRcvEvtCh *n3iwf_context.SafeEvtCh[n3iwf_context.IkeEvt]
+	Listener   map[int]*net.UDPConn
+	StopServer chan struct{}
+	rcvPktCh   *safe_channel.SafeCh[IkeReceivePacket]
+	rcvEvtCh   *safe_channel.SafeCh[n3iwf_context.IkeEvt]
 }
 
 type IkeReceivePacket struct {
@@ -57,13 +58,12 @@ type IkeReceivePacket struct {
 
 func NewServer(n3iwf n3iwf) (*Server, error) {
 	s := &Server{
-		n3iwf:       n3iwf,
-		Listener:    make(map[int]*net.UDPConn),
-		RcvIkePktCh: make(chan IkeReceivePacket, RECEIVE_IKEPACKET_CHANNEL_LEN),
-		StopServer:  make(chan struct{}),
+		n3iwf:      n3iwf,
+		Listener:   make(map[int]*net.UDPConn),
+		StopServer: make(chan struct{}),
 	}
-	s.safeRcvEvtCh = new(n3iwf_context.SafeEvtCh[n3iwf_context.IkeEvt])
-	s.safeRcvEvtCh.Init(make(chan n3iwf_context.IkeEvt, RECEIVE_IKEEVENT_CHANNEL_LEN))
+	s.rcvPktCh = safe_channel.NewSafeCh[IkeReceivePacket](RECEIVE_IKEPACKET_CHANNEL_LEN)
+	s.rcvEvtCh = safe_channel.NewSafeCh[n3iwf_context.IkeEvt](RECEIVE_IKEEVENT_CHANNEL_LEN)
 	return s, nil
 }
 
@@ -112,15 +112,18 @@ func (s *Server) server(wg *sync.WaitGroup) {
 			ikeLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 		ikeLog.Infof("Ike server stopped")
-		close(s.RcvIkePktCh)
-		s.safeRcvEvtCh.Close()
+		s.rcvPktCh.Close()
+		s.rcvEvtCh.Close()
 		close(s.StopServer)
 		wg.Done()
 	}()
 
+	rcvEvtCh := s.rcvEvtCh.GetRcvChan()
+	rcvPktCh := s.rcvPktCh.GetRcvChan()
+
 	for {
 		select {
-		case rcvPkt := <-s.RcvIkePktCh:
+		case rcvPkt := <-rcvPktCh:
 			ikeMsg, ikeSA, err := s.checkIKEMessage(
 				rcvPkt.Msg, &rcvPkt.Listener, &rcvPkt.LocalAddr, &rcvPkt.RemoteAddr)
 			if err != nil {
@@ -129,7 +132,7 @@ func (s *Server) server(wg *sync.WaitGroup) {
 			}
 			s.Dispatch(&rcvPkt.Listener, &rcvPkt.LocalAddr, &rcvPkt.RemoteAddr,
 				ikeMsg, rcvPkt.Msg, ikeSA)
-		case rcvIkeEvent := <-s.safeRcvEvtCh.RecvEvtCh():
+		case rcvIkeEvent := <-rcvEvtCh:
 			s.HandleEvent(rcvIkeEvent)
 		case <-s.StopServer:
 			return
@@ -194,12 +197,13 @@ func (s *Server) receiver(
 			continue
 		}
 
-		s.RcvIkePktCh <- IkeReceivePacket{
+		ikePkt := IkeReceivePacket{
 			RemoteAddr: *remoteAddr,
 			Listener:   *listener,
 			LocalAddr:  *localAddr,
 			Msg:        msgBuf,
 		}
+		s.rcvPktCh.Send(ikePkt)
 	}
 }
 
@@ -234,8 +238,8 @@ func handleNattMsg(
 	return msgBuf, nil
 }
 
-func (s *Server) SendIkeEvt(evt n3iwf_context.IkeEvt) error {
-	return s.safeRcvEvtCh.SendEvt(evt)
+func (s *Server) SendIkeEvt(evt n3iwf_context.IkeEvt) {
+	s.rcvEvtCh.Send(evt)
 }
 
 func (s *Server) Stop() {

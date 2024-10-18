@@ -601,16 +601,12 @@ func (s *Server) HandleIKEAUTH(
 				ranNgapId = 0
 			}
 
-			err := s.SendNgapEvt(n3iwf_context.NewUnmarshalEAP5GDataEvt(
+			s.SendNgapEvt(n3iwf_context.NewUnmarshalEAP5GDataEvt(
 				ikeSecurityAssociation.LocalSPI,
 				eapExpanded.VendorData,
 				ikeSecurityAssociation.IkeUE != nil,
 				ranNgapId,
 			))
-			if err != nil {
-				ikeLog.Errorf("SendNgapEvt[Unmarshal EAP5G Data] failed: %+v", err)
-				return
-			}
 
 			ikeSecurityAssociation.IKEConnection = &n3iwf_context.UDPSocketInfo{
 				Conn:      udpConn,
@@ -860,7 +856,7 @@ func (s *Server) HandleIKEAUTH(
 			ikeLog.Errorf("Applying XFRM rules failed: %v", err)
 			return
 		}
-		ikeLog.Debugf(childSecurityAssociationContext.String(cfg.GetXfrmIfaceId()))
+		ikeLog.Debugln(childSecurityAssociationContext.String(cfg.GetXfrmIfaceId()))
 
 		// Send IKE message to UE
 		err = SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage,
@@ -880,20 +876,12 @@ func (s *Server) HandleIKEAUTH(
 		ikeSecurityAssociation.State++
 
 		// After this, N3IWF will forward NAS with Child SA (IPSec SA)
-		err = s.SendNgapEvt(n3iwf_context.NewStartTCPSignalNASMsgEvt(ranNgapId))
-		if err != nil {
-			ikeLog.Errorf("SendNgapEvt[Start TCP Signal NAS Msg] failed: %+v", err)
-			return
-		}
+		s.SendNgapEvt(n3iwf_context.NewStartTCPSignalNASMsgEvt(ranNgapId))
 
 		// Get TempPDUSessionSetupData from NGAP to setup PDU session if needed
-		err = s.SendNgapEvt(n3iwf_context.NewGetNGAPContextEvt(
+		s.SendNgapEvt(n3iwf_context.NewGetNGAPContextEvt(
 			ranNgapId, []int64{n3iwf_context.CxtTempPDUSessionSetupData},
 		))
-		if err != nil {
-			ikeLog.Errorf("SendNgapEvt[Get NGAP Context] failed: %+v", err)
-			return
-		}
 	}
 }
 
@@ -977,11 +965,7 @@ func (s *Server) HandleCREATECHILDSA(
 
 	ngapCxtReqNumlist := []int64{n3iwf_context.CxtTempPDUSessionSetupData}
 
-	err := s.SendNgapEvt(n3iwf_context.NewGetNGAPContextEvt(ranNgapId, ngapCxtReqNumlist))
-	if err != nil {
-		ikeLog.Errorf("SendNgapEvt[Get NGAP Context] failed: %+v", err)
-		return
-	}
+	s.SendNgapEvt(n3iwf_context.NewGetNGAPContextEvt(ranNgapId, ngapCxtReqNumlist))
 }
 
 func (s *Server) continueCreateChildSA(
@@ -1119,11 +1103,7 @@ func (s *Server) continueCreateChildSA(
 		return
 	}
 	// Forward PDU Seesion Establishment Accept to UE
-	err = s.SendNgapEvt(n3iwf_context.NewSendNASMsgEvt(ranNgapId))
-	if err != nil {
-		ikeLog.Errorf("SendNgapEvt[Send NAS Msg] failed: %+v", err)
-		return
-	}
+	s.SendNgapEvt(n3iwf_context.NewSendNASMsgEvt(ranNgapId))
 
 	temporaryPDUSessionSetupData.FailedErrStr = append(temporaryPDUSessionSetupData.FailedErrStr, n3iwf_context.ErrNil)
 
@@ -1233,16 +1213,12 @@ func (s *Server) HandleUnmarshalEAP5GDataResponse(ikeEvt n3iwf_context.IkeEvt) {
 
 	n3iwfCtx.IkeSpiNgapIdMapping(ikeUe.N3IWFIKESecurityAssociation.LocalSPI, ranUeNgapId)
 
-	err := s.SendNgapEvt(n3iwf_context.NewSendInitialUEMessageEvt(
+	s.SendNgapEvt(n3iwf_context.NewSendInitialUEMessageEvt(
 		ranUeNgapId,
 		ikeSecurityAssociation.IKEConnection.UEAddr.IP.To4().String(),
 		ikeSecurityAssociation.IKEConnection.UEAddr.Port,
 		nasPDU,
 	))
-	if err != nil {
-		ikeLog.Errorf("SendNgapEvt[Send Init UE Message] failed: %+v", err)
-		return
-	}
 }
 
 func (s *Server) HandleSendEAP5GFailureMsg(ikeEvt n3iwf_context.IkeEvt) {
@@ -1645,10 +1621,7 @@ func (s *Server) CreatePDUSessionChildSA(
 				break
 			}
 		} else {
-			err := s.SendNgapEvt(n3iwf_context.NewSendPDUSessionResourceSetupResEvt(ranNgapId))
-			if err != nil {
-				ikeLog.Errorf("SendNgapEvt[Send PDU Sess Resource Setup Res] failed: %+v", err)
-			}
+			s.SendNgapEvt(n3iwf_context.NewSendPDUSessionResourceSetupResEvt(ranNgapId))
 			break
 		}
 	}
@@ -1697,13 +1670,9 @@ func (s *Server) StartDPD(ikeUe *n3iwf_context.N3IWFIkeUe) {
 							return
 						}
 
-						err := s.SendNgapEvt(n3iwf_context.NewSendUEContextReleaseRequestEvt(
+						s.SendNgapEvt(n3iwf_context.NewSendUEContextReleaseRequestEvt(
 							ranNgapId, n3iwf_context.ErrRadioConnWithUeLost,
 						))
-						if err != nil {
-							ikeLog.Errorf("SendNgapEvt[Send UE Ctx Release Request] failed: %+v", err)
-							return
-						}
 
 						ikeSA.DPDReqRetransTimer = nil
 						timer.Stop()
@@ -1838,10 +1807,7 @@ func (s *Server) handleDeletePayload(payload *ike_message.Delete, isResponse boo
 		return nil, errors.Errorf("Get Protocol ID %d in Informational delete payload, "+
 			"this payload will not be handled by IKE handler", payload.ProtocolID)
 	}
-	err = s.SendNgapEvt(evt)
-	if err != nil {
-		return nil, errors.Wrapf(err, "handleDeletePayload: SendNgapEvt failed")
-	}
+	s.SendNgapEvt(evt)
 	return responseIKEPayload, nil
 }
 

@@ -12,18 +12,18 @@ import (
 type N3IWFRanUe struct {
 	RanUeSharedCtx
 
-	/* Temporary cached NAS message */
+	// Temporary cached NAS message
 	// Used when NAS registration accept arrived before
 	// UE setup NAS TCP connection with N3IWF, and
 	// Forward pduSessionEstablishmentAccept to UE after
 	// UE send CREATE_CHILD_SA response
 	TemporaryCachedNASMessage []byte
 
-	/* NAS TCP Connection Established */
+	// NAS TCP Connection Established
 	IsNASTCPConnEstablished         bool
 	IsNASTCPConnEstablishedComplete bool
 
-	/* NAS TCP Connection */
+	// NAS TCP Connection
 	TCPConnection net.Conn
 }
 
@@ -74,7 +74,7 @@ func (n3iwfUe *N3IWFRanUe) DetachAMF() {
 	delete(n3iwfUe.AMF.N3iwfRanUeList, n3iwfUe.RanUeNgapId)
 }
 
-/* Implement RanUe interface */
+// Implement RanUe interface
 func (n3iwfUe *N3IWFRanUe) GetUserLocationInformation() *ngapType.UserLocationInformation {
 	userLocationInformation := new(ngapType.UserLocationInformation)
 

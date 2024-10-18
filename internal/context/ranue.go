@@ -24,15 +24,15 @@ const (
 )
 
 type RanUe interface {
-	/* Get Attributes */
+	// Get Attributes
 	GetUserLocationInformation() *ngapType.UserLocationInformation
 	GetSharedCtx() *RanUeSharedCtx
 
-	/* User Plane Traffic */
+	// User Plane Traffic
 	// ForwardDL(gtpQoSMsg.QoSTPDUPacket)
 	// ForwardUL()
 
-	/* Others */
+	// Others
 	CreatePDUSession(int64, ngapType.SNSSAI) (*PDUSession, error)
 	DeletePDUSession(int64)
 	FindPDUSession(int64) *PDUSession
@@ -40,7 +40,7 @@ type RanUe interface {
 }
 
 type RanUeSharedCtx struct {
-	/* UE identity */
+	// UE identity
 	RanUeNgapId  int64
 	AmfUeNgapId  int64
 	IPAddrv4     string
@@ -49,20 +49,20 @@ type RanUeSharedCtx struct {
 	MaskedIMEISV *ngapType.MaskedIMEISV // TS 38.413 9.3.1.54
 	Guti         string
 
-	/* Relative Context */
+	// Relative Context
 	N3iwfCtx *N3IWFContext
 	AMF      *N3IWFAMF
 
-	/* Security */
+	// Security
 	SecurityCapabilities *ngapType.UESecurityCapabilities // TS 38.413 9.3.1.86
 
-	/* PDU Session */
+	// PDU Session
 	PduSessionList map[int64]*PDUSession // pduSessionId as key
 
-	/* PDU Session Setup Temporary Data */
+	// PDU Session Setup Temporary Data
 	TemporaryPDUSessionSetupData *PDUSessionSetupTemporaryData
 
-	/* Others */
+	// Others
 	Guami                            *ngapType.GUAMI
 	IndexToRfsp                      int64
 	Ambr                             *ngapType.UEAggregateMaximumBitRate

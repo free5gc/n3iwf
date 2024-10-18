@@ -7,6 +7,7 @@ import (
 	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/ike"
 	"github.com/free5gc/n3iwf/pkg/factory"
+	"github.com/free5gc/util/safe_channel"
 )
 
 type n3iwfTestApp struct {
@@ -19,7 +20,7 @@ type n3iwfTestApp struct {
 	ngapServer *Server
 	ikeServer  *ike.Server
 
-	mockIkeEvtCh *n3iwf_context.SafeEvtCh[n3iwf_context.IkeEvt]
+	mockIkeEvtCh *safe_channel.SafeCh[n3iwf_context.IkeEvt]
 }
 
 func (a *n3iwfTestApp) Config() *factory.Config {
@@ -34,12 +35,12 @@ func (a *n3iwfTestApp) CancelContext() context.Context {
 	return a.ctx
 }
 
-func (a *n3iwfTestApp) SendNgapEvt(evt n3iwf_context.NgapEvt) error {
-	return a.ngapServer.SendNgapEvt(evt)
+func (a *n3iwfTestApp) SendNgapEvt(evt n3iwf_context.NgapEvt) {
+	a.ngapServer.SendNgapEvt(evt)
 }
 
-func (a *n3iwfTestApp) SendIkeEvt(evt n3iwf_context.IkeEvt) error {
-	return a.mockIkeEvtCh.SendEvt(evt)
+func (a *n3iwfTestApp) SendIkeEvt(evt n3iwf_context.IkeEvt) {
+	a.mockIkeEvtCh.Send(evt)
 }
 
 func NewN3iwfTestApp(cfg *factory.Config) (*n3iwfTestApp, error) {
@@ -52,9 +53,7 @@ func NewN3iwfTestApp(cfg *factory.Config) (*n3iwfTestApp, error) {
 		cancel: cancel,
 		wg:     &sync.WaitGroup{},
 	}
-	n3iwfApp.mockIkeEvtCh = new(n3iwf_context.SafeEvtCh[n3iwf_context.IkeEvt])
-	n3iwfApp.mockIkeEvtCh.Init(make(chan n3iwf_context.IkeEvt, 10))
-
+	n3iwfApp.mockIkeEvtCh = safe_channel.NewSafeCh[n3iwf_context.IkeEvt](10)
 	n3iwfApp.n3iwfCtx, err = n3iwf_context.NewTestContext(n3iwfApp)
 	if err != nil {
 		return nil, err

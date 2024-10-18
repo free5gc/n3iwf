@@ -93,7 +93,8 @@ func TestGenerateNATDetectHash(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for i := range tests {
+		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := n3iwf.ikeServer.generateNATDetectHash(tt.initiatorSPI, tt.responderSPI, &tt.Addr)
 			require.NoError(t, err)
@@ -278,7 +279,8 @@ func TestHandleNATDetect(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for i := range tests {
+		tt := tests[i]
 		t.Run(tt.name, func(t *testing.T) {
 			ueBehindNAT, n3iwfBehindNAT, err := n3iwf.ikeServer.handleNATDetect(
 				tt.initiatorSPI, tt.responderSPI,
