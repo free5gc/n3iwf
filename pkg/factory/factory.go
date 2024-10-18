@@ -1,7 +1,3 @@
-/*
- * N3IWF Configuration Factory
- */
-
 package factory
 
 import (

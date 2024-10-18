@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -24,6 +24,7 @@ import (
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/sctp"
 	"github.com/free5gc/util/idgenerator"
+	"github.com/free5gc/util/ippool"
 )
 
 type n3iwf interface {
@@ -45,9 +46,9 @@ type N3IWFContext struct {
 	ChildSA                sync.Map // map[uint32]*ChildSecurityAssociation, inboundSPI as key
 	GTPConnectionWithUPF   sync.Map // map[string]*gtpv1.UPlaneConn, UPF address as key
 	AllocatedUEIPAddress   sync.Map // map[string]*N3IWFIkeUe, IPAddr as key
-	AllocatedUETEID        sync.Map // map[uint32]*N3IWFRanUe, TEID as key
+	AllocatedUETEID        sync.Map // map[uint32]*RanUe, TEID as key
 	IKEUePool              sync.Map // map[uint64]*N3IWFIkeUe, SPI as key
-	RANUePool              sync.Map // map[int64]*N3IWFRanUe, RanUeNgapID as key
+	RANUePool              sync.Map // map[int64]*RanUe, RanUeNgapID as key
 	IKESPIToNGAPId         sync.Map // map[uint64]RanUeNgapID, SPI as key
 	NGAPIdToIKESPI         sync.Map // map[uint64]SPI, RanUeNgapID as key
 
@@ -56,12 +57,12 @@ type N3IWFContext struct {
 	N3IWFCertificate     []byte
 	N3IWFPrivateKey      *rsa.PrivateKey
 
-	UeIPRange *net.IPNet
+	IPSecInnerIPPool *ippool.IPPool
+	// TODO: [TWIF] TwifUe may has its own IP address pool
 
 	// XFRM interface
 	XfrmIfaces          sync.Map // map[uint32]*netlink.Link, XfrmIfaceId as key
 	XfrmParentIfaceName string
-
 	// Every UE's first UP IPsec will use default XFRM interface, additoinal UP IPsec will offset its XFRM id
 	XfrmIfaceIdOffsetForUP uint32
 }
@@ -120,11 +121,11 @@ func NewContext(n3iwf n3iwf) (*N3IWFContext, error) {
 	n.N3IWFCertificate = block.Bytes
 
 	// UE IP address range
-	_, ueIPRange, err := net.ParseCIDR(cfg.GetUEIPAddrRange())
+	ueIPPool, err := ippool.NewIPPool(cfg.GetUEIPAddrRange())
 	if err != nil {
-		return nil, errors.Errorf("Parse CIDR failed: %+v", err)
+		return nil, errors.Errorf("NewContext(): %+v", err)
 	}
-	n.UeIPRange = ueIPRange
+	n.IPSecInnerIPPool = ueIPPool
 
 	// XFRM related
 	ikeBindIfaceName, err := getInterfaceName(cfg.GetIKEBindAddr())
@@ -190,11 +191,12 @@ func (c *N3IWFContext) NewN3iwfRanUe() *N3IWFRanUe {
 		return nil
 	}
 	n3iwfRanUe := &N3IWFRanUe{
-		N3iwfCtx: c,
+		RanUeSharedCtx: RanUeSharedCtx{
+			N3iwfCtx: c,
+		},
 	}
 	n3iwfRanUe.init(ranUeNgapId)
 	c.RANUePool.Store(ranUeNgapId, n3iwfRanUe)
-	n3iwfRanUe.TemporaryPDUSessionSetupData = new(PDUSessionSetupTemporaryData)
 
 	return n3iwfRanUe
 }
@@ -218,10 +220,21 @@ func (c *N3IWFContext) IkeUePoolLoad(spi uint64) (*N3IWFIkeUe, bool) {
 	}
 }
 
-func (c *N3IWFContext) RanUePoolLoad(ranUeNgapId int64) (*N3IWFRanUe, bool) {
+func (c *N3IWFContext) RanUePoolLoad(id interface{}) (RanUe, bool) {
+	var ranUeNgapId int64
+
+	cfgLog := logger.CfgLog
+	switch id := id.(type) {
+	case int64:
+		ranUeNgapId = id
+	default:
+		cfgLog.Warnf("RanUePoolLoad unhandle type: %t", id)
+		return nil, false
+	}
+
 	ranUe, ok := c.RANUePool.Load(ranUeNgapId)
 	if ok {
-		return ranUe.(*N3IWFRanUe), ok
+		return ranUe.(RanUe), ok
 	} else {
 		return nil, ok
 	}
@@ -256,7 +269,7 @@ func (c *N3IWFContext) DeleteIkeSPIFromNgapId(ranUeNgapId int64) {
 	c.NGAPIdToIKESPI.Delete(ranUeNgapId)
 }
 
-func (c *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (*N3IWFRanUe, error) {
+func (c *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (RanUe, error) {
 	ranNgapId, ok := c.IKESPIToNGAPId.Load(spi)
 	if ok {
 		ranUe, err := c.RanUePoolLoad(ranNgapId.(int64))
@@ -371,26 +384,30 @@ func (c *N3IWFContext) GTPConnectionWithUPFStore(upfAddr string, conn *gtpv1.UPl
 	c.GTPConnectionWithUPF.Store(upfAddr, conn)
 }
 
-func (c *N3IWFContext) NewInternalUEIPAddr(ikeUe *N3IWFIkeUe) net.IP {
+func (c *N3IWFContext) NewIPsecInnerUEIP(ikeUe *N3IWFIkeUe) (net.IP, error) {
 	var ueIPAddr net.IP
-
+	var err error
 	cfg := c.Config()
 	ipsecGwAddr := cfg.GetIPSecGatewayAddr()
-	// TODO: Check number of allocated IP to detect running out of IPs
+
 	for {
-		ueIPAddr = generateRandomIPinRange(c.UeIPRange)
-		if ueIPAddr != nil {
-			if ueIPAddr.String() == ipsecGwAddr {
-				continue
-			}
-			_, ok := c.AllocatedUEIPAddress.LoadOrStore(ueIPAddr.String(), ikeUe)
-			if !ok {
-				break
-			}
+		ueIPAddr, err = c.IPSecInnerIPPool.Allocate(nil)
+		if err != nil {
+			return nil, errors.Wrapf(err, "NewIPsecInnerUEIP()")
+		}
+		if ueIPAddr.String() == ipsecGwAddr {
+			continue
+		}
+		_, ok := c.AllocatedUEIPAddress.LoadOrStore(ueIPAddr.String(), ikeUe)
+		if ok {
+			logger.CtxLog.Warnf("NewIPsecInnerUEIP(): IP(%v) is used by other IkeUE",
+				ueIPAddr.String())
+		} else {
+			break
 		}
 	}
 
-	return ueIPAddr
+	return ueIPAddr, nil
 }
 
 func (c *N3IWFContext) DeleteInternalUEIPAddr(ipAddr string) {
@@ -405,10 +422,14 @@ func (c *N3IWFContext) AllocatedUEIPAddressLoad(ipAddr string) (*N3IWFIkeUe, boo
 	return nil, false
 }
 
-func (c *N3IWFContext) NewTEID(ranUe *N3IWFRanUe) uint32 {
+func (c *N3IWFContext) NewTEID(ranUe RanUe) uint32 {
 	teid64, err := c.TEIDGenerator.Allocate()
 	if err != nil {
 		logger.CtxLog.Errorf("New TEID failed: %+v", err)
+		return 0
+	}
+	if teid64 < 0 || teid64 > math.MaxUint32 {
+		logger.CtxLog.Warnf("NewTEID teid64 out of uint32 range: %d, use maxUint32", teid64)
 		return 0
 	}
 	teid32 := uint32(teid64)
@@ -423,10 +444,10 @@ func (c *N3IWFContext) DeleteTEID(teid uint32) {
 	c.AllocatedUETEID.Delete(teid)
 }
 
-func (c *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (*N3IWFRanUe, bool) {
+func (c *N3IWFContext) AllocatedUETEIDLoad(teid uint32) (RanUe, bool) {
 	ranUe, ok := c.AllocatedUETEID.Load(teid)
 	if ok {
-		return ranUe.(*N3IWFRanUe), ok
+		return ranUe.(RanUe), ok
 	}
 	return nil, false
 }
@@ -435,9 +456,12 @@ func (c *N3IWFContext) AMFSelection(
 	ueSpecifiedGUAMI *ngapType.GUAMI,
 	ueSpecifiedPLMNId *ngapType.PLMNIdentity,
 ) *N3IWFAMF {
-	var availableAMF *N3IWFAMF
+	var availableAMF, defaultAMF *N3IWFAMF
 	c.AMFPool.Range(func(key, value interface{}) bool {
 		amf := value.(*N3IWFAMF)
+		if defaultAMF == nil {
+			defaultAMF = amf
+		}
 		if amf.FindAvalibleAMFByCompareGUAMI(ueSpecifiedGUAMI) {
 			availableAMF = amf
 			return false
@@ -451,24 +475,9 @@ func (c *N3IWFContext) AMFSelection(
 			return true
 		}
 	})
+	if availableAMF == nil &&
+		defaultAMF != nil {
+		availableAMF = defaultAMF
+	}
 	return availableAMF
-}
-
-func generateRandomIPinRange(subnet *net.IPNet) net.IP {
-	ipAddr := make([]byte, 4)
-	randomNumber := make([]byte, 4)
-
-	_, err := rand.Read(randomNumber)
-	if err != nil {
-		logger.CtxLog.Errorf("Generate random number for IP address failed: %+v", err)
-		return nil
-	}
-
-	// TODO: elimenate network name, gateway, and broadcast
-	for i := 0; i < 4; i++ {
-		alter := randomNumber[i] & (subnet.Mask[i] ^ 255)
-		ipAddr[i] = subnet.IP[i] + alter
-	}
-
-	return net.IPv4(ipAddr[0], ipAddr[1], ipAddr[2], ipAddr[3])
 }

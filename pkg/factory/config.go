@@ -1,7 +1,3 @@
-/*
- * N3IWF Configuration Factory
- */
-
 package factory
 
 import (
@@ -26,46 +22,48 @@ const (
 	N3iwfDefaultConfigPath    string = "./config/n3iwfcfg.yaml"
 	N3iwfDefaultXfrmIfaceName string = "ipsec"
 	N3iwfDefaultXfrmIfaceId   uint32 = 7
+
+	MAX_BUF_MSG_LEN int = 65535
 )
 
 type N3IWFNFInfo struct {
-	GlobalN3IWFID   *GlobalN3IWFID    `yaml:"GlobalN3IWFID" valid:"required"`
-	RanNodeName     string            `yaml:"Name,omitempty" valid:"optional"`
-	SupportedTAList []SupportedTAItem `yaml:"SupportedTAList" valid:"required"`
+	GlobalN3IWFID   *GlobalN3IWFID    `yaml:"globalN3IWFID" valid:"required"`
+	RanNodeName     string            `yaml:"name,omitempty" valid:"optional"`
+	SupportedTAList []SupportedTAItem `yaml:"supportedTAList" valid:"required"`
 }
 
 type GlobalN3IWFID struct {
-	PLMNID  *PLMNID `yaml:"PLMNID" valid:"required"`
-	N3IWFID uint16  `yaml:"N3IWFID" valid:"range(0|65535),required"` // with length 2 bytes
+	PLMNID  *PLMNID `yaml:"plmnID" valid:"required"`
+	N3IWFID uint16  `yaml:"n3iwfID" valid:"range(0|65535),required"` // with length 2 bytes
 }
 
 type SupportedTAItem struct {
-	TAC               string              `yaml:"TAC" valid:"hexadecimal,stringlength(6|6),required"`
-	BroadcastPLMNList []BroadcastPLMNItem `yaml:"BroadcastPLMNList" valid:"required"`
+	TAC               string              `yaml:"tac" valid:"hexadecimal,stringlength(6|6),required"`
+	BroadcastPLMNList []BroadcastPLMNItem `yaml:"broadcastPlmnList" valid:"required"`
 }
 
 type BroadcastPLMNItem struct {
-	PLMNID              *PLMNID            `yaml:"PLMNID" valid:"required"`
-	TAISliceSupportList []SliceSupportItem `yaml:"TAISliceSupportList" valid:"required"`
+	PLMNID              *PLMNID            `yaml:"plmnID" valid:"required"`
+	TAISliceSupportList []SliceSupportItem `yaml:"taiSliceSupportList" valid:"required"`
 }
 
 type PLMNID struct {
-	Mcc string `yaml:"MCC" valid:"numeric,stringlength(3|3),required"`
-	Mnc string `yaml:"MNC" valid:"numeric,stringlength(2|3),required"`
+	Mcc string `yaml:"mcc" valid:"numeric,stringlength(3|3),required"`
+	Mnc string `yaml:"mnc" valid:"numeric,stringlength(2|3),required"`
 }
 
 type SliceSupportItem struct {
-	SNSSAI SNSSAIItem `yaml:"SNSSAI" valid:"required"`
+	SNSSAI SNSSAIItem `yaml:"snssai" valid:"required"`
 }
 
 type SNSSAIItem struct {
-	SST int32  `yaml:"SST" valid:"required"`
-	SD  string `yaml:"SD,omitempty" valid:"required,hexadecimal,stringlength(6|6)"`
+	SST int32  `yaml:"sst" valid:"required"`
+	SD  string `yaml:"sd,omitempty" valid:"required,hexadecimal,stringlength(6|6)"`
 }
 
 type AMFSCTPAddresses struct {
-	IPAddresses []string `yaml:"IP" valid:"required"`
-	Port        int      `yaml:"Port,omitempty" valid:"port,optional"` // Default port is 38412 if not defined.
+	IPAddresses []string `yaml:"ip" valid:"required"`
+	Port        int      `yaml:"port,omitempty" valid:"port,optional"` // Default port is 38412 if not defined.
 }
 
 func (a *AMFSCTPAddresses) validate() error {
@@ -115,22 +113,22 @@ type Info struct {
 }
 
 type Configuration struct {
-	N3IWFInfo        *N3IWFNFInfo       `yaml:"N3IWFInformation"        valid:"required"`
+	N3IWFInfo        *N3IWFNFInfo       `yaml:"n3iwfInformation"        valid:"required"`
 	LocalSctpAddr    string             `yaml:"localSctpAddr,omitempty" valid:"optional,host"`
-	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"AMFSCTPAddresses"        valid:"required"`
+	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"amfSCTPAddresses"        valid:"required"`
 
-	TCPPort              int         `yaml:"NASTCPPort"           valid:"required,port"`
-	IKEBindAddr          string      `yaml:"IKEBindAddress"       valid:"required,host"`
-	IPSecGatewayAddr     string      `yaml:"IPSecTunnelAddress"   valid:"required,host"`
-	UEIPAddressRange     string      `yaml:"UEIPAddressRange"     valid:"required,cidr"`               // e.g. 10.0.1.0/24
-	XfrmIfaceName        string      `yaml:"XFRMInterfaceName"    valid:"optional,stringlength(1|10)"` // must != 0
-	XfrmIfaceId          uint32      `yaml:"XFRMInterfaceID"      valid:"optional"`                    // must != 0
-	GTPBindAddr          string      `yaml:"GTPBindAddress"       valid:"required,host"`
-	FQDN                 string      `yaml:"FQDN"                 valid:"required,host"` // e.g. n3iwf.Saviah.com
-	PrivateKey           string      `yaml:"PrivateKey"           valid:"optional"`
-	CertificateAuthority string      `yaml:"CertificateAuthority" valid:"optional"`
-	Certificate          string      `yaml:"Certificate"          valid:"optional"`
-	LivenessCheck        *TimerValue `yaml:"LivenessCheck"        valid:"required"`
+	TCPPort              int         `yaml:"nasTcpPort"           valid:"required,port"`
+	IKEBindAddr          string      `yaml:"ikeBindAddress"       valid:"required,host"`
+	UEIPAddressRange     string      `yaml:"ueIpAddressRange"     valid:"required,cidr"` // e.g. 10.0.1.0/24
+	IPSecGatewayAddr     string      `yaml:"ipSecTunnelAddress"   valid:"required,host"`
+	XfrmIfaceName        string      `yaml:"xfrmInterfaceName"    valid:"optional,stringlength(1|10)"` // must != 0
+	XfrmIfaceId          uint32      `yaml:"xfrmInterfaceID"      valid:"optional"`                    // must != 0
+	N3IWFGTPBindAddress  string      `yaml:"n3iwfGtpBindAddress"  valid:"required,host"`
+	FQDN                 string      `yaml:"fqdn"                 valid:"required,host"` // e.g. n3iwf.Saviah.com
+	PrivateKey           string      `yaml:"privateKey"           valid:"optional"`
+	CertificateAuthority string      `yaml:"certificateAuthority" valid:"optional"`
+	Certificate          string      `yaml:"certificate"          valid:"optional"`
+	LivenessCheck        *TimerValue `yaml:"livenessCheck"        valid:"required"`
 }
 
 type Logger struct {
@@ -318,10 +316,10 @@ func (c *Config) GetIPSecGatewayAddr() string {
 	return c.Configuration.IPSecGatewayAddr
 }
 
-func (c *Config) GetGTPBindAddr() string {
+func (c *Config) GetN3iwfGtpBindAddress() string {
 	c.RLock()
 	defer c.RUnlock()
-	return c.Configuration.GTPBindAddr
+	return c.Configuration.N3IWFGTPBindAddress
 }
 
 func (c *Config) GetNasTcpAddr() string {
@@ -333,7 +331,7 @@ func (c *Config) GetNasTcpAddr() string {
 func (c *Config) GetNasTcpPort() uint16 {
 	c.RLock()
 	defer c.RUnlock()
-	return uint16(c.Configuration.TCPPort)
+	return uint16(c.Configuration.TCPPort) // #nosec G115
 }
 
 func (c *Config) GetFQDN() string {

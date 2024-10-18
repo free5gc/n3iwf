@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	n3iwf_context "github.com/free5gc/n3iwf/pkg/context"
+	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
+	"github.com/free5gc/n3iwf/internal/ike"
 	"github.com/free5gc/n3iwf/pkg/factory"
-	"github.com/free5gc/n3iwf/pkg/ike"
 )
 
 func TestReleaseIkeUeAndRanUe(t *testing.T) {
@@ -22,7 +22,9 @@ func TestReleaseIkeUeAndRanUe(t *testing.T) {
 
 	n3iwfCtx := n3iwf.n3iwfCtx
 	ranUe := &n3iwf_context.N3IWFRanUe{
-		N3iwfCtx: n3iwfCtx,
+		RanUeSharedCtx: n3iwf_context.RanUeSharedCtx{
+			N3iwfCtx: n3iwfCtx,
+		},
 	}
 
 	ranUeNgapId := int64(0x1234567890ABCDEF)
@@ -33,13 +35,14 @@ func TestReleaseIkeUeAndRanUe(t *testing.T) {
 	n3iwfCtx.IKESPIToNGAPId.Store(spi, ranUeNgapId)
 
 	stopCh := make(chan struct{})
+	rcvIkeEvtCh := n3iwf.mockIkeEvtCh.GetRcvChan()
 
 	go func() {
 		for {
 			select {
 			case <-stopCh:
 				return
-			case rcvEvt := <-n3iwf.ikeServer.RcvEventCh:
+			case rcvEvt := <-rcvIkeEvtCh:
 				if rcvEvt.Type() != n3iwf_context.IKEDeleteRequest {
 					t.Errorf("Receive Wrong Event")
 				}

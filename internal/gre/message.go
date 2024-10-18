@@ -1,6 +1,11 @@
 package gre
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"math"
+
+	"github.com/pkg/errors"
+)
 
 // [TS 24.502] 9.3.3 GRE encapsulated user data packet
 const (
@@ -77,8 +82,14 @@ func (p *GREPacket) setRQI(rqi bool) {
 	}
 }
 
-func (p *GREPacket) GetQFI() uint8 {
-	return uint8((p.key >> 24) & 0x3F)
+func (p *GREPacket) GetQFI() (uint8, error) {
+	value := (p.key >> 24) & 0x3F
+
+	if value > math.MaxUint8 {
+		return 0, errors.Errorf("GetQFI() value exceeds uint8: %d", value)
+	} else {
+		return uint8(value), nil
+	}
 }
 
 func (p *GREPacket) GetRQI() bool {
