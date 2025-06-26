@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/free5gc/util/metrics"
+	"github.com/free5gc/util/metrics/utils"
+	"github.com/prometheus/client_golang/prometheus"
 	"io"
 	"net"
 	"os"
@@ -29,16 +32,16 @@ var N3IWF *N3iwfApp
 var _ app.App = &N3iwfApp{}
 
 type N3iwfApp struct {
-	n3iwfCtx    *n3iwf_context.N3IWFContext
-	cfg         *factory.Config
-	ngapServer  *ngap.Server
-	nwucpServer *nwucp.Server
-	nwuupServer *nwuup.Server
-	ikeServer   *ike.Server
-
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	n3iwfCtx      *n3iwf_context.N3IWFContext
+	cfg           *factory.Config
+	ngapServer    *ngap.Server
+	nwucpServer   *nwucp.Server
+	nwuupServer   *nwuup.Server
+	ikeServer     *ike.Server
+	metricsServer *metrics.Server
+	ctx           context.Context
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
 }
 
 func NewApp(
@@ -72,8 +75,32 @@ func NewApp(
 	if n3iwf.ikeServer, err = ike.NewServer(n3iwf); err != nil {
 		return nil, errors.Wrap(err, "NewApp()")
 	}
+
+	features := map[utils.MetricTypeEnabled]bool{}
+	customMetrics := make(map[utils.MetricTypeEnabled][]prometheus.Collector)
+	if cfg.AreMetricsEnabled() {
+		if n3iwf.metricsServer, err = metrics.NewServer(getInitMetrics(cfg, features, customMetrics), tlsKeyLogPath, logger.InitLog); err != nil {
+			return nil, err
+		}
+	}
+
 	N3IWF = n3iwf
 	return n3iwf, nil
+}
+
+func getInitMetrics(cfg *factory.Config, features map[utils.MetricTypeEnabled]bool, customMetrics map[utils.MetricTypeEnabled][]prometheus.Collector) metrics.InitMetrics {
+	metricsInfo := metrics.Metrics{
+		BindingIPv4: cfg.GetMetricsBindingAddr(),
+		Scheme:      cfg.GetMetricsScheme(),
+		Namespace:   cfg.GetMetricsNamespace(),
+		Port:        cfg.GetMetricsPort(),
+		Tls: metrics.Tls{
+			Key: cfg.GetMetricsCertKeyPath(),
+			Pem: cfg.GetMetricsCertPemPath(),
+		},
+	}
+
+	return metrics.NewInitMetrics(metricsInfo, "N3IWF", features, customMetrics)
 }
 
 func (a *N3iwfApp) CancelContext() context.Context {
@@ -164,6 +191,13 @@ func (a *N3iwfApp) Run() error {
 		return errors.Wrapf(err, "Start IKE service failed")
 	}
 	mainLog.Infof("IKE service running")
+
+	// Metrics server
+	if a.cfg.AreMetricsEnabled() && a.metricsServer != nil {
+		go func() {
+			a.metricsServer.Run(&a.wg)
+		}()
+	}
 
 	mainLog.Infof("N3IWF started")
 
@@ -257,6 +291,10 @@ func (a *N3iwfApp) terminateProcedure() {
 	a.nwucpServer.Stop()
 	a.nwuupServer.Stop()
 	a.ikeServer.Stop()
+	if a.metricsServer != nil {
+		a.metricsServer.Stop()
+		logger.MainLog.Infof("N3IWF Metrics Server terminated")
+	}
 }
 
 func (a *N3iwfApp) SendNgapEvt(evt n3iwf_context.NgapEvt) {
