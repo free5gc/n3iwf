@@ -7,19 +7,25 @@ import (
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/sctp"
+	ngap_metrics "github.com/free5gc/util/metrics/ngap"
 )
 
-func SendToAmf(amf *n3iwf_context.N3IWFAMF, pkt []byte) {
+var emptyCause = ngapType.Cause{Present: 0}
+
+func SendToAmf(amf *n3iwf_context.N3IWFAMF, pkt []byte) (bool, string) {
 	ngapLog := logger.NgapLog
 	if amf == nil {
 		ngapLog.Errorf("AMF Context is nil ")
+		return false, "AMF Context is nil"
 	} else {
 		if n, err := amf.SCTPConn.Write(pkt); err != nil {
 			ngapLog.Errorf("Write to SCTP socket failed: %+v", err)
+			return false, ngap_metrics.SCTP_SOCKET_WRITE_ERR
 		} else {
 			ngapLog.Tracef("Wrote %d bytes", n)
 		}
 	}
+	return true, ""
 }
 
 func SendNGSetupRequest(
@@ -34,12 +40,17 @@ func SendNGSetupRequest(
 		}
 	}()
 
+	isNGSetupReqSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.NG_SETUP_REQUEST, &isNGSetupReqSent, emptyCause, &additionalCause)
+
 	ngapLog.Infoln("Send NG Setup Request")
 
 	cfg := n3iwfCtx.Config()
 	sctpAddr := conn.RemoteAddr().String()
 
 	if available, _ := n3iwfCtx.AMFReInitAvailableListLoad(sctpAddr); !available {
+		additionalCause = ngap_metrics.AMF_TIME_REINIT_ERR
 		ngapLog.Warnf(
 			"Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
 			sctpAddr)
@@ -51,14 +62,17 @@ func SendNGSetupRequest(
 		cfg.GetSupportedTAList(),
 	)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build NGSetup Request failed: %+v\n", err)
 		return
 	}
 
 	if n, err := conn.Write(pkt); err != nil {
 		ngapLog.Errorf("Write to SCTP socket failed: %+v", err)
+		additionalCause = ngap_metrics.SCTP_SOCKET_WRITE_ERR
 	} else {
 		ngapLog.Tracef("Wrote %d bytes", n)
+		isNGSetupReqSent = true
 	}
 }
 
@@ -68,16 +82,20 @@ func SendNGReset(
 	cause ngapType.Cause,
 	partOfNGInterface *ngapType.UEAssociatedLogicalNGConnectionList,
 ) {
+	isNGResetSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.NG_RESET, &isNGResetSent, cause, &additionalCause)
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send NG Reset")
 
 	pkt, err := BuildNGReset(cause, partOfNGInterface)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build NGReset failed : %s", err.Error())
 		return
 	}
 
-	SendToAmf(amf, pkt)
+	isNGResetSent, additionalCause = SendToAmf(amf, pkt)
 }
 
 func SendNGResetAcknowledge(
@@ -88,18 +106,25 @@ func SendNGResetAcknowledge(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send NG Reset Acknowledge")
 
+	isNGResetAckSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.NG_RESET_ACKNOWLEDGE,
+		&isNGResetAckSent, emptyCause, &additionalCause)
+
 	if partOfNGInterface != nil && len(partOfNGInterface.List) == 0 {
 		ngapLog.Error("length of partOfNGInterface is 0")
+		additionalCause = ngap_metrics.NF_INTERFACE_LEN_ZERO_ERR
 		return
 	}
 
 	pkt, err := BuildNGResetAcknowledge(partOfNGInterface, diagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build NGReset Acknowledge failed : %s", err.Error())
 		return
 	}
 
-	SendToAmf(amf, pkt)
+	isNGResetAckSent, additionalCause = SendToAmf(amf, pkt)
 }
 
 func SendInitialContextSetupResponse(
@@ -111,23 +136,31 @@ func SendInitialContextSetupResponse(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send Initial Context Setup Response")
 
+	isInitialCtxRespSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.INITIAL_CONTEXT_SETUP_RESPONSE,
+		&isInitialCtxRespSent, emptyCause, &additionalCause)
+
 	if responseList != nil && len(responseList.List) > n3iwf_context.MaxNumOfPDUSessions {
+		additionalCause = ngap_metrics.PDU_LIST_OOR_ERR
 		ngapLog.Errorln("Pdu List out of range")
 		return
 	}
 
 	if failedList != nil && len(failedList.List) > n3iwf_context.MaxNumOfPDUSessions {
+		additionalCause = ngap_metrics.PDU_LIST_OOR_ERR
 		ngapLog.Errorln("Pdu List out of range")
 		return
 	}
 
 	pkt, err := BuildInitialContextSetupResponse(ranUe, responseList, failedList, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build Initial Context Setup Response failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isInitialCtxRespSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendInitialContextSetupFailure(
@@ -139,18 +172,25 @@ func SendInitialContextSetupFailure(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send Initial Context Setup Failure")
 
+	isInitialCtxFailureSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.INITIAL_CONTEXT_SETUP_RESPONSE,
+		&isInitialCtxFailureSent, cause, &additionalCause)
+
 	if failedList != nil && len(failedList.List) > n3iwf_context.MaxNumOfPDUSessions {
+		additionalCause = ngap_metrics.PDU_LIST_OOR_ERR
 		ngapLog.Errorln("Pdu List out of range")
 		return
 	}
 
 	pkt, err := BuildInitialContextSetupFailure(ranUe, cause, failedList, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build Initial Context Setup Failure failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isInitialCtxFailureSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendUEContextModificationResponse(
@@ -160,13 +200,19 @@ func SendUEContextModificationResponse(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send UE Context Modification Response")
 
+	isUECtxModificationRespSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.UE_CONTEXT_MODIFICATION_RESPONSE,
+		&isUECtxModificationRespSent, emptyCause, &additionalCause)
+
 	pkt, err := BuildUEContextModificationResponse(ranUe, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build UE Context Modification Response failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isUECtxModificationRespSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendUEContextModificationFailure(
@@ -177,13 +223,19 @@ func SendUEContextModificationFailure(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send UE Context Modification Failure")
 
+	isUECtxModificationFailureSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.UE_CONTEXT_MODIFICATION_FAILURE,
+		&isUECtxModificationFailureSent, cause, &additionalCause)
+
 	pkt, err := BuildUEContextModificationFailure(ranUe, cause, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build UE Context Modification Failure failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isUECtxModificationFailureSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendUEContextReleaseComplete(
@@ -193,13 +245,19 @@ func SendUEContextReleaseComplete(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send UE Context Release Complete")
 
+	isUECtxReleaseCompleteSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.UE_CONTEXT_RELEASE_COMPLETE,
+		&isUECtxReleaseCompleteSent, emptyCause, &additionalCause)
+
 	pkt, err := BuildUEContextReleaseComplete(ranUe, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build UE Context Release Complete failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isUECtxReleaseCompleteSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendUEContextReleaseRequest(
@@ -208,13 +266,19 @@ func SendUEContextReleaseRequest(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send UE Context Release Request")
 
+	isUECtxReleaseReqSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.UE_CONTEXT_RELEASE_REQUEST,
+		&isUECtxReleaseReqSent, cause, &additionalCause)
+
 	pkt, err := BuildUEContextReleaseRequest(ranUe, cause)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build UE Context Release Request failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isUECtxReleaseReqSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendInitialUEMessage(amf *n3iwf_context.N3IWFAMF,
@@ -222,15 +286,22 @@ func SendInitialUEMessage(amf *n3iwf_context.N3IWFAMF,
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send Initial UE Message")
+
+	isInitialUEMessageSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.INITIAL_UE_MESSAGE,
+		&isInitialUEMessageSent, emptyCause, &additionalCause)
+
 	// Attach To AMF
 
 	pkt, err := BuildInitialUEMessage(ranUe, nasPdu, nil)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build Initial UE Message failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isInitialUEMessageSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 	// ranUe.AttachAMF() // TODO: Check AttachAMF if is necessary
 }
 
@@ -241,18 +312,25 @@ func SendUplinkNASTransport(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send Uplink NAS Transport")
 
+	isUplinkNasTransportSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.UPLINK_NAS_TRANSPORT,
+		&isUplinkNasTransportSent, emptyCause, &additionalCause)
+
 	if len(nasPdu) == 0 {
+		additionalCause = ngap_metrics.NAS_PDU_NIL_ERR
 		ngapLog.Errorln("NAS Pdu is nil")
 		return
 	}
 
 	pkt, err := BuildUplinkNASTransport(ranUe, nasPdu)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build Uplink NAS Transport failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isUplinkNasTransportSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendNASNonDeliveryIndication(
@@ -263,18 +341,25 @@ func SendNASNonDeliveryIndication(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send NAS NonDelivery Indication")
 
+	isNasNonDeliveryIndicationSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.NAS_NON_DELIVERY_INDICATION,
+		&isNasNonDeliveryIndicationSent, cause, &additionalCause)
+
 	if len(nasPdu) == 0 {
+		additionalCause = ngap_metrics.NAS_PDU_NIL_ERR
 		ngapLog.Errorln("NAS Pdu is nil")
 		return
 	}
 
 	pkt, err := BuildNASNonDeliveryIndication(ranUe, nasPdu, cause)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build NAS Non Delivery Indication failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isNasNonDeliveryIndicationSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendRerouteNASRequest() {
@@ -291,18 +376,25 @@ func SendPDUSessionResourceSetupResponse(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send PDU Session Resource Setup Response")
 
+	isPduSessionResourceSetupRespSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.PDUSESSION_RESOURCE_SETUP_RESPONSE,
+		&isPduSessionResourceSetupRespSent, emptyCause, &additionalCause)
+
 	if ranUe == nil {
+		additionalCause = ngap_metrics.UE_CTX_NIL
 		ngapLog.Error("UE context is nil, this information is mandatory.")
 		return
 	}
 
 	pkt, err := BuildPDUSessionResourceSetupResponse(ranUe, responseList, failedListSURes, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build PDU Session Resource Setup Response failed : %+v", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isPduSessionResourceSetupRespSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendPDUSessionResourceModifyResponse(
@@ -314,18 +406,25 @@ func SendPDUSessionResourceModifyResponse(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send PDU Session Resource Modify Response")
 
+	isPduSessionResourceModifyRespSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.PDUSESSION_RESOURCE_MODIFY_RESPONSE,
+		&isPduSessionResourceModifyRespSent, emptyCause, &additionalCause)
+
 	if ranUe == nil && criticalityDiagnostics == nil {
+		additionalCause = ngap_metrics.UE_CTX_NIL
 		ngapLog.Error("UE context is nil, this information is mandatory")
 		return
 	}
 
 	pkt, err := BuildPDUSessionResourceModifyResponse(ranUe, responseList, failedList, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build PDU Session Resource Modify Response failed : %+v", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isPduSessionResourceModifyRespSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendPDUSessionResourceModifyIndication(
@@ -335,11 +434,18 @@ func SendPDUSessionResourceModifyIndication(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send PDU Session Resource Modify Indication")
 
+	isPduSessionResourceModifyIndicationSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.PDUSESSION_RESOURCE_MODIFY_INDICATION,
+		&isPduSessionResourceModifyIndicationSent, emptyCause, &additionalCause)
+
 	if ranUe == nil {
+		additionalCause = ngap_metrics.UE_CTX_NIL
 		ngapLog.Error("UE context is nil, this information is mandatory")
 		return
 	}
 	if modifyList == nil {
+		additionalCause = ngap_metrics.PDU_SESS_RESOURCE_MODIFY_LIST_NIL_ERR
 		ngapLog.Errorln(
 			"PDU Session Resource Modify Indication List is nil. This message shall contain at least one Item")
 		return
@@ -347,11 +453,12 @@ func SendPDUSessionResourceModifyIndication(
 
 	pkt, err := BuildPDUSessionResourceModifyIndication(ranUe, modifyList)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build PDU Session Resource Modify Indication failed : %+v", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isPduSessionResourceModifyIndicationSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendPDUSessionResourceNotify(
@@ -362,18 +469,25 @@ func SendPDUSessionResourceNotify(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send PDU Session Resource Notify")
 
+	isPduSessionResourceNotifySent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.PDUSESSION_RESOURCE_NOTIFY,
+		&isPduSessionResourceNotifySent, emptyCause, &additionalCause)
+
 	if ranUe == nil {
+		additionalCause = ngap_metrics.UE_CTX_NIL
 		ngapLog.Error("UE context is nil, this information is mandatory")
 		return
 	}
 
 	pkt, err := BuildPDUSessionResourceNotify(ranUe, notiList, relList)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build PDUSession Resource Notify failed : %+v", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isPduSessionResourceNotifySent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendPDUSessionResourceReleaseResponse(
@@ -384,11 +498,18 @@ func SendPDUSessionResourceReleaseResponse(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send PDU Session Resource Release Response")
 
+	isPduSessionResourceReleaseRespSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.PDUSESSION_RESOURCE_RELEASE_RESPONSE,
+		&isPduSessionResourceReleaseRespSent, emptyCause, &additionalCause)
+
 	if ranUe == nil {
+		additionalCause = ngap_metrics.UE_CTX_NIL
 		ngapLog.Error("UE context is nil, this information is mandatory")
 		return
 	}
 	if len(relList.List) < 1 {
+		additionalCause = ngap_metrics.PDU_SESS_RESOURCE_RELEASED_LIST_NIL_ERR
 		ngapLog.Errorln(
 			"PDUSessionResourceReleasedListRelRes is nil. This message shall contain at least one Item")
 		return
@@ -396,11 +517,12 @@ func SendPDUSessionResourceReleaseResponse(
 
 	pkt, err := BuildPDUSessionResourceReleaseResponse(ranUe, relList, diagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build PDU Session Resource Release Response failed : %+v", err)
 		return
 	}
 
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isPduSessionResourceReleaseRespSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendErrorIndication(
@@ -413,18 +535,30 @@ func SendErrorIndication(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send Error Indication")
 
+	isErrorIndicationSent := false
+	additionalCause := ""
+	if cause != nil {
+		defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.ERROR_INDICATION,
+			&isErrorIndicationSent, *cause, &additionalCause)
+	} else {
+		defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.ERROR_INDICATION,
+			&isErrorIndicationSent, emptyCause, &additionalCause)
+	}
+
 	if (cause == nil) && (criticalityDiagnostics == nil) {
+		additionalCause = ngap_metrics.ERROR_INDICATION_CAUSE_AND_CRITICALITY_NIL_ERR
 		ngapLog.Errorln("Both cause and criticality is nil. This message shall contain at least one of them.")
 		return
 	}
 
 	pkt, err := BuildErrorIndication(amfUENGAPID, ranUENGAPID, cause, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build Error Indication failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(amf, pkt)
+	isErrorIndicationSent, additionalCause = SendToAmf(amf, pkt)
 }
 
 func SendErrorIndicationWithSctpConn(
@@ -437,20 +571,34 @@ func SendErrorIndicationWithSctpConn(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send Error Indication")
 
+	isErrorIndicationWithSctpConnSent := false
+	additionalCause := ""
+	if cause != nil {
+		defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.ERROR_INDICATION_WITH_SCTP_CONN,
+			&isErrorIndicationWithSctpConnSent, *cause, &additionalCause)
+	} else {
+		defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.ERROR_INDICATION_WITH_SCTP_CONN,
+			&isErrorIndicationWithSctpConnSent, emptyCause, &additionalCause)
+	}
+
 	if (cause == nil) && (criticalityDiagnostics == nil) {
+		additionalCause = ngap_metrics.ERROR_INDICATION_CAUSE_AND_CRITICALITY_NIL_ERR
 		ngapLog.Errorln("Both cause and criticality is nil. This message shall contain at least one of them.")
 		return
 	}
 
 	pkt, err := BuildErrorIndication(amfUENGAPID, ranUENGAPID, cause, criticalityDiagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build Error Indication failed : %+v\n", err)
 		return
 	}
 
 	if n, err := sctpConn.Write(pkt); err != nil {
+		additionalCause = ngap_metrics.SCTP_SOCKET_WRITE_ERR
 		ngapLog.Errorf("Write to SCTP socket failed: %+v", err)
 	} else {
+		isErrorIndicationWithSctpConnSent = true
 		ngapLog.Tracef("Wrote %d bytes", n)
 	}
 }
@@ -468,12 +616,18 @@ func SendUERadioCapabilityCheckResponse(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send UE Radio Capability Check Response")
 
+	isUeRadioCapabilityCheckRespSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.UE_RADIO_CAPABILITY_CHECK_RESPONSE,
+		&isUeRadioCapabilityCheckRespSent, emptyCause, &additionalCause)
+
 	pkt, err := BuildUERadioCapabilityCheckResponse(ranUe, diagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build UERadio Capability Check Response failed : %+v\n", err)
 		return
 	}
-	SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
+	isUeRadioCapabilityCheckRespSent, additionalCause = SendToAmf(ranUe.GetSharedCtx().AMF, pkt)
 }
 
 func SendAMFConfigurationUpdateAcknowledge(
@@ -485,13 +639,19 @@ func SendAMFConfigurationUpdateAcknowledge(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send AMF Configuration Update Acknowledge")
 
+	isAmfConfUpdateAckSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.AMF_CONFIGURATION_UPDATE_ACKNOWLEDGE,
+		&isAmfConfUpdateAckSent, emptyCause, &additionalCause)
+
 	pkt, err := BuildAMFConfigurationUpdateAcknowledge(setupList, failList, diagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build AMF Configuration Update Acknowledge failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(amf, pkt)
+	isAmfConfUpdateAckSent, additionalCause = SendToAmf(amf, pkt)
 }
 
 func SendAMFConfigurationUpdateFailure(
@@ -502,13 +662,20 @@ func SendAMFConfigurationUpdateFailure(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send AMF Configuration Update Failure")
+
+	isAmfConfUpdateFailureSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.AMF_CONFIGURATION_UPDATE_FAILURE,
+		&isAmfConfUpdateFailureSent, ngCause, &additionalCause)
+
 	pkt, err := BuildAMFConfigurationUpdateFailure(ngCause, time, diagnostics)
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build AMF Configuration Update Failure failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(amf, pkt)
+	isAmfConfUpdateFailureSent, additionalCause = SendToAmf(amf, pkt)
 }
 
 func SendRANConfigurationUpdate(
@@ -518,8 +685,14 @@ func SendRANConfigurationUpdate(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Send RAN Configuration Update")
 
+	isRanConfUpdateSent := false
+	additionalCause := ""
+	defer ngap_metrics.IncrMetricsSentMsg(ngap_metrics.RAN_CONFIGURATION_UPDATE_UPDATE,
+		&isRanConfUpdateSent, emptyCause, &additionalCause)
+
 	available, _ := n3iwfCtx.AMFReInitAvailableListLoad(amf.SCTPAddr)
 	if !available {
+		additionalCause = ngap_metrics.AMF_TIME_REINIT_ERR
 		ngapLog.Warnf(
 			"Please Wait at least for the indicated time before reinitiating toward same AMF[%s]",
 			amf.SCTPAddr)
@@ -531,11 +704,12 @@ func SendRANConfigurationUpdate(
 		cfg.GetRanNodeName(),
 		cfg.GetSupportedTAList())
 	if err != nil {
+		additionalCause = ngap_metrics.NGAP_MSG_BUILD_ERR
 		ngapLog.Errorf("Build AMF Configuration Update Failure failed : %+v\n", err)
 		return
 	}
 
-	SendToAmf(amf, pkt)
+	isRanConfUpdateSent, additionalCause = SendToAmf(amf, pkt)
 }
 
 func SendUplinkRANConfigurationTransfer() {

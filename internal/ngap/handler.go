@@ -17,6 +17,7 @@ import (
 	"github.com/free5gc/ngap/ngapConvert"
 	"github.com/free5gc/ngap/ngapType"
 	"github.com/free5gc/sctp"
+	ngap_metrics "github.com/free5gc/util/metrics/ngap"
 )
 
 func (s *Server) HandleNGSetupResponse(
@@ -33,6 +34,11 @@ func (s *Server) HandleNGSetupResponse(
 	var plmnSupportList *ngapType.PLMNSupportList
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
+
+	var syntaxCause ngapType.Cause
+	metricStatusOk := false
+
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.NG_SETUP_RESPONSE, &metricStatusOk, &syntaxCause)
 
 	n3iwfCtx := s.Context()
 
@@ -97,6 +103,8 @@ func (s *Server) HandleNGSetupResponse(
 		cause := message.BuildCause(ngapType.CausePresentProtocol,
 			ngapType.CauseProtocolPresentAbstractSyntaxErrorReject)
 
+		syntaxCause = *cause
+
 		procedureCode := ngapType.ProcedureCodeNGSetup
 		triggeringMessage := ngapType.TriggeringMessagePresentSuccessfulOutcome
 		procedureCriticality := ngapType.CriticalityPresentReject
@@ -130,6 +138,7 @@ func (s *Server) HandleNGSetupResponse(
 	if criticalityDiagnostics != nil {
 		printCriticalityDiagnostics(criticalityDiagnostics)
 	}
+	metricStatusOk = true
 }
 
 func (s *Server) HandleNGSetupFailure(
@@ -144,6 +153,9 @@ func (s *Server) HandleNGSetupFailure(
 	var timeToWait *ngapType.TimeToWait
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
+
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.NG_SETUP_FAILURE, &metricStatusOk, cause)
 
 	n3iwfCtx := s.Context()
 
@@ -238,6 +250,7 @@ func (s *Server) HandleNGSetupFailure(
 		})
 		return
 	}
+	metricStatusOk = true
 }
 
 func (s *Server) HandleNGReset(
@@ -250,6 +263,9 @@ func (s *Server) HandleNGReset(
 	var cause *ngapType.Cause
 	var resetType *ngapType.ResetType
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
+
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.NG_RESET, &metricStatusOk, cause)
 
 	n3iwfCtx := s.Context()
 
@@ -352,6 +368,7 @@ func (s *Server) HandleNGReset(
 	default:
 		ngapLog.Warnf("Invalid ResetType[%d]", resetType.Present)
 	}
+	metricStatusOk = true
 }
 
 func (s *Server) HandleNGResetAcknowledge(
@@ -363,6 +380,10 @@ func (s *Server) HandleNGResetAcknowledge(
 
 	var uEAssociatedLogicalNGConnectionList *ngapType.UEAssociatedLogicalNGConnectionList
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
+
+	var syntaxCause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.NG_RESET_ACKNOWLEDGE, &metricStatusOk, syntaxCause)
 
 	if amf == nil {
 		ngapLog.Error("AMF Context is nil")
@@ -414,6 +435,7 @@ func (s *Server) HandleNGResetAcknowledge(
 	if criticalityDiagnostics != nil {
 		printCriticalityDiagnostics(criticalityDiagnostics)
 	}
+	metricStatusOk = true
 }
 
 func (s *Server) HandleInitialContextSetupRequest(
@@ -443,6 +465,10 @@ func (s *Server) HandleInitialContextSetupRequest(
 
 	var ranUe n3iwf_context.RanUe
 	var ranUeCtx *n3iwf_context.RanUeSharedCtx
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.INITIAL_CONTEXT_SETUP_REQUEST, &metricStatusOk, cause)
 
 	n3iwfCtx := s.Context()
 
@@ -564,7 +590,7 @@ func (s *Server) HandleInitialContextSetupRequest(
 	if len(iesCriticalityDiagnostics.List) > 0 {
 		ngapLog.Traceln(
 			"[NGAP] Sending unsuccessful outcome to AMF, because some mandatory IEs were not included")
-		cause := message.BuildCause(ngapType.CausePresentProtocol,
+		cause = message.BuildCause(ngapType.CausePresentProtocol,
 			ngapType.CauseProtocolPresentAbstractSyntaxErrorFalselyConstructedMessage)
 
 		criticalityDiagnostics := buildCriticalityDiagnostics(nil, nil, nil, &iesCriticalityDiagnostics)
@@ -614,7 +640,7 @@ func (s *Server) HandleInitialContextSetupRequest(
 			ranUeCtx.Ambr = ueAggregateMaximumBitRate
 		} else {
 			ngapLog.Errorln("IE[UEAggregateMaximumBitRate] is nil")
-			cause := message.BuildCause(ngapType.CausePresentProtocol,
+			cause = message.BuildCause(ngapType.CausePresentProtocol,
 				ngapType.CauseProtocolPresentAbstractSyntaxErrorFalselyConstructedMessage)
 
 			criticalityDiagnosticsIEItem := buildCriticalityDiagnosticsIEItem(ngapType.CriticalityPresentReject,
@@ -663,7 +689,7 @@ func (s *Server) HandleInitialContextSetupRequest(
 			if err != nil {
 				ngapLog.Errorf("Create PDU Session Error: %v\n", err)
 
-				cause := message.BuildCause(ngapType.CausePresentRadioNetwork,
+				cause = message.BuildCause(ngapType.CausePresentRadioNetwork,
 					ngapType.CauseRadioNetworkPresentMultiplePDUSessionIDInstances)
 				unsuccessfulTransfer, buildErr := message.
 					BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
@@ -734,6 +760,7 @@ func (s *Server) HandleInitialContextSetupRequest(
 		s.SendIkeEvt(n3iwf_context.NewSendEAPSuccessMsgEvt(
 			spi, securityKey.Value.Bytes, len(ranUeCtx.PduSessionList),
 		))
+		metricStatusOk = true
 	default:
 		ngapLog.Errorf("Unknown UE type: %T", ue)
 	}
@@ -938,6 +965,10 @@ func (s *Server) HandleUEContextModificationRequest(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle UE Context Modification Request")
 
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.UE_CONTEXT_MODIFICATION_REQUEST, &metricStatusOk, cause)
+
 	if amf == nil {
 		ngapLog.Error("Corresponding AMF context not found")
 		return
@@ -1070,6 +1101,8 @@ func (s *Server) HandleUEContextModificationRequest(
 	}
 
 	s.SendIkeEvt(n3iwf_context.NewIKEContextUpdateEvt(spi, securityKey.Value.Bytes)) // Kn3iwf
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleUEContextReleaseCommand(
@@ -1079,13 +1112,16 @@ func (s *Server) HandleUEContextReleaseCommand(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle UE Context Release Command")
 
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.UE_CONTEXT_RELEASE_COMMAND, &metricStatusOk, cause)
+
 	if amf == nil {
 		ngapLog.Error("Corresponding AMF context not found")
 		return
 	}
 
 	var ueNgapIDs *ngapType.UENGAPIDs
-	var cause *ngapType.Cause
 	var iesCriticalityDiagnostics ngapType.CriticalityDiagnosticsIEList
 	var ranUe n3iwf_context.RanUe
 
@@ -1162,6 +1198,8 @@ func (s *Server) HandleUEContextReleaseCommand(
 	if err != nil {
 		ngapLog.Warnf("HandleUEContextReleaseCommand(): %v", err)
 	}
+
+	metricStatusOk = true
 }
 
 func (s *Server) releaseIkeUeAndRanUe(ranUe n3iwf_context.RanUe) error {
@@ -1185,6 +1223,10 @@ func (s *Server) HandleDownlinkNASTransport(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle Downlink NAS Transport")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.DOWNLINK_NAS_TRANSPORT, &metricStatusOk, cause)
 
 	if amf == nil {
 		ngapLog.Error("Corresponding AMF context not found")
@@ -1339,6 +1381,8 @@ func (s *Server) HandleDownlinkNASTransport(
 			ngapLog.Errorf("Unknown UE type: %T", ue)
 		}
 	}
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandlePDUSessionResourceSetupRequest(
@@ -1347,6 +1391,10 @@ func (s *Server) HandlePDUSessionResourceSetupRequest(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle PDU Session Resource Setup Request")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.PDUSESSION_RESOURCE_SETUP_REQUEST, &metricStatusOk, cause)
 
 	if amf == nil {
 		ngapLog.Error("Corresponding AMF context not found")
@@ -1492,7 +1540,7 @@ func (s *Server) HandlePDUSessionResourceSetupRequest(
 			if err != nil {
 				ngapLog.Errorf("Create PDU Session Error: %v\n", err)
 
-				cause := message.BuildCause(ngapType.CausePresentRadioNetwork,
+				cause = message.BuildCause(ngapType.CausePresentRadioNetwork,
 					ngapType.CauseRadioNetworkPresentMultiplePDUSessionIDInstances)
 				unsuccessfulTransfer, buildErr := message.
 					BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
@@ -1544,6 +1592,7 @@ func (s *Server) HandlePDUSessionResourceSetupRequest(
 			ue.TemporaryCachedNASMessage = nasEnv
 		}
 	}
+	metricStatusOk = true
 }
 
 func (s *Server) HandlePDUSessionResourceModifyRequest(
@@ -1552,6 +1601,10 @@ func (s *Server) HandlePDUSessionResourceModifyRequest(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle PDU Session Resource Modify Request")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.PDUSESSION_RESOURCE_MODIFY_REQUEST, &metricStatusOk, cause)
 
 	if amf == nil {
 		ngapLog.Error("Corresponding AMF context not found")
@@ -1659,7 +1712,7 @@ func (s *Server) HandlePDUSessionResourceModifyRequest(
 			if pduSession = ranUeCtx.FindPDUSession(pduSessionID); pduSession == nil {
 				ngapLog.Errorf("[PDUSessionID: %d] Unknown PDU session ID", pduSessionID)
 
-				cause := message.BuildCause(ngapType.CausePresentRadioNetwork,
+				cause = message.BuildCause(ngapType.CausePresentRadioNetwork,
 					ngapType.CauseRadioNetworkPresentUnknownPDUSessionID)
 				unsuccessfulTransfer, buildErr := message.
 					BuildPDUSessionResourceModifyUnsuccessfulTransfer(*cause, nil)
@@ -1683,6 +1736,7 @@ func (s *Server) HandlePDUSessionResourceModifyRequest(
 	}
 
 	message.SendPDUSessionResourceModifyResponse(ranUe, responseList, failedListModRes, nil)
+	metricStatusOk = true
 }
 
 func (s *Server) handlePDUSessionResourceModifyRequestTransfer(
@@ -1850,6 +1904,10 @@ func (s *Server) HandlePDUSessionResourceModifyConfirm(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle PDU Session Resource Modify Confirm")
 
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.PDUSESSION_RESOURCE_MODIFY_CONFIRM, &metricStatusOk, cause)
+
 	var aMFUENGAPID *ngapType.AMFUENGAPID
 	var rANUENGAPID *ngapType.RANUENGAPID
 	var pDUSessionResourceModifyListModCfm *ngapType.PDUSessionResourceModifyListModCfm
@@ -1983,6 +2041,8 @@ func (s *Server) HandlePDUSessionResourceModifyConfirm(
 	if criticalityDiagnostics != nil {
 		printCriticalityDiagnostics(criticalityDiagnostics)
 	}
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandlePDUSessionResourceReleaseCommand(
@@ -1991,6 +2051,11 @@ func (s *Server) HandlePDUSessionResourceReleaseCommand(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle PDU Session Resource Release Command")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.PDUSESSION_RESOURCE_RELEASE_COMMAND, &metricStatusOk, cause)
+
 	var aMFUENGAPID *ngapType.AMFUENGAPID
 	var rANUENGAPID *ngapType.RANUENGAPID
 	// var rANPagingPriority *ngapType.RANPagingPriority
@@ -2074,7 +2139,7 @@ func (s *Server) HandlePDUSessionResourceReleaseCommand(
 	ranUe, ok := n3iwfCtx.RanUePoolLoad(rANUENGAPID.Value)
 	if !ok {
 		ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", rANUENGAPID.Value)
-		cause := message.BuildCause(ngapType.CausePresentRadioNetwork,
+		cause = message.BuildCause(ngapType.CausePresentRadioNetwork,
 			ngapType.CauseRadioNetworkPresentUnknownLocalUENGAPID)
 		message.SendErrorIndication(amf, nil, nil, cause, nil)
 		return
@@ -2084,7 +2149,7 @@ func (s *Server) HandlePDUSessionResourceReleaseCommand(
 	if ranUeCtx.AmfUeNgapId != aMFUENGAPID.Value {
 		ngapLog.Errorf("Inconsistent remote UE NGAP ID, AMFUENGAPID: %d, RanUe.AmfUeNgapId: %d",
 			aMFUENGAPID.Value, ranUeCtx.AmfUeNgapId)
-		cause := message.BuildCause(ngapType.CausePresentRadioNetwork,
+		cause = message.BuildCause(ngapType.CausePresentRadioNetwork,
 			ngapType.CauseRadioNetworkPresentInconsistentRemoteUENGAPID)
 		message.SendErrorIndication(amf, nil, &rANUENGAPID.Value, cause, nil)
 		return
@@ -2133,6 +2198,7 @@ func (s *Server) HandlePDUSessionResourceReleaseCommand(
 	// if nASPDU != nil {
 	// TODO: Send NAS to UE
 	// }
+	metricStatusOk = true
 }
 
 func (s *Server) HandleErrorIndication(
@@ -2142,9 +2208,12 @@ func (s *Server) HandleErrorIndication(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle Error Indication")
 
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.ERROR_INDICATION, &metricStatusOk, cause)
+
 	var aMFUENGAPID *ngapType.AMFUENGAPID
 	var rANUENGAPID *ngapType.RANUENGAPID
-	var cause *ngapType.Cause
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
 
 	if amf == nil {
@@ -2224,6 +2293,8 @@ func (s *Server) HandleErrorIndication(
 		}
 	}
 
+	metricStatusOk = true
+
 	// TODO: handle error based on cause/criticalityDiagnostics
 }
 
@@ -2233,6 +2304,11 @@ func (s *Server) HandleUERadioCapabilityCheckRequest(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle UE Radio Capability Check Request")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.UE_RADIO_CAPABILITY_CHECK_REQUEST, &metricStatusOk, cause)
+
 	var aMFUENGAPID *ngapType.AMFUENGAPID
 	var rANUENGAPID *ngapType.RANUENGAPID
 	var uERadioCapability *ngapType.UERadioCapability
@@ -2301,13 +2377,14 @@ func (s *Server) HandleUERadioCapabilityCheckRequest(
 	ranUe, ok := n3iwfCtx.RanUePoolLoad(rANUENGAPID.Value)
 	if !ok {
 		ngapLog.Errorf("Unknown local UE NGAP ID. RanUENGAPID: %d", rANUENGAPID.Value)
-		cause := message.BuildCause(ngapType.CausePresentRadioNetwork,
+		cause = message.BuildCause(ngapType.CausePresentRadioNetwork,
 			ngapType.CauseRadioNetworkPresentUnknownLocalUENGAPID)
 		message.SendErrorIndication(amf, nil, nil, cause, nil)
 		return
 	}
 
 	ranUe.GetSharedCtx().RadioCapability = uERadioCapability
+	metricStatusOk = true
 }
 
 func (s *Server) HandleAMFConfigurationUpdate(
@@ -2316,6 +2393,10 @@ func (s *Server) HandleAMFConfigurationUpdate(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle AMF Configuration Updaet")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.AMF_CONFIGURATION_UPDATE, &metricStatusOk, cause)
 
 	var aMFName *ngapType.AMFName
 	var servedGUAMIList *ngapType.ServedGUAMIList
@@ -2432,6 +2513,8 @@ func (s *Server) HandleAMFConfigurationUpdate(
 		}
 	}
 	message.SendAMFConfigurationUpdateAcknowledge(amf, setupList, nil, nil)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleRANConfigurationUpdateAcknowledge(
@@ -2440,6 +2523,10 @@ func (s *Server) HandleRANConfigurationUpdateAcknowledge(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle RAN Configuration Update Acknowledge")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.RAN_CONFIGURATION_UPDATE_ACKNOWLEDGE, &metricStatusOk, cause)
 
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
 
@@ -2476,6 +2563,8 @@ func (s *Server) HandleRANConfigurationUpdateAcknowledge(
 	if criticalityDiagnostics != nil {
 		printCriticalityDiagnostics(criticalityDiagnostics)
 	}
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleRANConfigurationUpdateFailure(
@@ -2486,6 +2575,9 @@ func (s *Server) HandleRANConfigurationUpdateFailure(
 	ngapLog.Infoln("Handle RAN Configuration Update Failure")
 
 	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.RAN_CONFIGURATION_UPDATE_FAILURE, &metricStatusOk, cause)
+
 	var timeToWait *ngapType.TimeToWait
 	var criticalityDiagnostics *ngapType.CriticalityDiagnostics
 
@@ -2564,6 +2656,7 @@ func (s *Server) HandleRANConfigurationUpdateFailure(
 		return
 	}
 	message.SendRANConfigurationUpdate(n3iwfCtx, amf)
+	metricStatusOk = true
 }
 
 func (s *Server) HandleDownlinkRANConfigurationTransfer(
@@ -2571,6 +2664,12 @@ func (s *Server) HandleDownlinkRANConfigurationTransfer(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle Downlink RAN Configuration Transfer")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.DOWNLINK_RAN_CONFIGURATION_TRANSFER, &metricStatusOk, cause)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleDownlinkRANStatusTransfer(
@@ -2578,6 +2677,12 @@ func (s *Server) HandleDownlinkRANStatusTransfer(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle Downlink RAN Status Transfer")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.DOWNLINK_RAN_STATUS_TRANSFER, &metricStatusOk, cause)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleAMFStatusIndication(
@@ -2585,6 +2690,12 @@ func (s *Server) HandleAMFStatusIndication(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle AMF Status Indication")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.AMF_STATUS_INDICATION, &metricStatusOk, cause)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleLocationReportingControl(
@@ -2592,6 +2703,12 @@ func (s *Server) HandleLocationReportingControl(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle Location Reporting Control")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.LOCATION_REPORTING_CONTROL, &metricStatusOk, cause)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleUETNLAReleaseRequest(
@@ -2599,6 +2716,12 @@ func (s *Server) HandleUETNLAReleaseRequest(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle UE TNLA Release Request")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.UE_TNLA_BINDING_RELEASE_REQUEST, &metricStatusOk, cause)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleOverloadStart(
@@ -2607,6 +2730,10 @@ func (s *Server) HandleOverloadStart(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle Overload Start")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.OVERLOAD_START, &metricStatusOk, cause)
 
 	var aMFOverloadResponse *ngapType.OverloadResponse
 	var aMFTrafficLoadReductionIndication *ngapType.TrafficLoadReductionIndication
@@ -2649,6 +2776,7 @@ func (s *Server) HandleOverloadStart(
 	}
 	// TODO: restrict rule about overload action
 	amf.StartOverload(aMFOverloadResponse, aMFTrafficLoadReductionIndication, overloadStartNSSAIList)
+	metricStatusOk = true
 }
 
 func (s *Server) HandleOverloadStop(
@@ -2658,12 +2786,17 @@ func (s *Server) HandleOverloadStop(
 	ngapLog := logger.NgapLog
 	ngapLog.Infoln("Handle Overload Stop")
 
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.OVERLOAD_STOP, &metricStatusOk, cause)
+
 	if amf == nil {
 		ngapLog.Error("AMF Context is nil")
 		return
 	}
 	// TODO: remove restrict about overload action
 	amf.StopOverload()
+	metricStatusOk = true
 }
 
 func buildCriticalityDiagnostics(
@@ -2838,6 +2971,10 @@ func (s *Server) HandleGetNGAPContext(
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle HandleGetNGAPContext Event")
 
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg("GetNGAPContext", &metricStatusOk, cause)
+
 	evt := ngapEvent.(*n3iwf_context.GetNGAPContextEvt)
 	ranUeNgapId := evt.RanUeNgapId
 	ngapCxtReqNumlist := evt.NgapCxtReqNumlist
@@ -2867,6 +3004,8 @@ func (s *Server) HandleGetNGAPContext(
 	}
 
 	s.SendIkeEvt(n3iwf_context.NewGetNGAPContextRepEvt(spi, ngapCxtReqNumlist, ngapCxt))
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleUnmarshalEAP5GData(
@@ -2874,6 +3013,10 @@ func (s *Server) HandleUnmarshalEAP5GData(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle UnmarshalEAP5GData Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg("UnmarchalEAP5GData", &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.UnmarshalEAP5GDataEvt)
 	spi := evt.LocalSPI
@@ -2948,6 +3091,7 @@ func (s *Server) HandleUnmarshalEAP5GData(
 		}
 		message.SendUplinkNASTransport(ranUe, nasPDU)
 	}
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendInitialUEMessage(
@@ -2955,6 +3099,10 @@ func (s *Server) HandleSendInitialUEMessage(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendInitialUEMessage Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.INITIAL_UE_MESSAGE, &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendInitialUEMessageEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -2973,6 +3121,7 @@ func (s *Server) HandleSendInitialUEMessage(
 	ranUeCtx.IPAddrv4 = ipv4Addr
 	ranUeCtx.PortNumber = int32(ipv4Port) // #nosec G115
 	message.SendInitialUEMessage(ranUeCtx.AMF, ranUe, nasPDU)
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendPDUSessionResourceSetupResponse(
@@ -2980,6 +3129,10 @@ func (s *Server) HandleSendPDUSessionResourceSetupResponse(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendPDUSessionResourceSetupResponse Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.PDUSESSION_RESOURCE_SETUP_RESPONSE, &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendPDUSessionResourceSetupResEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -2998,10 +3151,9 @@ func (s *Server) HandleSendPDUSessionResourceSetupResponse(
 		for index, pduSession := range temporaryPDUSessionSetupData.UnactivatedPDUSession {
 			errStr := temporaryPDUSessionSetupData.FailedErrStr[index]
 			if errStr != n3iwf_context.ErrNil {
-				var cause ngapType.Cause
 				switch errStr {
 				case n3iwf_context.ErrTransportResourceUnavailable:
-					cause = ngapType.Cause{
+					cause = &ngapType.Cause{
 						Present: ngapType.CausePresentTransport,
 						Transport: &ngapType.CauseTransport{
 							Value: ngapType.CauseTransportPresentTransportResourceUnavailable,
@@ -3012,7 +3164,7 @@ func (s *Server) HandleSendPDUSessionResourceSetupResponse(
 					return
 				}
 
-				transfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(cause, nil)
+				transfer, err := message.BuildPDUSessionResourceSetupUnsuccessfulTransfer(*cause, nil)
 				if err != nil {
 					ngapLog.Errorf("Build PDU Session Resource Setup Unsuccessful Transfer Failed: %v", err)
 					continue
@@ -3061,6 +3213,8 @@ func (s *Server) HandleSendPDUSessionResourceSetupResponse(
 	} else {
 		message.SendInitialContextSetupResponse(ranUe, nil, nil, nil)
 	}
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendNASMsg(
@@ -3068,6 +3222,10 @@ func (s *Server) HandleSendNASMsg(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendNASMsg Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg("SendNASMsg", &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendNASMsgEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3091,6 +3249,8 @@ func (s *Server) HandleSendNASMsg(
 		ngapLog.Tracef("Forward PDU Seesion Establishment Accept to UE. Wrote %d bytes", n)
 		n3iwfUe.TemporaryCachedNASMessage = nil
 	}
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleStartTCPSignalNASMsg(
@@ -3098,6 +3258,10 @@ func (s *Server) HandleStartTCPSignalNASMsg(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle StartTCPSignalNASMsg Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg("StartTCPSignalNASMsg", &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.StartTCPSignalNASMsgEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3116,6 +3280,8 @@ func (s *Server) HandleStartTCPSignalNASMsg(
 	}
 
 	n3iwfUe.IsNASTCPConnEstablished = true
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleNASTCPConnEstablishedComplete(
@@ -3123,6 +3289,10 @@ func (s *Server) HandleNASTCPConnEstablishedComplete(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle NASTCPConnEstablishedComplete Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg("NASTCPConnEstablishedComplete", &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.NASTCPConnEstablishedCompleteEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3151,6 +3321,7 @@ func (s *Server) HandleNASTCPConnEstablishedComplete(
 		}
 		n3iwfUe.TemporaryCachedNASMessage = nil
 	}
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendUEContextReleaseRequest(
@@ -3159,12 +3330,15 @@ func (s *Server) HandleSendUEContextReleaseRequest(
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendUEContextReleaseRequest Event")
 
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.UE_CONTEXT_RELEASE_REQUEST, &metricStatusOk, cause)
+
 	evt := ngapEvent.(*n3iwf_context.SendUEContextReleaseRequestEvt)
 
 	ranUeNgapId := evt.RanUeNgapId
 	errMsg := evt.ErrMsg
 
-	var cause *ngapType.Cause
 	switch errMsg {
 	case n3iwf_context.ErrRadioConnWithUeLost:
 		cause = message.BuildCause(ngapType.CausePresentRadioNetwork,
@@ -3183,6 +3357,7 @@ func (s *Server) HandleSendUEContextReleaseRequest(
 	}
 
 	message.SendUEContextReleaseRequest(ranUe, *cause)
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendUEContextReleaseComplete(
@@ -3190,6 +3365,10 @@ func (s *Server) HandleSendUEContextReleaseComplete(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendUEContextReleaseComplete Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.UE_CONTEXT_RELEASE_COMPLETE, &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendUEContextReleaseCompleteEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3205,6 +3384,8 @@ func (s *Server) HandleSendUEContextReleaseComplete(
 		ngapLog.Errorf("Delete RanUe Context error : %v", err)
 	}
 	message.SendUEContextReleaseComplete(ranUe, nil)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendPDUSessionResourceReleaseRes(
@@ -3212,6 +3393,10 @@ func (s *Server) HandleSendPDUSessionResourceReleaseRes(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendPDUSessionResourceReleaseResponse Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.PDUSESSION_RESOURCE_RELEASE_RESPONSE, &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendPDUSessionResourceReleaseResEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3224,6 +3409,8 @@ func (s *Server) HandleSendPDUSessionResourceReleaseRes(
 	}
 
 	message.SendPDUSessionResourceReleaseResponse(ranUe, ranUe.GetSharedCtx().PduSessionReleaseList, nil)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendUplinkNASTransport(
@@ -3231,6 +3418,10 @@ func (s *Server) HandleSendUplinkNASTransport(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendUplinkNASTransport Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.UPLINK_NAS_TRANSPORT, &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendUplinkNASTransportEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3242,6 +3433,8 @@ func (s *Server) HandleSendUplinkNASTransport(
 	}
 
 	message.SendUplinkNASTransport(ranUe, evt.Pdu)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendInitialContextSetupResponse(
@@ -3249,6 +3442,10 @@ func (s *Server) HandleSendInitialContextSetupResponse(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendInitialContextSetupResponse Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.INITIAL_CONTEXT_SETUP_RESPONSE, &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendInitialContextSetupRespEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3260,6 +3457,8 @@ func (s *Server) HandleSendInitialContextSetupResponse(
 	}
 
 	message.SendInitialContextSetupResponse(ranUe, evt.ResponseList, evt.FailedList, evt.CriticalityDiagnostics)
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendSendUEContextRelease(
@@ -3267,6 +3466,10 @@ func (s *Server) HandleSendSendUEContextRelease(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendSendUEContextRelease Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.UE_CONTEXT_RELEASE_REQUEST, &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendUEContextReleaseEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3284,11 +3487,13 @@ func (s *Server) HandleSendSendUEContextRelease(
 		message.SendUEContextReleaseComplete(ranUe, nil)
 		ranUe.GetSharedCtx().UeCtxRelState = n3iwf_context.UeCtxRelStateNone
 	} else {
-		cause := message.BuildCause(ngapType.CausePresentRadioNetwork,
+		cause = message.BuildCause(ngapType.CausePresentRadioNetwork,
 			ngapType.CauseRadioNetworkPresentRadioConnectionWithUeLost)
 		message.SendUEContextReleaseRequest(ranUe, *cause)
 		ranUe.GetSharedCtx().UeCtxRelState = n3iwf_context.UeCtxRelStateOngoing
 	}
+
+	metricStatusOk = true
 }
 
 func (s *Server) HandleSendSendPDUSessionResourceRelease(
@@ -3296,6 +3501,10 @@ func (s *Server) HandleSendSendPDUSessionResourceRelease(
 ) {
 	ngapLog := logger.NgapLog
 	ngapLog.Tracef("Handle SendSendPDUSessionResourceRelease Event")
+
+	var cause *ngapType.Cause
+	metricStatusOk := false
+	defer ngap_metrics.IncrMetricsRcvMsg(ngap_metrics.PDUSESSION_RESOURCE_RELEASE_RESPONSE, &metricStatusOk, cause)
 
 	evt := ngapEvent.(*n3iwf_context.SendPDUSessionResourceReleaseEvt)
 	ranUeNgapId := evt.RanUeNgapId
@@ -3316,4 +3525,6 @@ func (s *Server) HandleSendSendPDUSessionResourceRelease(
 		}
 		ranUe.GetSharedCtx().PduSessResRelState = n3iwf_context.PduSessResRelStateOngoing
 	}
+
+	metricStatusOk = true
 }
