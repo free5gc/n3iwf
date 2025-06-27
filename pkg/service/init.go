@@ -76,7 +76,7 @@ func NewApp(
 		return nil, errors.Wrap(err, "NewApp()")
 	}
 
-	features := map[utils.MetricTypeEnabled]bool{}
+	features := map[utils.MetricTypeEnabled]bool{utils.NGAP: true}
 	customMetrics := make(map[utils.MetricTypeEnabled][]prometheus.Collector)
 	if cfg.AreMetricsEnabled() {
 		if n3iwf.metricsServer, err = metrics.NewServer(getInitMetrics(cfg, features, customMetrics), tlsKeyLogPath, logger.InitLog); err != nil {
