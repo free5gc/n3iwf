@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/factory"
@@ -32,29 +32,35 @@ func main() {
 	app.Usage = "Non-3GPP Interworking Function (N3IWF)"
 	app.Action = action
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:  "config, c",
-			Usage: "Load configuration from `FILE`",
+		&cli.StringFlag{
+			Name:    "config",
+			Aliases: []string{"c"},
+			Usage:   "Load configuration from `FILE`",
 		},
-		cli.StringSliceFlag{
-			Name:  "log, l",
-			Usage: "Output NF log to `FILE`",
+		&cli.StringSliceFlag{
+			Name:    "log",
+			Aliases: []string{"l"},
+			Usage:   "Output NF log to `FILE`",
 		},
-		cli.BoolFlag{
-			Name:  "nolog, nl",
-			Usage: "Disable log to stdout/stderr",
+		&cli.BoolFlag{
+			Name:    "nolog",
+			Aliases: []string{"nl"},
+			Usage:   "Disable log to stdout/stderr",
 		},
-		cli.StringFlag{
-			Name:  "loglevel, ll",
-			Usage: "Override logger level",
+		&cli.StringFlag{
+			Name:    "loglevel",
+			Aliases: []string{"ll"},
+			Usage:   "Override logger level",
 		},
-		cli.BoolFlag{
-			Name:  "reportcaller, rc",
-			Usage: "Enable logger report caller",
+		&cli.BoolFlag{
+			Name:    "reportcaller",
+			Aliases: []string{"rc"},
+			Usage:   "Enable logger report caller",
 		},
-		cli.BoolFlag{
-			Name:  "debug, deb",
-			Usage: "Enable pprof debug",
+		&cli.BoolFlag{
+			Name:    "debug",
+			Aliases: []string{"deb"},
+			Usage:   "Enable pprof debug",
 		},
 	}
 	if err := app.Run(os.Args); err != nil {
