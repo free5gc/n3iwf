@@ -198,7 +198,7 @@ func SetupIPsecXfrmi(xfrmIfaceName, parentIfaceName string, xfrmIfaceId uint32,
 	)
 
 	if parent, err = netlink.LinkByName(parentIfaceName); err != nil {
-		return nil, fmt.Errorf("Cannot find parent interface %s by name: %+v", parentIfaceName, err)
+		return nil, fmt.Errorf("cannot find parent interface %s by name: %+v", parentIfaceName, err)
 	}
 
 	// ip link add <xfrmIfaceName> type xfrm dev <parent.Attrs().Name> if_id <xfrmIfaceId>

@@ -172,7 +172,7 @@ func getInterfaceName(IPAddress string) (interfaceName string, err error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("Cannot find interface name for IP[%s]", IPAddress)
+	return "", fmt.Errorf("cannot find interface name for IP[%s]", IPAddress)
 }
 
 func (c *N3IWFContext) NewN3iwfIkeUe(spi uint64) *N3IWFIkeUe {
@@ -274,11 +274,11 @@ func (c *N3IWFContext) RanUeLoadFromIkeSPI(spi uint64) (RanUe, error) {
 	if ok {
 		ranUe, err := c.RanUePoolLoad(ranNgapId.(int64))
 		if !err {
-			return nil, fmt.Errorf("Cannot find RanUE from RanNgapId : %+v", ranNgapId)
+			return nil, fmt.Errorf("cannot find RanUE from RanNgapId : %+v", ranNgapId)
 		}
 		return ranUe, nil
 	}
-	return nil, fmt.Errorf("Cannot find RanNgapId from IkeUe SPI : %+v", spi)
+	return nil, fmt.Errorf("cannot find RanNgapId from IkeUe SPI : %+v", spi)
 }
 
 func (c *N3IWFContext) IkeUeLoadFromNgapId(ranUeNgapId int64) (*N3IWFIkeUe, error) {
@@ -286,11 +286,11 @@ func (c *N3IWFContext) IkeUeLoadFromNgapId(ranUeNgapId int64) (*N3IWFIkeUe, erro
 	if ok {
 		ikeUe, err := c.IkeUePoolLoad(spi.(uint64))
 		if !err {
-			return nil, fmt.Errorf("Cannot find IkeUe from spi : %+v", spi)
+			return nil, fmt.Errorf("cannot find IkeUe from spi : %+v", spi)
 		}
 		return ikeUe, nil
 	}
-	return nil, fmt.Errorf("Cannot find SPI from NgapId : %+v", ranUeNgapId)
+	return nil, fmt.Errorf("cannot find SPI from NgapId : %+v", ranUeNgapId)
 }
 
 func (c *N3IWFContext) NewN3iwfAmf(sctpAddr string, conn *sctp.SCTPConn) *N3IWFAMF {
@@ -335,7 +335,7 @@ func (c *N3IWFContext) AMFReInitAvailableListStore(sctpAddr string, flag bool) {
 func (c *N3IWFContext) NewIKESecurityAssociation() *IKESecurityAssociation {
 	ikeSecurityAssociation := new(IKESecurityAssociation)
 
-	var maxSPI *big.Int = new(big.Int).SetUint64(math.MaxUint64)
+	maxSPI := new(big.Int).SetUint64(math.MaxUint64)
 	var localSPIuint64 uint64
 
 	for {

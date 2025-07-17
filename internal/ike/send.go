@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/free5gc/ike"
-	"github.com/free5gc/ike/message"
 	ike_message "github.com/free5gc/ike/message"
 	"github.com/free5gc/ike/security"
 	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
@@ -78,8 +77,8 @@ func SendIKEDeleteRequest(n3iwfCtx *n3iwf_context.N3IWFContext, localSPI uint64)
 		return
 	}
 
-	var deletePayload message.IKEPayloadContainer
-	deletePayload.BuildDeletePayload(message.TypeIKE, 0, 0, nil)
+	var deletePayload ike_message.IKEPayloadContainer
+	deletePayload.BuildDeletePayload(ike_message.TypeIKE, 0, 0, nil)
 	SendUEInformationExchange(ikeUe.N3IWFIKESecurityAssociation, ikeUe.N3IWFIKESecurityAssociation.IKESAKey,
 		&deletePayload, false, false, ikeUe.N3IWFIKESecurityAssociation.ResponderMessageID,
 		ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr, ikeUe.IKEConnection.N3IWFAddr)
@@ -111,8 +110,8 @@ func SendChildSADeleteRequest(
 		}
 	}
 
-	var deletePayload message.IKEPayloadContainer
-	deletePayload.BuildDeletePayload(message.TypeESP, 4, spiLen, deleteSPIs)
+	var deletePayload ike_message.IKEPayloadContainer
+	deletePayload.BuildDeletePayload(ike_message.TypeESP, 4, spiLen, deleteSPIs)
 	SendUEInformationExchange(ikeUe.N3IWFIKESecurityAssociation, ikeUe.N3IWFIKESecurityAssociation.IKESAKey,
 		&deletePayload, false, false, ikeUe.N3IWFIKESecurityAssociation.ResponderMessageID,
 		ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr, ikeUe.IKEConnection.N3IWFAddr)

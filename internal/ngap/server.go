@@ -3,6 +3,7 @@ package ngap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"runtime/debug"
 	"sync"
@@ -134,7 +135,7 @@ func (s *Server) listenAndServe(
 			time.Sleep(1 * time.Second)
 		} else {
 			ngapLog.Debugf("[SCTP] AMF SCTP address: %s", remoteAddr)
-			errChan <- errors.New("Failed to connect to AMF.")
+			errChan <- fmt.Errorf("failed to connect to AMF")
 			return
 		}
 	}
@@ -147,7 +148,7 @@ func (s *Server) listenAndServe(
 		if errConn != nil {
 			ngapLog.Errorf("conn close error in GetDefaultSentParam(): %+v", errConn)
 		}
-		errChan <- errors.New("Get socket information failed.")
+		errChan <- fmt.Errorf("get socket information failed")
 		return
 	}
 	info.PPID = lib_ngap.PPID
@@ -158,7 +159,7 @@ func (s *Server) listenAndServe(
 		if errConn != nil {
 			ngapLog.Errorf("conn close error in SetDefaultSentParam(): %+v", errConn)
 		}
-		errChan <- errors.New("Set socket parameter failed.")
+		errChan <- errors.New("set socket parameter failed")
 		return
 	}
 
@@ -170,7 +171,7 @@ func (s *Server) listenAndServe(
 		if errConn != nil {
 			ngapLog.Errorf("conn close error in SubscribeEvents(): %+v", errConn)
 		}
-		errChan <- errors.New("Subscribe SCTP event failed.")
+		errChan <- errors.New("subscribe SCTP event failed")
 		return
 	}
 
