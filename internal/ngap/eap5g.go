@@ -29,7 +29,7 @@ func UnmarshalEAP5GData(
 ) {
 	ngapLog := logger.NgapLog
 	if len(codedData) < 2 {
-		return nil, nil, errors.New("No data to decode")
+		return nil, nil, errors.New("no data to decode")
 	}
 
 	ngapLog.Debug("===== Unmarshal EAP5G Data (Ref: TS24.502 Fig. 9.3.2.2.2-1) =====")
@@ -43,7 +43,7 @@ func UnmarshalEAP5GData(
 
 	if len(codedData) < 2 {
 		ngapLog.Error("No AN-Parameter type or length specified")
-		return nil, nil, errors.New("Error formatting")
+		return nil, nil, errors.New("error formatting")
 	}
 
 	// Length of the AN-Parameter field
@@ -56,7 +56,7 @@ func UnmarshalEAP5GData(
 		// Bound checking
 		if len(anParameterField) < int(anParameterLength) {
 			ngapLog.Error("Packet contained error length of value")
-			return nil, nil, errors.New("Error formatting")
+			return nil, nil, errors.New("error formatting")
 		}
 		anParameterField = anParameterField[:anParameterLength]
 
@@ -77,12 +77,12 @@ func UnmarshalEAP5GData(
 					parameterValue := anParameterField[2:]
 
 					if len(parameterValue) < int(parameterLength) {
-						return nil, nil, errors.New("Error formatting")
+						return nil, nil, errors.New("error formatting")
 					}
 					parameterValue = parameterValue[:parameterLength]
 
 					if len(parameterValue) != message.ANParametersLenGUAMI {
-						return nil, nil, errors.New("Unmatched GUAMI length")
+						return nil, nil, errors.New("unmatched GUAMI length")
 					}
 
 					guamiField := make([]byte, 1)
@@ -92,7 +92,7 @@ func UnmarshalEAP5GData(
 					err = aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
 					if err != nil {
 						ngapLog.Errorf("APER unmarshal with parameter failed: %+v", err)
-						return nil, nil, errors.New("Unmarshal failed when decoding GUAMI")
+						return nil, nil, errors.New("unmarshal failed when decoding GUAMI")
 					}
 					anParameters.GUAMI = ngapGUAMI
 					ngapLog.Debugf("Unmarshal GUAMI: % x", guamiField)
@@ -109,12 +109,12 @@ func UnmarshalEAP5GData(
 					parameterValue := anParameterField[2:]
 
 					if len(parameterValue) < int(parameterLength) {
-						return nil, nil, errors.New("Error formatting")
+						return nil, nil, errors.New("error formatting")
 					}
 					parameterValue = parameterValue[:parameterLength]
 
 					if len(parameterValue) != message.ANParametersLenPLMNID {
-						return nil, nil, errors.New("Unmatched PLMN ID length")
+						return nil, nil, errors.New("unmatched PLMN ID length")
 					}
 
 					plmnField := make([]byte, 1)
@@ -124,7 +124,7 @@ func UnmarshalEAP5GData(
 					err = aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
 					if err != nil {
 						ngapLog.Errorf("APER unmarshal with parameter failed: %v", err)
-						return nil, nil, errors.New("Unmarshal failed when decoding PLMN")
+						return nil, nil, errors.New("unmarshal failed when decoding PLMN")
 					}
 					anParameters.SelectedPLMNID = ngapPLMN
 					ngapLog.Debugf("Unmarshal SelectedPLMNID: % x", plmnField)
@@ -138,7 +138,7 @@ func UnmarshalEAP5GData(
 					parameterValue := anParameterField[2:]
 
 					if len(parameterValue) < int(parameterLength) {
-						return nil, nil, errors.New("Error formatting")
+						return nil, nil, errors.New("error formatting")
 					}
 					parameterValue = parameterValue[:parameterLength]
 
@@ -155,7 +155,7 @@ func UnmarshalEAP5GData(
 
 						if len(snssaiValue) < int(snssaiLength) {
 							ngapLog.Error("SNSSAI length error")
-							return nil, nil, errors.New("Error formatting")
+							return nil, nil, errors.New("error formatting")
 						}
 						snssaiValue = snssaiValue[:snssaiLength]
 
@@ -178,7 +178,7 @@ func UnmarshalEAP5GData(
 							}
 						} else {
 							ngapLog.Error("Empty SNSSAI value")
-							return nil, nil, errors.New("Error formatting")
+							return nil, nil, errors.New("error formatting")
 						}
 
 						ngapNSSAI.List = append(ngapNSSAI.List, ngapSNSSAIItem)
@@ -205,12 +205,12 @@ func UnmarshalEAP5GData(
 					parameterValue := anParameterField[2:]
 
 					if len(parameterValue) < int(parameterLength) {
-						return nil, nil, errors.New("Error formatting")
+						return nil, nil, errors.New("error formatting")
 					}
 					parameterValue = parameterValue[:parameterLength]
 
 					if len(parameterValue) != message.ANParametersLenEstCause {
-						return nil, nil, errors.New("Unmatched Establishment Cause length")
+						return nil, nil, errors.New("unmatched Establishment Cause length")
 					}
 
 					ngapLog.Debugf("Unmarshal ANParametersTypeEstablishmentCause: % x", parameterValue)
@@ -255,7 +255,7 @@ func UnmarshalEAP5GData(
 
 	if len(codedData) < 2 {
 		ngapLog.Error("No NASPDU length specified")
-		return nil, nil, errors.New("Error formatting")
+		return nil, nil, errors.New("error formatting")
 	}
 	// Length of the NASPDU field
 	nasPDULength := binary.BigEndian.Uint16(codedData[:2])
@@ -263,13 +263,13 @@ func UnmarshalEAP5GData(
 
 	if nasPDULength == 0 {
 		ngapLog.Error("No NAS PDU included in EAP-5G packet")
-		return nil, nil, errors.New("No NAS PDU")
+		return nil, nil, errors.New("no NAS PDU")
 	}
 
 	nasPDUField := codedData[2:]
 	// Bound checking
 	if len(nasPDUField) < int(nasPDULength) {
-		return nil, nil, errors.New("Error formatting")
+		return nil, nil, errors.New("error formatting")
 	} else {
 		nasPDUField = nasPDUField[:nasPDULength]
 	}

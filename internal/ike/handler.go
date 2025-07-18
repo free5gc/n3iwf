@@ -693,7 +693,7 @@ func (s *Server) HandleIKEAUTH(
 
 		// Parse configuration request to get if the UE has requested internal address,
 		// and prepare configuration payload to UE
-		var addrRequest bool = false
+		addrRequest := false
 
 		if configuration != nil {
 			ikeLog.Tracef("Received configuration payload with type: %d", configuration.ConfigurationType)
@@ -1658,7 +1658,7 @@ func (s *Server) StartDPD(ikeUe *n3iwf_context.N3IWFIkeUe) {
 					ikeSA.ResponderMessageID, ikeUe.IKEConnection.Conn, ikeUe.IKEConnection.UEAddr,
 					ikeUe.IKEConnection.N3IWFAddr)
 
-				var DPDReqRetransTime time.Duration = 2 * time.Second // TODO: make it configurable
+				DPDReqRetransTime := 2 * time.Second // TODO: make it configurable
 				ikeSA.DPDReqRetransTimer = n3iwf_context.NewDPDPeriodicTimer(
 					DPDReqRetransTime, liveness.MaxRetryTimes, ikeSA,
 					func() {
