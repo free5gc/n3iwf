@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -22,6 +23,11 @@ const (
 	N3iwfDefaultConfigPath    string = "./config/n3iwfcfg.yaml"
 	N3iwfDefaultXfrmIfaceName string = "ipsec"
 	N3iwfDefaultXfrmIfaceId   uint32 = 7
+
+	N3iwfMetricsDefaultEnabled   = false
+	N3iwfMetricsDefaultPort      = 9091
+	N3iwfMetricsDefaultScheme    = "https"
+	N3iwfMetricsDefaultNamespace = "free5gc"
 
 	MAX_BUF_MSG_LEN int = 65535
 )
@@ -91,9 +97,19 @@ type Config struct {
 }
 
 func (c *Config) Validate() error {
+	govalidator.TagMap["scheme"] = func(str string) bool {
+		return str == "https" || str == "http"
+	}
+
 	if configuration := c.Configuration; configuration != nil {
 		for _, amfSCTPAddress := range configuration.AMFSCTPAddresses {
 			if err := amfSCTPAddress.validate(); err != nil {
+				return err
+			}
+		}
+
+		if configuration.Metrics != nil {
+			if _, err := configuration.Metrics.validate(); err != nil {
 				return err
 			}
 		}
@@ -116,6 +132,8 @@ type Configuration struct {
 	N3IWFInfo        *N3IWFNFInfo       `yaml:"n3iwfInformation"        valid:"required"`
 	LocalSctpAddr    string             `yaml:"localSctpAddr,omitempty" valid:"optional,host"`
 	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"amfSCTPAddresses"        valid:"required"`
+
+	Metrics *Metrics `yaml:"metrics,omitempty" valid:"optional"`
 
 	TCPPort              int         `yaml:"nasTcpPort"           valid:"required,port"`
 	IKEBindAddr          string      `yaml:"ikeBindAddress"       valid:"required,host"`
@@ -395,4 +413,126 @@ func (c *Config) GetLivenessCheck() TimerValue {
 	c.RLock()
 	defer c.RUnlock()
 	return *c.Configuration.LivenessCheck
+}
+
+type Tls struct {
+	Pem string `yaml:"pem,omitempty" valid:"type(string),minstringlength(1),required"`
+	Key string `yaml:"key,omitempty" valid:"type(string),minstringlength(1),required"`
+}
+
+func (c *Tls) validate() (bool, error) {
+	result, err := govalidator.ValidateStruct(c)
+	return result, appendInvalid(err)
+}
+
+type Metrics struct {
+	Enable      bool   `yaml:"enable" valid:"optional"`
+	Scheme      string `yaml:"scheme" valid:"required,scheme"`
+	BindingIPv4 string `yaml:"bindingIPv4,omitempty" valid:"required,host"` // IP used to run the server in the node.
+	Port        int    `yaml:"port,omitempty" valid:"optional,port"`
+	Tls         *Tls   `yaml:"tls,omitempty" valid:"optional"`
+	Namespace   string `yaml:"namespace" valid:"optional"`
+}
+
+// This function is the mirror of the SBI one, I decided not to factor the code as it could in the future diverge.
+// And it will reduce the cognitive overload when reading the function by not hiding the logic elsewhere.
+func (m *Metrics) validate() (bool, error) {
+	var errs govalidator.Errors
+
+	if tls := m.Tls; tls != nil {
+		if _, err := tls.validate(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if _, err := govalidator.ValidateStruct(m); err != nil {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return false, error(errs)
+	}
+	return true, nil
+}
+
+func (c *Config) AreMetricsEnabled() bool {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration != nil && c.Configuration.Metrics != nil {
+		return c.Configuration.Metrics.Enable
+	}
+	return N3iwfMetricsDefaultEnabled
+}
+
+func (c *Config) GetMetricsScheme() string {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration != nil && c.Configuration.Metrics != nil && c.Configuration.Metrics.Scheme != "" {
+		return c.Configuration.Metrics.Scheme
+	}
+	return N3iwfMetricsDefaultScheme
+}
+
+func (c *Config) GetMetricsPort() int {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration != nil && c.Configuration.Metrics != nil && c.Configuration.Metrics.Port != 0 {
+		return c.Configuration.Metrics.Port
+	}
+	return N3iwfMetricsDefaultPort
+}
+
+func (c *Config) GetMetricsBindingIP() string {
+	c.RLock()
+	defer c.RUnlock()
+	bindIP := "0.0.0.0"
+
+	if c.Configuration == nil || c.Configuration.Metrics == nil {
+		return bindIP
+	}
+
+	if c.Configuration.Metrics.BindingIPv4 != "" {
+		if bindIP = os.Getenv(c.Configuration.Metrics.BindingIPv4); bindIP != "" {
+			logger.CfgLog.Infof("Parsing ServerIPv4 [%s] from ENV Variable", bindIP)
+		} else {
+			bindIP = c.Configuration.Metrics.BindingIPv4
+		}
+	}
+	return bindIP
+}
+
+func (c *Config) GetMetricsBindingAddr() string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.GetMetricsBindingIP() + ":" + strconv.Itoa(c.GetMetricsPort())
+}
+
+func (c *Config) GetMetricsCertPemPath() string {
+	// We can see if there is a benefit to factor this tls key/pem with the sbi ones
+	c.RLock()
+	defer c.RUnlock()
+
+	if c.Configuration.Metrics != nil && c.Configuration.Metrics.Tls != nil {
+		return c.Configuration.Metrics.Tls.Pem
+	}
+	return ""
+}
+
+func (c *Config) GetMetricsCertKeyPath() string {
+	c.RLock()
+	defer c.RUnlock()
+
+	if c.Configuration.Metrics != nil && c.Configuration.Metrics.Tls != nil {
+		return c.Configuration.Metrics.Tls.Key
+	}
+	return ""
+}
+
+func (c *Config) GetMetricsNamespace() string {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration.Metrics != nil && c.Configuration.Metrics.Namespace != "" {
+		return c.Configuration.Metrics.Namespace
+	}
+	return N3iwfMetricsDefaultNamespace
 }
