@@ -6,7 +6,7 @@ require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/free5gc/aper v1.0.6-0.20250102035630-3ddc831eed6a
 	github.com/free5gc/ike v1.1.1-0.20241014015325-083f89768f43
-	github.com/free5gc/ngap v1.1.0
+	github.com/free5gc/ngap v1.1.1
 	github.com/free5gc/sctp v1.1.0
 	github.com/free5gc/util v1.2.0
 	github.com/gin-contrib/pprof v1.5.0
@@ -34,8 +34,8 @@ require (
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/free5gc/nas v1.1.5 // indirect
-	github.com/free5gc/openapi v1.2.0 // indirect
+	github.com/free5gc/nas v1.2.1 // indirect
+	github.com/free5gc/openapi v1.2.2 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
