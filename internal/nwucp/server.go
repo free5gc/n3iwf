@@ -41,7 +41,8 @@ func NewServer(n3iwf n3iwf) (*Server, error) {
 // to AMF
 func (s *Server) Run(wg *sync.WaitGroup) error {
 	cfg := s.Config()
-	listener, err := net.Listen("tcp", cfg.GetNasTcpAddr())
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(context.Background(), "tcp", cfg.GetNasTcpAddr())
 	if err != nil {
 		return err
 	}
