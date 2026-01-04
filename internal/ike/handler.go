@@ -19,6 +19,7 @@ import (
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 
+	eap "github.com/free5gc/ike/eap"
 	ike_message "github.com/free5gc/ike/message"
 	ike_security "github.com/free5gc/ike/security"
 	"github.com/free5gc/ike/security/dh"
@@ -170,7 +171,7 @@ func (s *Server) HandleIKESAINIT(
 	ikeSecurityAssociation.UeBehindNAT = ueBehindNAT
 	ikeSecurityAssociation.N3iwfBehindNAT = n3iwfBehindNAT
 
-	responseIKEPayload.BUildKeyExchange(chosenDiffieHellmanGroup, localPublicValue)
+	responseIKEPayload.BuildKeyExchange(chosenDiffieHellmanGroup, localPublicValue)
 	err = s.buildNATDetectNotifPayload(
 		ikeSecurityAssociation, &responseIKEPayload, ueAddr, n3iwfAddr)
 	if err != nil {
@@ -257,7 +258,7 @@ func (s *Server) HandleIKEAUTH(
 	var securityAssociation *ike_message.SecurityAssociation
 	var trafficSelectorInitiator *ike_message.TrafficSelectorInitiator
 	var trafficSelectorResponder *ike_message.TrafficSelectorResponder
-	var eap *ike_message.EAP
+	var payloadEap *ike_message.PayloadEap
 	var authentication *ike_message.Authentication
 	var configuration *ike_message.Configuration
 	var ok bool
@@ -277,7 +278,7 @@ func (s *Server) HandleIKEAUTH(
 		case ike_message.TypeTSr:
 			trafficSelectorResponder = ikePayload.(*ike_message.TrafficSelectorResponder)
 		case ike_message.TypeEAP:
-			eap = ikePayload.(*ike_message.EAP)
+			payloadEap = ikePayload.(*ike_message.PayloadEap)
 		case ike_message.TypeAUTH:
 			authentication = ikePayload.(*ike_message.Authentication)
 		case ike_message.TypeCP:
@@ -533,36 +534,36 @@ func (s *Server) HandleIKEAUTH(
 
 	case EAPSignalling:
 		// If success, N3IWF will send an UPLinkNASTransport to AMF
-		if eap != nil {
-			if eap.Code != ike_message.EAPCodeResponse {
+		if payloadEap != nil {
+			if payloadEap.EAP.Code != eap.EapCodeResponse {
 				ikeLog.Error("[EAP] Received an EAP payload with code other than response. Drop the payload.")
 				return
 			}
-			if eap.Identifier != ikeSecurityAssociation.LastEAPIdentifier {
+			if payloadEap.EAP.Identifier != ikeSecurityAssociation.LastEAPIdentifier {
 				ikeLog.Error("[EAP] Received an EAP payload with unmatched identifier. Drop the payload.")
 				return
 			}
 
-			eapTypeData := eap.EAPTypeData[0]
-			var eapExpanded *ike_message.EAPExpanded
+			eapTypeData := payloadEap.EAP.EapTypeData
+			var eapExpanded *eap.EapExpanded
 
 			switch eapTypeData.Type() {
 			// TODO: handle
 			// case ike_message.EAPTypeIdentity:
 			// case ike_message.EAPTypeNotification:
 			// case ike_message.EAPTypeNak:
-			case ike_message.EAPTypeExpanded:
-				eapExpanded = eapTypeData.(*ike_message.EAPExpanded)
+			case eap.EapTypeExpanded:
+				eapExpanded = eapTypeData.(*eap.EapExpanded)
 			default:
 				ikeLog.Errorf("[EAP] Received EAP packet with type other than EAP expanded type: %d", eapTypeData.Type())
 				return
 			}
 
-			if eapExpanded.VendorID != ike_message.VendorID3GPP {
+			if eapExpanded.VendorID != eap.VendorId3GPP {
 				ikeLog.Error("The peer sent EAP expended packet with wrong vendor ID. Drop the packet.")
 				return
 			}
-			if eapExpanded.VendorType != ike_message.VendorTypeEAP5G {
+			if eapExpanded.VendorType != eap.VendorTypeEAP5G {
 				ikeLog.Error("The peer sent EAP expanded packet with wrong vendor type. Drop the packet.")
 				return
 			}

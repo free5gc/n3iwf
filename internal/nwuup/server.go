@@ -69,7 +69,8 @@ func (s *Server) newGreConn() error {
 
 	// Setup IPv4 packet connection socket
 	// This socket will only capture GRE encapsulated packet
-	connection, err := net.ListenPacket("ip4:gre", listenAddr)
+	lc := net.ListenConfig{}
+	connection, err := lc.ListenPacket(context.Background(), "ip4:gre", listenAddr)
 	if err != nil {
 		return errors.Wrapf(err, "Error setting GRE listen socket on %s", listenAddr)
 	}
