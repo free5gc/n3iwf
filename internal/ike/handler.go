@@ -547,6 +547,11 @@ func (s *Server) HandleIKEAUTH(
 			eapTypeData := payloadEap.EAP.EapTypeData
 			var eapExpanded *eap.EapExpanded
 
+			if eapTypeData == nil {
+				ikeLog.Warnf("Received malformed EAP payload: EapTypeData is nil")
+				return
+			}
+
 			switch eapTypeData.Type() {
 			// TODO: handle
 			// case ike_message.EAPTypeIdentity:
