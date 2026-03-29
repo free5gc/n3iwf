@@ -564,6 +564,11 @@ func (s *Server) HandleIKEAUTH(
 				return
 			}
 
+			if len(eapExpanded.VendorData) == 0 {
+				ikeLog.Error("The peer sent EAP expended packet with empty vendor data. Drop the packet.")
+				return
+			}
+
 			if eapExpanded.VendorID != eap.VendorId3GPP {
 				ikeLog.Error("The peer sent EAP expended packet with wrong vendor ID. Drop the packet.")
 				return
