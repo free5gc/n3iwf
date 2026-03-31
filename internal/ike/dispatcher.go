@@ -19,7 +19,7 @@ func (s *Server) Dispatch(
 	defer func() {
 		if p := recover(); p != nil {
 			// Print stack for panic to log. Fatalf() will let program exit.
-			ikeLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			ikeLog.Errorf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 	}()
 
