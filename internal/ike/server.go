@@ -108,8 +108,8 @@ func (s *Server) server(wg *sync.WaitGroup) {
 	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
-			// Print stack for panic to log. Fatalf() will let program exit.
-			ikeLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			// Print stack for panic to log.
+			ikeLog.Errorf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 		ikeLog.Infof("Ike server stopped")
 		s.rcvPktCh.Close()
@@ -148,8 +148,8 @@ func (s *Server) receiver(
 	ikeLog := logger.IKELog
 	defer func() {
 		if p := recover(); p != nil {
-			// Print stack for panic to log. Fatalf() will let program exit.
-			ikeLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+			// Print stack for panic to log.
+			ikeLog.Errorf("panic: %v\n%s", p, string(debug.Stack()))
 		}
 		ikeLog.Infof("Ike receiver stopped")
 		wg.Done()
