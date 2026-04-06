@@ -249,8 +249,8 @@ func UnmarshalEAP5GData(
 			anParameterField = anParameterField[2+parameterLength:]
 		}
 	} else {
-        return nil, nil, errors.New("AN-parameter field length is zero, which is invalid")
-    }
+		return nil, nil, errors.New("AN-parameter field length is zero, which is invalid")
+	}
 
 	// shift codedData
 	codedData = codedData[2+anParameterLength:]
