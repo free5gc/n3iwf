@@ -50,204 +50,208 @@ func UnmarshalEAP5GData(
 	anParameterLength := binary.BigEndian.Uint16(codedData[:2])
 	ngapLog.Debugf("AN-parameters length: %d", anParameterLength)
 
-	if anParameterLength != 0 {
-		anParameterField := codedData[2:]
+	// An AN-parameter length of zero is invalid, as at least one AN-parameter should be included in EAP-5G packet.
+	if anParameterLength == 0 {
+		return nil, nil, errors.New("AN-parameter field length is zero, which is invalid")
+	}
 
-		// Bound checking
-		if len(anParameterField) < int(anParameterLength) {
-			ngapLog.Error("Packet contained error length of value")
-			return nil, nil, errors.New("error formatting")
-		}
-		anParameterField = anParameterField[:anParameterLength]
+	// AN-parameter field starts after the AN-parameter length field
+	anParameterField := codedData[2:]
 
-		ngapLog.Debugf("Parsing AN-parameters...: % v", anParameterField)
+	// Bound checking
+	if len(anParameterField) < int(anParameterLength) {
+		ngapLog.Error("Packet contained error length of value")
+		return nil, nil, errors.New("error formatting")
+	}
+	anParameterField = anParameterField[:anParameterLength]
 
-		anParameters = new(ANParameters)
+	ngapLog.Debugf("Parsing AN-parameters...: % v", anParameterField)
 
-		// Parse AN-Parameters
-		for len(anParameterField) >= 2 {
-			parameterType := anParameterField[0]
-			// The AN-parameter length field indicates the length of the AN-parameter value field.
-			parameterLength := anParameterField[1]
+	anParameters = new(ANParameters)
 
-			switch parameterType {
-			case message.ANParametersTypeGUAMI:
-				ngapLog.Debugf("-> Parameter type: GUAMI")
-				if parameterLength != 0 {
-					parameterValue := anParameterField[2:]
+	// Parse AN-Parameters
+	for len(anParameterField) >= 2 {
+		parameterType := anParameterField[0]
+		// The AN-parameter length field indicates the length of the AN-parameter value field.
+		parameterLength := anParameterField[1]
 
-					if len(parameterValue) < int(parameterLength) {
-						return nil, nil, errors.New("error formatting")
-					}
-					parameterValue = parameterValue[:parameterLength]
+		switch parameterType {
+		case message.ANParametersTypeGUAMI:
+			ngapLog.Debugf("-> Parameter type: GUAMI")
+			if parameterLength != 0 {
+				parameterValue := anParameterField[2:]
 
-					if len(parameterValue) != message.ANParametersLenGUAMI {
-						return nil, nil, errors.New("unmatched GUAMI length")
-					}
-
-					guamiField := make([]byte, 1)
-					guamiField = append(guamiField, parameterValue...)
-					// Decode GUAMI using aper
-					ngapGUAMI := new(ngapType.GUAMI)
-					err = aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
-					if err != nil {
-						ngapLog.Errorf("APER unmarshal with parameter failed: %+v", err)
-						return nil, nil, errors.New("unmarshal failed when decoding GUAMI")
-					}
-					anParameters.GUAMI = ngapGUAMI
-					ngapLog.Debugf("Unmarshal GUAMI: % x", guamiField)
-					ngapLog.Debugf("\tGUAMI: PLMNIdentity[% x], "+
-						"AMFRegionID[% x], AMFSetID[% x], AMFPointer[% x]",
-						anParameters.GUAMI.PLMNIdentity, anParameters.GUAMI.AMFRegionID,
-						anParameters.GUAMI.AMFSetID, anParameters.GUAMI.AMFPointer)
-				} else {
-					ngapLog.Warn("AN-Parameter GUAMI field empty")
+				if len(parameterValue) < int(parameterLength) {
+					return nil, nil, errors.New("error formatting")
 				}
-			case message.ANParametersTypeSelectedPLMNID:
-				ngapLog.Debugf("-> Parameter type: ANParametersTypeSelectedPLMNID")
-				if parameterLength != 0 {
-					parameterValue := anParameterField[2:]
+				parameterValue = parameterValue[:parameterLength]
 
-					if len(parameterValue) < int(parameterLength) {
-						return nil, nil, errors.New("error formatting")
-					}
-					parameterValue = parameterValue[:parameterLength]
-
-					if len(parameterValue) != message.ANParametersLenPLMNID {
-						return nil, nil, errors.New("unmatched PLMN ID length")
-					}
-
-					plmnField := make([]byte, 1)
-					plmnField = append(plmnField, parameterValue...)
-					// Decode PLMN using aper
-					ngapPLMN := new(ngapType.PLMNIdentity)
-					err = aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
-					if err != nil {
-						ngapLog.Errorf("APER unmarshal with parameter failed: %v", err)
-						return nil, nil, errors.New("unmarshal failed when decoding PLMN")
-					}
-					anParameters.SelectedPLMNID = ngapPLMN
-					ngapLog.Debugf("Unmarshal SelectedPLMNID: % x", plmnField)
-					ngapLog.Debugf("\tSelectedPLMNID: % x", anParameters.SelectedPLMNID.Value)
-				} else {
-					ngapLog.Warn("AN-Parameter PLMN field empty")
+				if len(parameterValue) != message.ANParametersLenGUAMI {
+					return nil, nil, errors.New("unmatched GUAMI length")
 				}
-			case message.ANParametersTypeRequestedNSSAI:
-				ngapLog.Debugf("-> Parameter type: ANParametersTypeRequestedNSSAI")
-				if parameterLength != 0 {
-					parameterValue := anParameterField[2:]
 
-					if len(parameterValue) < int(parameterLength) {
-						return nil, nil, errors.New("error formatting")
-					}
-					parameterValue = parameterValue[:parameterLength]
-
-					ngapNSSAI := new(ngapType.AllowedNSSAI)
-
-					// [TS 24501 f30] 9.11.2.8 S-NSSAI
-					// s-nssai(LV) consists of
-					// len(1 byte) | SST(1) | SD(3,opt) | Mapped HPLMN SST (1,opt) | Mapped HPLMN SD (3,opt)
-					// The length of minimum s-nssai comprised of a length and a SST is 2 bytes.
-
-					for len(parameterValue) >= 2 {
-						snssaiLength := parameterValue[0]
-						snssaiValue := parameterValue[1:]
-
-						if len(snssaiValue) < int(snssaiLength) {
-							ngapLog.Error("SNSSAI length error")
-							return nil, nil, errors.New("error formatting")
-						}
-						snssaiValue = snssaiValue[:snssaiLength]
-
-						ngapSNSSAIItem := ngapType.AllowedNSSAIItem{}
-
-						if len(snssaiValue) == 1 {
-							ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
-								SST: ngapType.SST{
-									Value: []byte{snssaiValue[0]},
-								},
-							}
-						} else if len(snssaiValue) == 4 {
-							ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
-								SST: ngapType.SST{
-									Value: []byte{snssaiValue[0]},
-								},
-								SD: &ngapType.SD{
-									Value: []byte{snssaiValue[1], snssaiValue[2], snssaiValue[3]},
-								},
-							}
-						} else {
-							ngapLog.Error("Empty SNSSAI value")
-							return nil, nil, errors.New("error formatting")
-						}
-
-						ngapNSSAI.List = append(ngapNSSAI.List, ngapSNSSAIItem)
-
-						ngapLog.Debugf("Unmarshal SNSSAI: % x", parameterValue[:1+snssaiLength])
-						ngapLog.Debugf("\t\t\tSST: % x", ngapSNSSAIItem.SNSSAI.SST.Value)
-						sd := ngapSNSSAIItem.SNSSAI.SD
-						if sd == nil {
-							ngapLog.Debugf("\t\t\tSD: nil")
-						} else {
-							ngapLog.Debugf("\t\t\tSD: % x", sd.Value)
-						}
-
-						// shift parameterValue for parsing next s-nssai
-						parameterValue = parameterValue[1+snssaiLength:]
-					}
-					anParameters.RequestedNSSAI = ngapNSSAI
-				} else {
-					ngapLog.Warn("AN-Parameter NSSAI is empty")
+				guamiField := make([]byte, 1)
+				guamiField = append(guamiField, parameterValue...)
+				// Decode GUAMI using aper
+				ngapGUAMI := new(ngapType.GUAMI)
+				err = aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
+				if err != nil {
+					ngapLog.Errorf("APER unmarshal with parameter failed: %+v", err)
+					return nil, nil, errors.New("unmarshal failed when decoding GUAMI")
 				}
-			case message.ANParametersTypeEstablishmentCause:
-				ngapLog.Debugf("-> Parameter type: ANParametersTypeEstablishmentCause")
-				if parameterLength != 0 {
-					parameterValue := anParameterField[2:]
-
-					if len(parameterValue) < int(parameterLength) {
-						return nil, nil, errors.New("error formatting")
-					}
-					parameterValue = parameterValue[:parameterLength]
-
-					if len(parameterValue) != message.ANParametersLenEstCause {
-						return nil, nil, errors.New("unmatched Establishment Cause length")
-					}
-
-					ngapLog.Debugf("Unmarshal ANParametersTypeEstablishmentCause: % x", parameterValue)
-
-					establishmentCause := parameterValue[0] & 0x0f
-					switch establishmentCause {
-					case message.EstablishmentCauseEmergency:
-						ngapLog.Trace("AN-Parameter establishment cause: Emergency")
-					case message.EstablishmentCauseHighPriorityAccess:
-						ngapLog.Trace("AN-Parameter establishment cause: High Priority Access")
-					case message.EstablishmentCauseMO_Signalling:
-						ngapLog.Trace("AN-Parameter establishment cause: MO Signalling")
-					case message.EstablishmentCauseMO_Data:
-						ngapLog.Trace("AN-Parameter establishment cause: MO Data")
-					case message.EstablishmentCauseMPS_PriorityAccess:
-						ngapLog.Trace("AN-Parameter establishment cause: MPS Priority Access")
-					case message.EstablishmentCauseMCS_PriorityAccess:
-						ngapLog.Trace("AN-Parameter establishment cause: MCS Priority Access")
-					default:
-						ngapLog.Trace("AN-Parameter establishment cause: Unknown. Treat as mo-Data")
-						establishmentCause = message.EstablishmentCauseMO_Data
-					}
-
-					ngapEstablishmentCause := new(ngapType.RRCEstablishmentCause)
-					ngapEstablishmentCause.Value = aper.Enumerated(establishmentCause)
-
-					anParameters.EstablishmentCause = ngapEstablishmentCause
-				} else {
-					ngapLog.Warn("AN-Parameter establishment cause field empty")
-				}
-			default:
-				ngapLog.Warn("Unsopprted AN-Parameter. Ignore.")
+				anParameters.GUAMI = ngapGUAMI
+				ngapLog.Debugf("Unmarshal GUAMI: % x", guamiField)
+				ngapLog.Debugf("\tGUAMI: PLMNIdentity[% x], "+
+					"AMFRegionID[% x], AMFSetID[% x], AMFPointer[% x]",
+					anParameters.GUAMI.PLMNIdentity, anParameters.GUAMI.AMFRegionID,
+					anParameters.GUAMI.AMFSetID, anParameters.GUAMI.AMFPointer)
+			} else {
+				ngapLog.Warn("AN-Parameter GUAMI field empty")
 			}
+		case message.ANParametersTypeSelectedPLMNID:
+			ngapLog.Debugf("-> Parameter type: ANParametersTypeSelectedPLMNID")
+			if parameterLength != 0 {
+				parameterValue := anParameterField[2:]
 
-			// shift anParameterField
-			anParameterField = anParameterField[2+parameterLength:]
+				if len(parameterValue) < int(parameterLength) {
+					return nil, nil, errors.New("error formatting")
+				}
+				parameterValue = parameterValue[:parameterLength]
+
+				if len(parameterValue) != message.ANParametersLenPLMNID {
+					return nil, nil, errors.New("unmatched PLMN ID length")
+				}
+
+				plmnField := make([]byte, 1)
+				plmnField = append(plmnField, parameterValue...)
+				// Decode PLMN using aper
+				ngapPLMN := new(ngapType.PLMNIdentity)
+				err = aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
+				if err != nil {
+					ngapLog.Errorf("APER unmarshal with parameter failed: %v", err)
+					return nil, nil, errors.New("unmarshal failed when decoding PLMN")
+				}
+				anParameters.SelectedPLMNID = ngapPLMN
+				ngapLog.Debugf("Unmarshal SelectedPLMNID: % x", plmnField)
+				ngapLog.Debugf("\tSelectedPLMNID: % x", anParameters.SelectedPLMNID.Value)
+			} else {
+				ngapLog.Warn("AN-Parameter PLMN field empty")
+			}
+		case message.ANParametersTypeRequestedNSSAI:
+			ngapLog.Debugf("-> Parameter type: ANParametersTypeRequestedNSSAI")
+			if parameterLength != 0 {
+				parameterValue := anParameterField[2:]
+
+				if len(parameterValue) < int(parameterLength) {
+					return nil, nil, errors.New("error formatting")
+				}
+				parameterValue = parameterValue[:parameterLength]
+
+				ngapNSSAI := new(ngapType.AllowedNSSAI)
+
+				// [TS 24501 f30] 9.11.2.8 S-NSSAI
+				// s-nssai(LV) consists of
+				// len(1 byte) | SST(1) | SD(3,opt) | Mapped HPLMN SST (1,opt) | Mapped HPLMN SD (3,opt)
+				// The length of minimum s-nssai comprised of a length and a SST is 2 bytes.
+
+				for len(parameterValue) >= 2 {
+					snssaiLength := parameterValue[0]
+					snssaiValue := parameterValue[1:]
+
+					if len(snssaiValue) < int(snssaiLength) {
+						ngapLog.Error("SNSSAI length error")
+						return nil, nil, errors.New("error formatting")
+					}
+					snssaiValue = snssaiValue[:snssaiLength]
+
+					ngapSNSSAIItem := ngapType.AllowedNSSAIItem{}
+
+					if len(snssaiValue) == 1 {
+						ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
+							SST: ngapType.SST{
+								Value: []byte{snssaiValue[0]},
+							},
+						}
+					} else if len(snssaiValue) == 4 {
+						ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
+							SST: ngapType.SST{
+								Value: []byte{snssaiValue[0]},
+							},
+							SD: &ngapType.SD{
+								Value: []byte{snssaiValue[1], snssaiValue[2], snssaiValue[3]},
+							},
+						}
+					} else {
+						ngapLog.Error("Empty SNSSAI value")
+						return nil, nil, errors.New("error formatting")
+					}
+
+					ngapNSSAI.List = append(ngapNSSAI.List, ngapSNSSAIItem)
+
+					ngapLog.Debugf("Unmarshal SNSSAI: % x", parameterValue[:1+snssaiLength])
+					ngapLog.Debugf("\t\t\tSST: % x", ngapSNSSAIItem.SNSSAI.SST.Value)
+					sd := ngapSNSSAIItem.SNSSAI.SD
+					if sd == nil {
+						ngapLog.Debugf("\t\t\tSD: nil")
+					} else {
+						ngapLog.Debugf("\t\t\tSD: % x", sd.Value)
+					}
+
+					// shift parameterValue for parsing next s-nssai
+					parameterValue = parameterValue[1+snssaiLength:]
+				}
+				anParameters.RequestedNSSAI = ngapNSSAI
+			} else {
+				ngapLog.Warn("AN-Parameter NSSAI is empty")
+			}
+		case message.ANParametersTypeEstablishmentCause:
+			ngapLog.Debugf("-> Parameter type: ANParametersTypeEstablishmentCause")
+			if parameterLength != 0 {
+				parameterValue := anParameterField[2:]
+
+				if len(parameterValue) < int(parameterLength) {
+					return nil, nil, errors.New("error formatting")
+				}
+				parameterValue = parameterValue[:parameterLength]
+
+				if len(parameterValue) != message.ANParametersLenEstCause {
+					return nil, nil, errors.New("unmatched Establishment Cause length")
+				}
+
+				ngapLog.Debugf("Unmarshal ANParametersTypeEstablishmentCause: % x", parameterValue)
+
+				establishmentCause := parameterValue[0] & 0x0f
+				switch establishmentCause {
+				case message.EstablishmentCauseEmergency:
+					ngapLog.Trace("AN-Parameter establishment cause: Emergency")
+				case message.EstablishmentCauseHighPriorityAccess:
+					ngapLog.Trace("AN-Parameter establishment cause: High Priority Access")
+				case message.EstablishmentCauseMO_Signalling:
+					ngapLog.Trace("AN-Parameter establishment cause: MO Signalling")
+				case message.EstablishmentCauseMO_Data:
+					ngapLog.Trace("AN-Parameter establishment cause: MO Data")
+				case message.EstablishmentCauseMPS_PriorityAccess:
+					ngapLog.Trace("AN-Parameter establishment cause: MPS Priority Access")
+				case message.EstablishmentCauseMCS_PriorityAccess:
+					ngapLog.Trace("AN-Parameter establishment cause: MCS Priority Access")
+				default:
+					ngapLog.Trace("AN-Parameter establishment cause: Unknown. Treat as mo-Data")
+					establishmentCause = message.EstablishmentCauseMO_Data
+				}
+
+				ngapEstablishmentCause := new(ngapType.RRCEstablishmentCause)
+				ngapEstablishmentCause.Value = aper.Enumerated(establishmentCause)
+
+				anParameters.EstablishmentCause = ngapEstablishmentCause
+			} else {
+				ngapLog.Warn("AN-Parameter establishment cause field empty")
+			}
+		default:
+			ngapLog.Warn("Unsopprted AN-Parameter. Ignore.")
 		}
+
+		// shift anParameterField
+		anParameterField = anParameterField[2+parameterLength:]
 	}
 
 	// shift codedData
