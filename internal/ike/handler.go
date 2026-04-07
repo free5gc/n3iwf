@@ -416,6 +416,10 @@ func (s *Server) HandleIKEAUTH(
 					continue // Mandatory
 				}
 
+				if encryptionAlgorithmTransform.TransformID == ike_message.ENCR_NULL && integrityAlgorithmTransform == nil {
+					continue
+				}
+
 				chosenProposal := responseSecurityAssociation.Proposals.BuildProposal(
 					proposal.ProposalNumber, proposal.ProtocolID, proposal.SPI)
 				chosenProposal.EncryptionAlgorithm = append(chosenProposal.EncryptionAlgorithm, encryptionAlgorithmTransform)
