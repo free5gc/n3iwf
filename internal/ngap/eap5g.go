@@ -69,7 +69,6 @@ func UnmarshalEAP5GData(
 
 	anParameters = new(ANParameters)
 
-
 	// Parse AN-Parameters
 	for len(anParameterField) >= 2 {
 		parameterType := anParameterField[0]
