@@ -1899,8 +1899,6 @@ func isTransformKernelSupported(
 		switch transformID {
 		case ike_message.AUTH_NONE:
 			return false
-		case ike_message.AUTH_HMAC_MD5_96:
-			return true
 		case ike_message.AUTH_HMAC_SHA1_96:
 			return true
 		case ike_message.AUTH_DES_MAC:
@@ -1997,6 +1995,11 @@ func SelectProposal(proposals ike_message.ProposalContainer) ike_message.Proposa
 		var choosePrf prf.PRFType
 
 		for _, transform := range proposal.DiffieHellmanGroup {
+			// block should NOT DH Group 2 in [RFC 8247]
+			if transform.TransformID == ike_message.DH_1024_BIT_MODP {
+				continue
+			}
+
 			dhType := dh.DecodeTransform(transform)
 			if dhType != nil {
 				if diffieHellmanGroupTransform == nil {
