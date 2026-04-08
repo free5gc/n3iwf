@@ -75,6 +75,11 @@ func UnmarshalEAP5GData(
 		// The AN-parameter length field indicates the length of the AN-parameter value field.
 		parameterLength := anParameterField[1]
 
+		if int(2+parameterLength) > len(anParameterField) {
+			// Reject malformed AN-parameters and return controlled errors.
+			return nil, nil, errors.New("malformed AN-parameter with parameter length exceeds remaining data bounds")
+		}
+
 		switch parameterType {
 		case message.ANParametersTypeGUAMI:
 			ngapLog.Debugf("-> Parameter type: GUAMI")
