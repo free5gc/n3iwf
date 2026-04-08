@@ -3031,12 +3031,13 @@ func (s *Server) HandleUnmarshalEAP5GData(
 		return
 	}
 
-	if anParameters == nil {
-		ngapLog.Error("Received EAP-5G packet with missing or zero-length AN-parameters")
-		return
-	}
-
 	if !isInitialUE { // ikeSA.ikeUE == nil
+		// TS 23.502 4.12.2 step5 EAP-Response/5G-NAS packet must contain AN-parameters
+		if anParameters == nil {
+			ngapLog.Error("Received EAP-5G packet with missing or zero-length AN-parameters in initial UE message")
+			return
+		}
+
 		ngapLog.Debug("Select AMF with the following AN parameters:")
 		if anParameters.GUAMI == nil {
 			ngapLog.Debug("\tGUAMI: nil")
