@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
 	github.com/free5gc/aper v1.1.0
-	github.com/free5gc/ike v1.2.0
+	github.com/free5gc/ike v1.2.1-0.20260408011533-46c414fee46d
 	github.com/free5gc/ngap v1.1.2
 	github.com/free5gc/sctp v1.1.1
 	github.com/free5gc/util v1.3.1
