@@ -1986,6 +1986,7 @@ func SelectProposal(proposals ike_message.ProposalContainer) ike_message.Proposa
 
 	for _, proposal := range proposals {
 		// We need ENCR, PRF, INTEG, DH, but not ESN
+		ikeLog := logger.IKELog
 
 		var encryptionAlgorithmTransform, pseudorandomFunctionTransform *ike_message.Transform
 		var integrityAlgorithmTransform, diffieHellmanGroupTransform *ike_message.Transform
@@ -1997,6 +1998,7 @@ func SelectProposal(proposals ike_message.ProposalContainer) ike_message.Proposa
 		for _, transform := range proposal.DiffieHellmanGroup {
 			// block should NOT DH Group 2 in [RFC 8247]
 			if transform.TransformID == ike_message.DH_1024_BIT_MODP {
+				ikeLog.Warn("DH Group 2 is not allowed in Diffie-Hellman Group Transform, skip this transform.")
 				continue
 			}
 
