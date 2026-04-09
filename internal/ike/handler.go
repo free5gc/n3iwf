@@ -417,6 +417,7 @@ func (s *Server) HandleIKEAUTH(
 				}
 
 				if encryptionAlgorithmTransform.TransformID == ike_message.ENCR_NULL && integrityAlgorithmTransform == nil {
+					ikeLog.Warn("The encryption algorithm is ENCR_NULL but no integrity algorithm is proposed.")
 					continue
 				}
 
