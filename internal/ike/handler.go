@@ -1017,6 +1017,16 @@ func (s *Server) continueCreateChildSA(
 	// Get xfrm needed data
 	// As specified in RFC 7296, ESP negotiate two child security association (pair) in one exchange
 	// Message ID is used to be a index to pair two SPI in serveral IKE messages.
+	// A peer can craft a CREATE_CHILD_SA response whose SecurityAssociation
+	// payload has an empty Proposals list; the upstream IKE parser accepts
+	// it. Indexing [0] here panics with runtime out-of-range and tears down
+	// the whole n3iwf process, enabling an authenticated DoS against the
+	// IKE handler (free5gc/free5gc#989).
+	if temporaryIkeMsg.SecurityAssociation == nil ||
+		len(temporaryIkeMsg.SecurityAssociation.Proposals) == 0 {
+		ikeLog.Errorln("CREATE_CHILD_SA response carried no Proposals; aborting child SA setup")
+		return
+	}
 	outboundSPI := binary.BigEndian.Uint32(temporaryIkeMsg.SecurityAssociation.Proposals[0].SPI)
 	childSecurityAssociationContext, err := ikeUe.CompleteChildSA(
 		ikeSecurityAssociation.ResponderMessageID, outboundSPI, temporaryIkeMsg.SecurityAssociation)
