@@ -39,6 +39,15 @@ func (p *GREPacket) Marshal() []byte {
 }
 
 func (p *GREPacket) Unmarshal(b []byte) error {
+	// A GRE header without the Key flag is 4 bytes (flags/version +
+	// protocolType); with the Key flag it grows by 4. Short frames from
+	// the NWu tunnel must be rejected rather than causing a runtime
+	// out-of-range panic — the nwuup recover path calls Fatalf and tears
+	// the whole n3iwf process down, so any peer that can inject into the
+	// IPsec tunnel can DoS the node.
+	if len(b) < 4 {
+		return errors.Errorf("GRE packet too short: got %d bytes, need at least 4", len(b))
+	}
 	p.flags = b[0]
 	p.version = b[1]
 
@@ -47,6 +56,10 @@ func (p *GREPacket) Unmarshal(b []byte) error {
 	offset := 4
 
 	if p.GetKeyFlag() {
+		if len(b) < offset+GREHeaderKeyFieldLength {
+			return errors.Errorf("GRE packet too short for Key field: got %d bytes, need %d",
+				len(b), offset+GREHeaderKeyFieldLength)
+		}
 		p.key = binary.BigEndian.Uint32(b[offset : offset+GREHeaderKeyFieldLength])
 		offset += GREHeaderKeyFieldLength
 	}
