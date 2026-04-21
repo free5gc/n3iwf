@@ -719,9 +719,17 @@ func (s *Server) HandleIKEAUTH(
 				switch attribute.Type {
 				case ike_message.INTERNAL_IP4_ADDRESS:
 					addrRequest = true
-					if len(attribute.Value) != 0 {
+					// A well-formed INTERNAL_IP4_ADDRESS value is 4 bytes
+					// (RFC 7296 §3.15.1). An authenticated peer can send a
+					// 1-3 byte value; the previous len != 0 check then
+					// passed but the next line indexed [0..3] and panicked,
+					// DoSing the n3iwf process (free5gc/free5gc#984).
+					if len(attribute.Value) >= 4 {
 						ikeLog.Tracef("Got client requested address: %d.%d.%d.%d",
 							attribute.Value[0], attribute.Value[1], attribute.Value[2], attribute.Value[3])
+					} else if len(attribute.Value) != 0 {
+						ikeLog.Warnf("Ignoring malformed INTERNAL_IP4_ADDRESS attribute (length %d, want 4)",
+							len(attribute.Value))
 					}
 				default:
 					ikeLog.Warnf("Receive other type of configuration request: %d", attribute.Type)
@@ -1017,6 +1025,16 @@ func (s *Server) continueCreateChildSA(
 	// Get xfrm needed data
 	// As specified in RFC 7296, ESP negotiate two child security association (pair) in one exchange
 	// Message ID is used to be a index to pair two SPI in serveral IKE messages.
+	// A peer can craft a CREATE_CHILD_SA response whose SecurityAssociation
+	// payload has an empty Proposals list; the upstream IKE parser accepts
+	// it. Indexing [0] here panics with runtime out-of-range and tears down
+	// the whole n3iwf process, enabling an authenticated DoS against the
+	// IKE handler (free5gc/free5gc#989).
+	if temporaryIkeMsg.SecurityAssociation == nil ||
+		len(temporaryIkeMsg.SecurityAssociation.Proposals) == 0 {
+		ikeLog.Errorln("CREATE_CHILD_SA response carried no Proposals; aborting child SA setup")
+		return
+	}
 	outboundSPI := binary.BigEndian.Uint32(temporaryIkeMsg.SecurityAssociation.Proposals[0].SPI)
 	childSecurityAssociationContext, err := ikeUe.CompleteChildSA(
 		ikeSecurityAssociation.ResponderMessageID, outboundSPI, temporaryIkeMsg.SecurityAssociation)
