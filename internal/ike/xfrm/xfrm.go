@@ -97,6 +97,13 @@ func ApplyXFRMRule(n3iwf_is_initiator bool, xfrmiId uint32,
 	xfrmState.Auth = xfrmIntegrityAlgorithm
 	xfrmState.Crypt = xfrmEncryptionAlgorithm
 	xfrmState.ESN = childSecurityAssociation.EsnInfo.GetNeedESN()
+	// A ReplayWindow of 0 tells the Linux kernel to skip ESP sequence
+	// number checking entirely, disabling RFC 4303 anti-replay protection.
+	// Go zero-initializes the field, so every N3IWF Child SA (control-plane
+	// and user-plane) shipped with replay protection off. Use the common
+	// default window size of 32 packets; ESN-enabled SAs still honour the
+	// same field (kernel treats it as the sliding window size).
+	xfrmState.ReplayWindow = 32
 
 	// Commit xfrm state to netlink
 	var err error
