@@ -23,6 +23,24 @@ func (s *Server) Dispatch(
 		}
 	}()
 
+	if ikeSA != nil && ikeMessage.ExchangeType != ike_message.IKE_SA_INIT {
+		if !ikeMessage.IsResponse() {
+			// UE → N3IWF (Request)
+			if ikeMessage.MessageID < ikeSA.InitiatorMessageID {
+				ikeLog.Warnf("Replay request. Expected >= %d, Got %d",
+					ikeSA.InitiatorMessageID, ikeMessage.MessageID)
+				return
+			}
+		} else {
+			// UE → N3IWF (Response)
+			if ikeMessage.MessageID < ikeSA.ResponderMessageID {
+				ikeLog.Warnf("Replay response. Expected >= %d, Got %d",
+					ikeSA.ResponderMessageID, ikeMessage.MessageID)
+				return
+			}
+		}
+	}
+
 	switch ikeMessage.ExchangeType {
 	case ike_message.IKE_SA_INIT:
 		s.HandleIKESAINIT(udpConn, localAddr, remoteAddr, ikeMessage, msg)
