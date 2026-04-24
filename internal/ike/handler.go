@@ -161,7 +161,7 @@ func (s *Server) HandleIKESAINIT(
 
 	// next request message ID should be 1, will be increased by 1
 	ikeSecurityAssociation.InitiatorMessageID = 1
-	
+
 	// response message ID should be 0 for IKE_SA_INIT, will be increased by 1
 	ikeSecurityAssociation.ResponderMessageID = 0
 
