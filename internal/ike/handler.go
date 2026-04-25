@@ -153,7 +153,17 @@ func (s *Server) HandleIKESAINIT(
 	// Create new IKE security association
 	ikeSecurityAssociation := n3iwfCtx.NewIKESecurityAssociation()
 	ikeSecurityAssociation.RemoteSPI = message.InitiatorSPI
-	ikeSecurityAssociation.InitiatorMessageID = message.MessageID
+	// First message of IKE_SA_INIT must have MessageID as 0
+	if message.MessageID != 0 {
+		ikeLog.Warnf("Invalid IKE_SA_INIT MessageID: got %d, expected 0", message.MessageID)
+		return
+	}
+
+	// next request message ID should be 1, will be increased by 1
+	ikeSecurityAssociation.InitiatorMessageID = 1
+
+	// response message ID should be 0 for IKE_SA_INIT, will be increased by 1
+	ikeSecurityAssociation.ResponderMessageID = 0
 
 	ikeSecurityAssociation.IKESAKey, localPublicValue, err = ike_security.NewIKESAKey(chooseProposal[0],
 		keyExcahge.KeyExchangeData, concatenatedNonce,
@@ -248,6 +258,8 @@ func (s *Server) HandleIKEAUTH(
 	cfg := s.Config()
 	ipsecGwAddr := cfg.GetIPSecGatewayAddr()
 
+	ikeSecurityAssociation.InitiatorMessageID = message.MessageID + 1
+
 	// Used for response
 	var responseIKEPayload ike_message.IKEPayloadContainer
 
@@ -289,8 +301,6 @@ func (s *Server) HandleIKEAUTH(
 				ikePayload.Type())
 		}
 	}
-
-	ikeSecurityAssociation.InitiatorMessageID = message.MessageID
 
 	switch ikeSecurityAssociation.State {
 	case PreSignalling:
@@ -1170,11 +1180,13 @@ func (s *Server) HandleInformational(
 	}
 
 	if message.IsResponse() {
+		// Receive response from UE
 		ikeSecurityAssociation.ResponderMessageID++
 	} else { // Get Request message
 		SendUEInformationExchange(ikeSecurityAssociation, ikeSecurityAssociation.IKESAKey,
 			responseIKEPayload, false, true, message.MessageID,
 			udpConn, ueAddr, n3iwfAddr)
+		ikeSecurityAssociation.InitiatorMessageID++
 	}
 }
 
