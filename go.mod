@@ -1,14 +1,14 @@
 module github.com/free5gc/n3iwf
 
-go 1.25.5
+go 1.26.2
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
-	github.com/free5gc/aper v1.1.0
-	github.com/free5gc/ike v1.2.1-0.20260408011533-46c414fee46d
-	github.com/free5gc/ngap v1.1.2
-	github.com/free5gc/sctp v1.1.1
-	github.com/free5gc/util v1.3.1
+	github.com/free5gc/aper v1.1.1
+	github.com/free5gc/ike v1.2.1
+	github.com/free5gc/ngap v1.1.3
+	github.com/free5gc/sctp v1.1.2
+	github.com/free5gc/util v1.3.2
 	github.com/gin-contrib/pprof v1.5.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/gopacket v1.1.19
@@ -34,8 +34,8 @@ require (
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/free5gc/nas v1.2.2 // indirect
-	github.com/free5gc/openapi v1.2.3 // indirect
+	github.com/free5gc/nas v1.2.3 // indirect
+	github.com/free5gc/openapi v1.2.4 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
