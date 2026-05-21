@@ -1022,7 +1022,12 @@ func (s *Server) continueCreateChildSA(
 		ikeLog.Errorln("CREATE_CHILD_SA response carried no Proposals; aborting child SA setup")
 		return
 	}
-	outboundSPI := binary.BigEndian.Uint32(temporaryIkeMsg.SecurityAssociation.Proposals[0].SPI)
+	proposal := temporaryIkeMsg.SecurityAssociation.Proposals[0]
+	if len(proposal.SPI) != 4 {
+		ikeLog.Errorf("CREATE_CHILD_SA response carried invalid ESP SPI length: %d", len(proposal.SPI))
+		return
+	}
+	outboundSPI := binary.BigEndian.Uint32(proposal.SPI)
 	childSecurityAssociationContext, err := ikeUe.CompleteChildSA(
 		ikeSecurityAssociation.ResponderMessageID, outboundSPI, temporaryIkeMsg.SecurityAssociation)
 	if err != nil {
