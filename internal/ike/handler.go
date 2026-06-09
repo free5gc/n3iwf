@@ -40,6 +40,12 @@ func (s *Server) HandleIKESAINIT(
 	ikeLog := logger.IKELog
 	ikeLog.Infoln("Handle IKE_SA_INIT")
 
+	// Validate before allocating an IKE SA so an invalid request cannot leak state.
+	if message.MessageID != 0 {
+		ikeLog.Warnf("Invalid IKE_SA_INIT MessageID: got %d, expected 0", message.MessageID)
+		return
+	}
+
 	// Used to receive value from peer
 	var securityAssociation *ike_message.SecurityAssociation
 	var keyExcahge *ike_message.KeyExchange
@@ -152,17 +158,23 @@ func (s *Server) HandleIKESAINIT(
 
 	// Create new IKE security association
 	ikeSecurityAssociation := n3iwfCtx.NewIKESecurityAssociation()
-	ikeSecurityAssociation.RemoteSPI = message.InitiatorSPI
-	// First message of IKE_SA_INIT must have MessageID as 0
-	if message.MessageID != 0 {
-		ikeLog.Warnf("Invalid IKE_SA_INIT MessageID: got %d, expected 0", message.MessageID)
+	if ikeSecurityAssociation == nil {
+		ikeLog.Error("Failed to create IKE security association")
 		return
 	}
+	keepIKESA := false
+	defer func() {
+		if !keepIKESA {
+			n3iwfCtx.DeleteIKESecurityAssociation(ikeSecurityAssociation.LocalSPI)
+		}
+	}()
 
-	// next request message ID should be 1, will be increased by 1
+	ikeSecurityAssociation.RemoteSPI = message.InitiatorSPI
+
+	// The next request after IKE_SA_INIT must use Message ID 1.
 	ikeSecurityAssociation.InitiatorMessageID = 1
 
-	// response message ID should be 0 for IKE_SA_INIT, will be increased by 1
+	// The first N3IWF-initiated request uses Message ID 0.
 	ikeSecurityAssociation.ResponderMessageID = 0
 
 	ikeSecurityAssociation.IKESAKey, localPublicValue, err = ike_security.NewIKESAKey(chooseProposal[0],
@@ -231,7 +243,9 @@ func (s *Server) HandleIKESAINIT(
 	err = SendIKEMessageToUE(udpConn, n3iwfAddr, ueAddr, responseIKEMessage, nil)
 	if err != nil {
 		ikeLog.Errorf("HandleIKESAINIT(): %v", err)
+		return
 	}
+	keepIKESA = true
 }
 
 const (
@@ -640,7 +654,6 @@ func (s *Server) HandleIKEAUTH(
 				UEAddr:    ueAddr,
 			}
 
-			ikeSecurityAssociation.InitiatorMessageID = message.MessageID
 		} else {
 			ikeLog.Error("EAP is nil")
 		}
@@ -1287,7 +1300,7 @@ func (s *Server) HandleSendEAP5GFailureMsg(ikeEvt n3iwf_context.IkeEvt) {
 
 	// Build IKE message
 	responseIKEMessage := ike_message.NewMessage(ikeSecurityAssociation.RemoteSPI, ikeSecurityAssociation.LocalSPI,
-		ike_message.IKE_AUTH, true, false, ikeSecurityAssociation.InitiatorMessageID, responseIKEPayload)
+		ike_message.IKE_AUTH, true, false, ikeSecurityAssociation.InitiatorMessageID-1, responseIKEPayload)
 
 	// Send IKE message to UE
 	err = SendIKEMessageToUE(ikeSecurityAssociation.IKEConnection.Conn,
@@ -1339,7 +1352,7 @@ func (s *Server) HandleSendEAPSuccessMsg(ikeEvt n3iwf_context.IkeEvt) {
 	// Build IKE message
 	responseIKEMessage := ike_message.NewMessage(ikeSecurityAssociation.RemoteSPI,
 		ikeSecurityAssociation.LocalSPI, ike_message.IKE_AUTH, true, false,
-		ikeSecurityAssociation.InitiatorMessageID, responseIKEPayload)
+		ikeSecurityAssociation.InitiatorMessageID-1, responseIKEPayload)
 
 	// Send IKE message to UE
 	err = SendIKEMessageToUE(ikeSecurityAssociation.IKEConnection.Conn,
@@ -1391,7 +1404,7 @@ func (s *Server) HandleSendEAPNASMsg(ikeEvt n3iwf_context.IkeEvt) {
 	// Build IKE message
 	responseIKEMessage := ike_message.NewMessage(ikeSecurityAssociation.RemoteSPI,
 		ikeSecurityAssociation.LocalSPI, ike_message.IKE_AUTH, true, false,
-		ikeSecurityAssociation.InitiatorMessageID, responseIKEPayload)
+		ikeSecurityAssociation.InitiatorMessageID-1, responseIKEPayload)
 
 	// Send IKE message to UE
 	err = SendIKEMessageToUE(ikeSecurityAssociation.IKEConnection.Conn,

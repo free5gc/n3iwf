@@ -23,22 +23,9 @@ func (s *Server) Dispatch(
 		}
 	}()
 
-	if ikeSA != nil && ikeMessage.ExchangeType != ike_message.IKE_SA_INIT {
-		if !ikeMessage.IsResponse() {
-			// UE → N3IWF (Request)
-			if ikeMessage.MessageID < ikeSA.InitiatorMessageID {
-				ikeLog.Warnf("Replay request. Expected >= %d, Got %d",
-					ikeSA.InitiatorMessageID, ikeMessage.MessageID)
-				return
-			}
-		} else {
-			// UE → N3IWF (Response)
-			if ikeMessage.MessageID < ikeSA.ResponderMessageID {
-				ikeLog.Warnf("Replay response. Expected >= %d, Got %d",
-					ikeSA.ResponderMessageID, ikeMessage.MessageID)
-				return
-			}
-		}
+	if ikeSA != nil && ikeMessage.ExchangeType != ike_message.IKE_SA_INIT &&
+		!hasExpectedMessageID(ikeMessage, ikeSA) {
+		return
 	}
 
 	switch ikeMessage.ExchangeType {
@@ -53,4 +40,26 @@ func (s *Server) Dispatch(
 	default:
 		ikeLog.Warnf("Unimplemented IKE message type, exchange type: %d", ikeMessage.ExchangeType)
 	}
+}
+
+func hasExpectedMessageID(
+	ikeMessage *ike_message.IKEMessage,
+	ikeSA *n3iwf_context.IKESecurityAssociation,
+) bool {
+	ikeLog := logger.IKELog
+	if !ikeMessage.IsResponse() {
+		if ikeMessage.MessageID != ikeSA.InitiatorMessageID {
+			ikeLog.Warnf("Unexpected request MessageID. Expected %d, got %d",
+				ikeSA.InitiatorMessageID, ikeMessage.MessageID)
+			return false
+		}
+		return true
+	}
+
+	if ikeMessage.MessageID != ikeSA.ResponderMessageID {
+		ikeLog.Warnf("Unexpected response MessageID. Expected %d, got %d",
+			ikeSA.ResponderMessageID, ikeMessage.MessageID)
+		return false
+	}
+	return true
 }
