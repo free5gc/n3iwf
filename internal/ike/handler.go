@@ -175,6 +175,7 @@ func (s *Server) HandleIKESAINIT(
 	ikeSecurityAssociation.InitiatorMessageID = 1
 
 	// The first N3IWF-initiated request uses Message ID 0.
+
 	ikeSecurityAssociation.ResponderMessageID = 0
 
 	ikeSecurityAssociation.IKESAKey, localPublicValue, err = ike_security.NewIKESAKey(chooseProposal[0],
@@ -653,7 +654,6 @@ func (s *Server) HandleIKEAUTH(
 				N3IWFAddr: n3iwfAddr,
 				UEAddr:    ueAddr,
 			}
-
 		} else {
 			ikeLog.Error("EAP is nil")
 		}
