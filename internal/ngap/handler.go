@@ -2910,7 +2910,7 @@ func printCriticalityDiagnostics(
 				}
 			}
 		} else {
-			ngapLog.Error("IEsCriticalityDiagnostics is nil")
+			ngapLog.Debug("IEsCriticalityDiagnostics is nil")
 		}
 		return
 	}

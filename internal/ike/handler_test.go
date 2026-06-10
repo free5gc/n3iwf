@@ -63,6 +63,25 @@ func TestRemoveIkeUe(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestInvalidIKESAInitMessageIDDoesNotAllocateSA(t *testing.T) {
+	n3iwf, err := NewN3iwfTestApp(&factory.Config{})
+	require.NoError(t, err)
+
+	n3iwf.ikeServer, err = NewServer(n3iwf)
+	require.NoError(t, err)
+
+	message := ike_message.NewMessage(
+		1, 0, ike_message.IKE_SA_INIT, false, false, 1, nil)
+	n3iwf.ikeServer.HandleIKESAINIT(nil, nil, nil, message, nil)
+
+	allocated := 0
+	n3iwf.n3iwfCtx.IKESA.Range(func(_, _ interface{}) bool {
+		allocated++
+		return true
+	})
+	require.Zero(t, allocated)
+}
+
 func TestGenerateNATDetectHash(t *testing.T) {
 	n3iwf, err := NewN3iwfTestApp(&factory.Config{})
 	require.NoError(t, err)

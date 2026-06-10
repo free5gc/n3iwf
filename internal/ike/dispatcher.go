@@ -23,6 +23,11 @@ func (s *Server) Dispatch(
 		}
 	}()
 
+	if ikeSA != nil && ikeMessage.ExchangeType != ike_message.IKE_SA_INIT &&
+		!hasExpectedMessageID(ikeMessage, ikeSA) {
+		return
+	}
+
 	switch ikeMessage.ExchangeType {
 	case ike_message.IKE_SA_INIT:
 		s.HandleIKESAINIT(udpConn, localAddr, remoteAddr, ikeMessage, msg)
@@ -35,4 +40,26 @@ func (s *Server) Dispatch(
 	default:
 		ikeLog.Warnf("Unimplemented IKE message type, exchange type: %d", ikeMessage.ExchangeType)
 	}
+}
+
+func hasExpectedMessageID(
+	ikeMessage *ike_message.IKEMessage,
+	ikeSA *n3iwf_context.IKESecurityAssociation,
+) bool {
+	ikeLog := logger.IKELog
+	if !ikeMessage.IsResponse() {
+		if ikeMessage.MessageID != ikeSA.InitiatorMessageID {
+			ikeLog.Warnf("Unexpected request MessageID. Expected %d, got %d",
+				ikeSA.InitiatorMessageID, ikeMessage.MessageID)
+			return false
+		}
+		return true
+	}
+
+	if ikeMessage.MessageID != ikeSA.ResponderMessageID {
+		ikeLog.Warnf("Unexpected response MessageID. Expected %d, got %d",
+			ikeSA.ResponderMessageID, ikeMessage.MessageID)
+		return false
+	}
+	return true
 }
