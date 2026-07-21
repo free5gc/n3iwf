@@ -307,6 +307,7 @@ func BuildInitialContextSetupResponse(
 		ie = ngapType.InitialContextSetupResponseIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
 		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+		ie.Value.Present = ngapType.InitialContextSetupResponseIEsPresentCriticalityDiagnostics
 		ie.Value.CriticalityDiagnostics = criticalityDiagnostics
 		initialContextSetupResponseIEs.List = append(initialContextSetupResponseIEs.List, ie)
 	}
@@ -383,6 +384,7 @@ func BuildInitialContextSetupFailure(
 		ie = ngapType.InitialContextSetupFailureIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
 		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+		ie.Value.Present = ngapType.InitialContextSetupFailureIEsPresentCriticalityDiagnostics
 		ie.Value.CriticalityDiagnostics = criticalityDiagnostics
 		initialContextSetupFailureIEs.List = append(initialContextSetupFailureIEs.List, ie)
 	}
@@ -434,11 +436,14 @@ func BuildUEContextModificationResponse(
 	uEContextModificationResponseIEs.List = append(uEContextModificationResponseIEs.List, ie)
 
 	// Criticality Diagnostics (optional)
-	ie = ngapType.UEContextModificationResponseIEs{}
-	ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
-	ie.Criticality.Value = ngapType.CriticalityPresentIgnore
-	ie.Value.CriticalityDiagnostics = criticalityDiagnostics
-	uEContextModificationResponseIEs.List = append(uEContextModificationResponseIEs.List, ie)
+	if criticalityDiagnostics != nil {
+		ie = ngapType.UEContextModificationResponseIEs{}
+		ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
+		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+		ie.Value.Present = ngapType.UEContextModificationResponseIEsPresentCriticalityDiagnostics
+		ie.Value.CriticalityDiagnostics = criticalityDiagnostics
+		uEContextModificationResponseIEs.List = append(uEContextModificationResponseIEs.List, ie)
+	}
 
 	return ngap.Encoder(pdu)
 }
@@ -495,11 +500,14 @@ func BuildUEContextModificationFailure(ranUe n3iwf_context.RanUe, cause ngapType
 	uEContextModificationFailureIEs.List = append(uEContextModificationFailureIEs.List, ie)
 
 	// Criticality Diagnostics (optional)
-	ie = ngapType.UEContextModificationFailureIEs{}
-	ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
-	ie.Criticality.Value = ngapType.CriticalityPresentIgnore
-	ie.Value.CriticalityDiagnostics = criticalityDiagnostics
-	uEContextModificationFailureIEs.List = append(uEContextModificationFailureIEs.List, ie)
+	if criticalityDiagnostics != nil {
+		ie = ngapType.UEContextModificationFailureIEs{}
+		ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
+		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+		ie.Value.Present = ngapType.UEContextModificationFailureIEsPresentCriticalityDiagnostics
+		ie.Value.CriticalityDiagnostics = criticalityDiagnostics
+		uEContextModificationFailureIEs.List = append(uEContextModificationFailureIEs.List, ie)
+	}
 
 	return ngap.Encoder(pdu)
 }
@@ -582,6 +590,7 @@ func BuildUEContextReleaseComplete(ranUe n3iwf_context.RanUe,
 		ie = ngapType.UEContextReleaseCompleteIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
 		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+		ie.Value.Present = ngapType.UEContextReleaseCompleteIEsPresentCriticalityDiagnostics
 		ie.Value.CriticalityDiagnostics = criticalityDiagnostics
 		uEContextReleaseCompleteIEs.List = append(uEContextReleaseCompleteIEs.List, ie)
 	}
@@ -1024,6 +1033,7 @@ func BuildPDUSessionResourceSetupResponse(
 		ie = ngapType.PDUSessionResourceSetupResponseIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
 		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+		ie.Value.Present = ngapType.PDUSessionResourceSetupResponseIEsPresentCriticalityDiagnostics
 		ie.Value.CriticalityDiagnostics = criticalityDiagnostics
 		pduSessionResourceSetupResponseIEs.List = append(pduSessionResourceSetupResponseIEs.List, ie)
 	}
@@ -1107,6 +1117,7 @@ func BuildPDUSessionResourceModifyResponse(
 		ie = ngapType.PDUSessionResourceModifyResponseIEs{}
 		ie.Id.Value = ngapType.ProtocolIEIDCriticalityDiagnostics
 		ie.Criticality.Value = ngapType.CriticalityPresentIgnore
+		ie.Value.Present = ngapType.PDUSessionResourceModifyResponseIEsPresentCriticalityDiagnostics
 		ie.Value.CriticalityDiagnostics = criticalityDiagnostics
 		pduSessionResourceModifyResponseIEs.List = append(pduSessionResourceModifyResponseIEs.List, ie)
 	}
