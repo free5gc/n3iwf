@@ -1,7 +1,7 @@
 package context
 
 import (
-	"github.com/free5gc/ngap/ngapType"
+	ngapType "github.com/free5gc/ngap/ie"
 )
 
 type NgapEventType int64

@@ -21,7 +21,7 @@ import (
 
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/pkg/factory"
-	"github.com/free5gc/ngap/ngapType"
+	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/free5gc/sctp"
 	"github.com/free5gc/util/idgenerator"
 	"github.com/free5gc/util/ippool"

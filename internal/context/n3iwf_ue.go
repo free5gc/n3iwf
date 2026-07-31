@@ -5,8 +5,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/free5gc/ngap/ngapConvert"
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/n3iwf/internal/util"
+	ngapType "github.com/free5gc/ngap/ie"
 )
 
 type N3IWFRanUe struct {
@@ -76,14 +76,12 @@ func (n3iwfUe *N3IWFRanUe) DetachAMF() {
 
 // Implement RanUe interface
 func (n3iwfUe *N3IWFRanUe) GetUserLocationInformation() *ngapType.UserLocationInformation {
-	userLocationInformation := new(ngapType.UserLocationInformation)
-
-	userLocationInformation.Present = ngapType.UserLocationInformationPresentUserLocationInformationN3IWF
-	userLocationInformation.UserLocationInformationN3IWF = new(ngapType.UserLocationInformationN3IWF)
-
-	userLocationInfoN3IWF := userLocationInformation.UserLocationInformationN3IWF
-	userLocationInfoN3IWF.IPAddress = ngapConvert.IPAddressToNgap(n3iwfUe.IPAddrv4, n3iwfUe.IPAddrv6)
-	userLocationInfoN3IWF.PortNumber = ngapConvert.PortNumberToNgap(n3iwfUe.PortNumber)
-
-	return userLocationInformation
+	ipAddress := util.IPAddressToNgap(n3iwfUe.IPAddrv4, n3iwfUe.IPAddrv6)
+	portNumber := util.PortNumberToNgap(n3iwfUe.PortNumber)
+	return &ngapType.UserLocationInformation{
+		Choice: &ngapType.UserLocationInformationN3IWF{
+			IPAddress:  &ipAddress,
+			PortNumber: &portNumber,
+		},
+	}
 }

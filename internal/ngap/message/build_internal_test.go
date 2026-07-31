@@ -6,12 +6,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/free5gc/aper"
 	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
+	"github.com/free5gc/n3iwf/internal/util"
 	"github.com/free5gc/n3iwf/pkg/factory"
-	"github.com/free5gc/ngap"
-	"github.com/free5gc/ngap/ngapConvert"
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/ngap/aper"
+	ngapType "github.com/free5gc/ngap/ie"
+	ngap "github.com/free5gc/ngap/message"
 )
 
 const (
@@ -25,10 +25,10 @@ var testNASPDU = []byte{0x7e, 0x00, 0x41, 0x01, 0x02, 0x03}
 type ngapGoldenCase struct {
 	name          string
 	wantHex       string
-	wantPresent   int
+	wantPresent   int64
 	wantProcedure int64
 	build         func() ([]byte, error)
-	validate      func(t *testing.T, pdu *ngapType.NGAPPDU)
+	validate      func(t *testing.T, pdu ngap.Message)
 }
 
 func TestGoldenNGAPPDUBuilders(t *testing.T) {
@@ -37,19 +37,25 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 	tests := []ngapGoldenCase{
 		{
 			name: "NGSetupRequest",
-			wantHex: "00150035000003001b00078002f8390081000052400f0600667265653547432d4e33495746" +
-				"0066001000000000010002f83900001008010203",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeNGSetup,
+			wantHex: "0015003a000004001b00078002f8390081000052400f0600667265653547432d4e33495746" +
+				"0066001000000000010002f839000010080102030015400140",
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeNGSetup,
 			build: func() ([]byte, error) {
 				return BuildNGSetupRequest(testGlobalN3IWFID(), "free5GC-N3IWF", testSupportedTAList())
+			},
+			validate: func(t *testing.T, pdu ngap.Message) {
+				msg, ok := pdu.(*ngap.NGSetupRequest)
+				require.True(t, ok)
+				require.NotNil(t, msg.DefaultPagingDRX)
+				require.Equal(t, ngapType.PagingDRXPresentV128, msg.DefaultPagingDRX.Value)
 			},
 		},
 		{
 			name:          "NGReset",
 			wantHex:       "00140014000002000f400200000058000740016201c8007b",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeNGReset,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeNGReset,
 			build: func() ([]byte, error) {
 				return BuildNGReset(cause, testUEAssociatedLogicalNGConnectionList())
 			},
@@ -57,8 +63,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "NGResetAcknowledge",
 			wantHex:       "2014000d000001006f4006016201c8007b",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeNGReset,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeNGReset,
 			build: func() ([]byte, error) {
 				return BuildNGResetAcknowledge(testUEAssociatedLogicalNGConnectionList(), nil)
 			},
@@ -66,14 +72,14 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "InitialContextSetupResponseWithoutDiagnostics",
 			wantHex:       "200e0026000004000a40032001c800554002007b0048400700000a030102030037400700000a03010203",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeInitialContextSetup,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeInitialContextSetup,
 			build: func() ([]byte, error) {
 				return BuildInitialContextSetupResponse(
 					testRanUE(), testSetupListCxtRes(), testFailedSetupListCxtRes(), nil,
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateInitialContextSetupResponse(t, pdu, false)
 			},
 		},
@@ -81,29 +87,29 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 			name: "InitialContextSetupResponseWithDiagnostics",
 			wantHex: "200e0032000005000a40032001c800554002007b0048400700000a030102030037400700000a03010203" +
 				"00134008780e000010000a00",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeInitialContextSetup,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeInitialContextSetup,
 			build: func() ([]byte, error) {
 				return BuildInitialContextSetupResponse(
 					testRanUE(),
 					testSetupListCxtRes(),
 					testFailedSetupListCxtRes(),
-					testCriticalityDiagnostics(ngapType.ProcedureCodeInitialContextSetup),
+					testCriticalityDiagnostics(ngap.ProcedureCodeInitialContextSetup),
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateInitialContextSetupResponse(t, pdu, true)
 			},
 		},
 		{
 			name:          "InitialContextSetupFailureWithoutDiagnostics",
 			wantHex:       "400e0021000004000a40032001c800554002007b0084400700000a03010203000f40020000",
-			wantPresent:   ngapType.NGAPPDUPresentUnsuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeInitialContextSetup,
+			wantPresent:   ngap.MessageTypeUnsuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeInitialContextSetup,
 			build: func() ([]byte, error) {
 				return BuildInitialContextSetupFailure(testRanUE(), cause, testFailedSetupListCxtFail(), nil)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateInitialContextSetupFailure(t, pdu, false)
 			},
 		},
@@ -111,81 +117,81 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 			name: "InitialContextSetupFailureWithDiagnostics",
 			wantHex: "400e002d000005000a40032001c800554002007b0084400700000a03010203000f40020000" +
 				"00134008780e000010000a00",
-			wantPresent:   ngapType.NGAPPDUPresentUnsuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeInitialContextSetup,
+			wantPresent:   ngap.MessageTypeUnsuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeInitialContextSetup,
 			build: func() ([]byte, error) {
 				return BuildInitialContextSetupFailure(
 					testRanUE(),
 					cause,
 					testFailedSetupListCxtFail(),
-					testCriticalityDiagnostics(ngapType.ProcedureCodeInitialContextSetup),
+					testCriticalityDiagnostics(ngap.ProcedureCodeInitialContextSetup),
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateInitialContextSetupFailure(t, pdu, true)
 			},
 		},
 		{
 			name:          "UEContextModificationResponseWithoutDiagnostics",
 			wantHex:       "20280010000002000a40032001c800554002007b",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeUEContextModification,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeUEContextModification,
 			build: func() ([]byte, error) {
 				return BuildUEContextModificationResponse(testRanUE(), nil)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateUEContextModificationResponse(t, pdu, false)
 			},
 		},
 		{
 			name:          "UEContextModificationResponseWithDiagnostics",
 			wantHex:       "2028001c000003000a40032001c800554002007b001340087828000010000a00",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeUEContextModification,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeUEContextModification,
 			build: func() ([]byte, error) {
 				return BuildUEContextModificationResponse(
-					testRanUE(), testCriticalityDiagnostics(ngapType.ProcedureCodeUEContextModification),
+					testRanUE(), testCriticalityDiagnostics(ngap.ProcedureCodeUEContextModification),
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateUEContextModificationResponse(t, pdu, true)
 			},
 		},
 		{
 			name:          "UEContextModificationFailureWithoutDiagnostics",
 			wantHex:       "40280016000003000a40032001c800554002007b000f40020000",
-			wantPresent:   ngapType.NGAPPDUPresentUnsuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeUEContextModification,
+			wantPresent:   ngap.MessageTypeUnsuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeUEContextModification,
 			build: func() ([]byte, error) {
 				return BuildUEContextModificationFailure(testRanUE(), cause, nil)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateUEContextModificationFailure(t, pdu, false)
 			},
 		},
 		{
 			name:          "UEContextModificationFailureWithDiagnostics",
 			wantHex:       "40280022000004000a40032001c800554002007b000f40020000001340087828000010000a00",
-			wantPresent:   ngapType.NGAPPDUPresentUnsuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeUEContextModification,
+			wantPresent:   ngap.MessageTypeUnsuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeUEContextModification,
 			build: func() ([]byte, error) {
 				return BuildUEContextModificationFailure(
-					testRanUE(), cause, testCriticalityDiagnostics(ngapType.ProcedureCodeUEContextModification),
+					testRanUE(), cause, testCriticalityDiagnostics(ngap.ProcedureCodeUEContextModification),
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateUEContextModificationFailure(t, pdu, true)
 			},
 		},
 		{
 			name:          "UEContextReleaseCompleteWithoutDiagnostics",
 			wantHex:       "20290023000004000a40032001c800554002007b0079400880f8c000020a1194003c000300000a",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeUEContextRelease,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeUEContextRelease,
 			build: func() ([]byte, error) {
 				return BuildUEContextReleaseComplete(testRanUE(), nil)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateUEContextReleaseComplete(t, pdu, false)
 			},
 		},
@@ -193,22 +199,22 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 			name: "UEContextReleaseCompleteWithDiagnostics",
 			wantHex: "2029002f000005000a40032001c800554002007b0079400880f8c000020a1194003c000300000a" +
 				"001340087829000010000a00",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeUEContextRelease,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeUEContextRelease,
 			build: func() ([]byte, error) {
 				return BuildUEContextReleaseComplete(
-					testRanUE(), testCriticalityDiagnostics(ngapType.ProcedureCodeUEContextRelease),
+					testRanUE(), testCriticalityDiagnostics(ngap.ProcedureCodeUEContextRelease),
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validateUEContextReleaseComplete(t, pdu, true)
 			},
 		},
 		{
 			name:          "UEContextReleaseRequest",
 			wantHex:       "002a401d000004000a00032001c800550002007b0085000300000a000f40020000",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeUEContextReleaseRequest,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeUEContextReleaseRequest,
 			build: func() ([]byte, error) {
 				return BuildUEContextReleaseRequest(testRanUE(), cause)
 			},
@@ -216,8 +222,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "InitialUEMessageWithoutOptionalIEs",
 			wantHex:       "000f402a00000500550002007b00260007067e00410102030079000880f8c000020a1194005a4001180070400100",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeInitialUEMessage,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeInitialUEMessage,
 			build: func() ([]byte, error) {
 				return BuildInitialUEMessage(testRanUE(), testNASPDU, nil)
 			},
@@ -225,20 +231,25 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name: "InitialUEMessageWithGUTIAndAllowedNSSAI",
 			wantHex: "000f404400000800550002007b00260007067e00410102030079000880f8c000020a1194" +
-				"005a400118001a00070080c0010203040003400202000070400100000040050201010203",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeInitialUEMessage,
+				"005a400118001a00070080c0010203040003400202000070400100000000050201010203",
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeInitialUEMessage,
 			build: func() ([]byte, error) {
 				ranUe := testRanUE()
 				ranUe.Guti = "2089301020301020304"
 				return BuildInitialUEMessage(ranUe, testNASPDU, testAllowedNSSAI())
 			},
+			validate: func(t *testing.T, pdu ngap.Message) {
+				msg, ok := pdu.(*ngap.InitialUEMessage)
+				require.True(t, ok)
+				require.NotNil(t, msg.AllowedNSSAI)
+			},
 		},
 		{
 			name:          "UplinkNASTransport",
 			wantHex:       "002e4027000004000a00032001c800550002007b00260007067e00410102030079400880f8c000020a1194",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeUplinkNASTransport,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeUplinkNASTransport,
 			build: func() ([]byte, error) {
 				return BuildUplinkNASTransport(testRanUE(), testNASPDU)
 			},
@@ -246,8 +257,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "NASNonDeliveryIndication",
 			wantHex:       "00134021000004000a00032001c800550002007b00264007067e0041010203000f40020000",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeNASNonDeliveryIndication,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeNASNonDeliveryIndication,
 			build: func() ([]byte, error) {
 				return BuildNASNonDeliveryIndication(testRanUE(), testNASPDU, cause)
 			},
@@ -255,14 +266,14 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "PDUSessionResourceSetupResponseWithoutDiagnostics",
 			wantHex:       "201d0026000004000a40032001c800554002007b004b400700000a03010203003a400700000a03010203",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodePDUSessionResourceSetup,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodePDUSessionResourceSetup,
 			build: func() ([]byte, error) {
 				return BuildPDUSessionResourceSetupResponse(
 					testRanUE(), testSetupListSURes(), testFailedSetupListSURes(), nil,
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validatePDUSessionResourceSetupResponse(t, pdu, false)
 			},
 		},
@@ -270,17 +281,17 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 			name: "PDUSessionResourceSetupResponseWithDiagnostics",
 			wantHex: "201d0032000005000a40032001c800554002007b004b400700000a03010203003a400700000a03010203" +
 				"00134008781d000010000a00",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodePDUSessionResourceSetup,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodePDUSessionResourceSetup,
 			build: func() ([]byte, error) {
 				return BuildPDUSessionResourceSetupResponse(
 					testRanUE(),
 					testSetupListSURes(),
 					testFailedSetupListSURes(),
-					testCriticalityDiagnostics(ngapType.ProcedureCodePDUSessionResourceSetup),
+					testCriticalityDiagnostics(ngap.ProcedureCodePDUSessionResourceSetup),
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validatePDUSessionResourceSetupResponse(t, pdu, true)
 			},
 		},
@@ -288,14 +299,14 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 			name: "PDUSessionResourceModifyResponseWithoutDiagnostics",
 			wantHex: "201a0032000005000a40032001c800554002007b0041400700000a03010203" +
 				"0036400700000a030102030079400880f8c000020a1194",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodePDUSessionResourceModify,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodePDUSessionResourceModify,
 			build: func() ([]byte, error) {
 				return BuildPDUSessionResourceModifyResponse(
 					testRanUE(), testModifyListModRes(), testFailedModifyListModRes(), nil,
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validatePDUSessionResourceModifyResponse(t, pdu, false)
 			},
 		},
@@ -303,29 +314,31 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 			name: "PDUSessionResourceModifyResponseWithDiagnostics",
 			wantHex: "201a003e000006000a40032001c800554002007b0041400700000a03010203" +
 				"0036400700000a030102030079400880f8c000020a119400134008781a000010000a00",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodePDUSessionResourceModify,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodePDUSessionResourceModify,
 			build: func() ([]byte, error) {
 				return BuildPDUSessionResourceModifyResponse(
 					testRanUE(),
 					testModifyListModRes(),
 					testFailedModifyListModRes(),
-					testCriticalityDiagnostics(ngapType.ProcedureCodePDUSessionResourceModify),
+					testCriticalityDiagnostics(ngap.ProcedureCodePDUSessionResourceModify),
 				)
 			},
-			validate: func(t *testing.T, pdu *ngapType.NGAPPDU) {
+			validate: func(t *testing.T, pdu ngap.Message) {
 				validatePDUSessionResourceModifyResponse(t, pdu, true)
 			},
 		},
 		{
 			name:          "PDUSessionResourceModifyIndication",
 			wantHex:       "001b001b000003000a00032001c800550002007b003f000700000a03010203",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodePDUSessionResourceModifyIndication,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodePDUSessionResourceModifyIndication,
 			build: func() ([]byte, error) {
-				item := ngapType.PDUSessionResourceModifyItemModInd{}
-				item.PDUSessionID.Value = testPDUSessionID
-				item.PDUSessionResourceModifyIndicationTransfer = testTransferBytes()
+				transfer := aper.OctetString(testTransferBytes())
+				item := ngapType.PDUSessionResourceModifyItemModInd{
+					PDUSessionID: &ngapType.PDUSessionID{Value: testPDUSessionID},
+					PDUSessionResourceModifyIndicationTransfer: &transfer,
+				}
 				return BuildPDUSessionResourceModifyIndication(testRanUE(), []ngapType.PDUSessionResourceModifyItemModInd{item})
 			},
 		},
@@ -333,8 +346,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 			name: "PDUSessionResourceNotify",
 			wantHex: "001e4032000005000a00032001c800550002007b0042000700000a03010203" +
 				"0043400700000a030102030079400880f8c000020a1194",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodePDUSessionResourceNotify,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodePDUSessionResourceNotify,
 			build: func() ([]byte, error) {
 				return BuildPDUSessionResourceNotify(testRanUE(), testNotifyList(), testReleasedListNot())
 			},
@@ -342,8 +355,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "PDUSessionResourceReleaseResponse",
 			wantHex:       "201c0027000004000a40032001c800554002007b0046400700000a030102030079400880f8c000020a1194",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodePDUSessionResourceRelease,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodePDUSessionResourceRelease,
 			build: func() ([]byte, error) {
 				return BuildPDUSessionResourceReleaseResponse(testRanUE(), testReleasedListRelRes(), nil)
 			},
@@ -351,8 +364,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "ErrorIndication",
 			wantHex:       "00094016000003000a40032001c800554002007b000f40020000",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeErrorIndication,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeErrorIndication,
 			build: func() ([]byte, error) {
 				amfID, ranID := testAmfUeNgapID, testRanUeNgapID
 				return BuildErrorIndication(&amfID, &ranID, &cause, nil)
@@ -361,8 +374,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "UERadioCapabilityCheckResponse",
 			wantHex:       "202b0015000003000a40032001c800554002007b001e000140",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeUERadioCapabilityCheck,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeUERadioCapabilityCheck,
 			build: func() ([]byte, error) {
 				return BuildUERadioCapabilityCheckResponse(testRanUE(), nil)
 			},
@@ -370,8 +383,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "AMFConfigurationUpdateAcknowledge",
 			wantHex:       "2000001b00000200054007000f80c633640a00044009000f80c633640b0000",
-			wantPresent:   ngapType.NGAPPDUPresentSuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeAMFConfigurationUpdate,
+			wantPresent:   ngap.MessageTypeSuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeAMFConfigurationUpdate,
 			build: func() ([]byte, error) {
 				return BuildAMFConfigurationUpdateAcknowledge(testAMFTNLAssociationSetupList(), testTNLAssociationList(), nil)
 			},
@@ -379,8 +392,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "AMFConfigurationUpdateFailure",
 			wantHex:       "4000000e000002000f40020000006b400120",
-			wantPresent:   ngapType.NGAPPDUPresentUnsuccessfulOutcome,
-			wantProcedure: ngapType.ProcedureCodeAMFConfigurationUpdate,
+			wantPresent:   ngap.MessageTypeUnsuccessfulOutcome,
+			wantProcedure: ngap.ProcedureCodeAMFConfigurationUpdate,
 			build: func() ([]byte, error) {
 				timeToWait := &ngapType.TimeToWait{Value: ngapType.TimeToWaitPresentV5s}
 				return BuildAMFConfigurationUpdateFailure(cause, timeToWait, nil)
@@ -389,8 +402,8 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 		{
 			name:          "RANConfigurationUpdate",
 			wantHex:       "0023002a0000020052400f0600667265653547432d4e334957460066001000000000010002f83900001008010203",
-			wantPresent:   ngapType.NGAPPDUPresentInitiatingMessage,
-			wantProcedure: ngapType.ProcedureCodeRANConfigurationUpdate,
+			wantPresent:   ngap.MessageTypeInitiatingMessage,
+			wantProcedure: ngap.ProcedureCodeRANConfigurationUpdate,
 			build: func() ([]byte, error) {
 				return BuildRANConfigurationUpdate("free5GC-N3IWF", testSupportedTAList())
 			},
@@ -400,10 +413,10 @@ func TestGoldenNGAPPDUBuilders(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := assertGoldenBytes(t, test.wantHex, test.build)
-			pdu, err := ngap.Decoder(got)
+			pdu, err := ngap.Parse(got)
 			require.NoError(t, err)
-			require.Equal(t, test.wantPresent, pdu.Present)
-			require.Equal(t, test.wantProcedure, procedureCode(pdu))
+			require.Equal(t, test.wantPresent, pdu.MessageType())
+			require.Equal(t, test.wantProcedure, pdu.ProcedureCode())
 			if test.validate != nil {
 				test.validate(t, pdu)
 			}
@@ -425,8 +438,10 @@ func TestGoldenNGAPTransferBuilders(t *testing.T) {
 		got := assertGoldenBytes(t, "0003e0c00002140102030404010240", build)
 
 		var decoded ngapType.PDUSessionResourceSetupResponseTransfer
-		require.NoError(t, aper.UnmarshalWithParams(got, &decoded, "valueExt"))
-		gotTEID := decoded.DLQosFlowPerTNLInformation.UPTransportLayerInformation.GTPTunnel.GTPTEID.Value
+		require.NoError(t, ngapType.UnmarshalBinary(got, &decoded))
+		tunnel, ok := decoded.DLQosFlowPerTNLInformation.UPTransportLayerInformation.Choice.(*ngapType.GTPTunnel)
+		require.True(t, ok)
+		gotTEID := tunnel.GTPTEID.Value
 		require.Equal(t, aper.OctetString{0x01, 0x02, 0x03, 0x04}, gotTEID)
 		require.Len(t, decoded.DLQosFlowPerTNLInformation.AssociatedQosFlowList.List, 2)
 		require.Equal(t, int64(1), decoded.DLQosFlowPerTNLInformation.AssociatedQosFlowList.List[0].QosFlowIdentifier.Value)
@@ -440,21 +455,22 @@ func TestGoldenNGAPTransferBuilders(t *testing.T) {
 		got := assertGoldenBytes(t, "0000", build)
 
 		var decoded ngapType.PDUSessionResourceSetupUnsuccessfulTransfer
-		require.NoError(t, aper.UnmarshalWithParams(got, &decoded, "valueExt"))
-		require.Equal(t, ngapType.CausePresentRadioNetwork, decoded.Cause.Present)
+		require.NoError(t, ngapType.UnmarshalBinary(got, &decoded))
+		_, ok := decoded.Cause.Choice.(*ngapType.CauseRadioNetwork)
+		require.True(t, ok)
 	})
 
 	t.Run("PDUSessionResourceModifyResponseTransfer", func(t *testing.T) {
 		build := func() ([]byte, error) {
 			responseList := &ngapType.QosFlowAddOrModifyResponseList{
 				List: []ngapType.QosFlowAddOrModifyResponseItem{{
-					QosFlowIdentifier: ngapType.QosFlowIdentifier{Value: 1},
+					QosFlowIdentifier: &ngapType.QosFlowIdentifier{Value: 1},
 				}},
 			}
 			failedList := &ngapType.QosFlowListWithCause{
 				List: []ngapType.QosFlowWithCauseItem{{
-					QosFlowIdentifier: ngapType.QosFlowIdentifier{Value: 9},
-					Cause:             cause,
+					QosFlowIdentifier: &ngapType.QosFlowIdentifier{Value: 9},
+					Cause:             &cause,
 				}},
 			}
 			return BuildPDUSessionResourceModifyResponseTransfer(
@@ -467,7 +483,7 @@ func TestGoldenNGAPTransferBuilders(t *testing.T) {
 		got := assertGoldenBytes(t, "7403e0c00002140102030401f0c633640a111213140002002400", build)
 
 		var decoded ngapType.PDUSessionResourceModifyResponseTransfer
-		require.NoError(t, aper.UnmarshalWithParams(got, &decoded, "valueExt"))
+		require.NoError(t, ngapType.UnmarshalBinary(got, &decoded))
 		require.NotNil(t, decoded.ULNGUUPTNLInformation)
 		require.NotNil(t, decoded.DLNGUUPTNLInformation)
 		require.Len(t, decoded.QosFlowAddOrModifyResponseList.List, 1)
@@ -481,8 +497,9 @@ func TestGoldenNGAPTransferBuilders(t *testing.T) {
 		got := assertGoldenBytes(t, "0000", build)
 
 		var decoded ngapType.PDUSessionResourceModifyUnsuccessfulTransfer
-		require.NoError(t, aper.UnmarshalWithParams(got, &decoded, "valueExt"))
-		require.Equal(t, ngapType.CausePresentRadioNetwork, decoded.Cause.Present)
+		require.NoError(t, ngapType.UnmarshalBinary(got, &decoded))
+		_, ok := decoded.Cause.Choice.(*ngapType.CauseRadioNetwork)
+		require.True(t, ok)
 	})
 }
 
@@ -502,336 +519,71 @@ func assertGoldenBytes(t *testing.T, wantHex string, build func() ([]byte, error
 	return got
 }
 
-func procedureCode(pdu *ngapType.NGAPPDU) int64 {
-	switch pdu.Present {
-	case ngapType.NGAPPDUPresentInitiatingMessage:
-		return pdu.InitiatingMessage.ProcedureCode.Value
-	case ngapType.NGAPPDUPresentSuccessfulOutcome:
-		return pdu.SuccessfulOutcome.ProcedureCode.Value
-	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
-		return pdu.UnsuccessfulOutcome.ProcedureCode.Value
-	default:
-		return -1
-	}
-}
-
-func validateInitialContextSetupResponse(t *testing.T, pdu *ngapType.NGAPPDU, wantDiagnostics bool) {
-	t.Helper()
-
-	require.NotNil(t, pdu.SuccessfulOutcome)
-	require.Equal(
-		t,
-		ngapType.SuccessfulOutcomePresentInitialContextSetupResponse,
-		pdu.SuccessfulOutcome.Value.Present,
-	)
-	require.NotNil(t, pdu.SuccessfulOutcome.Value.InitialContextSetupResponse)
-
-	ies := pdu.SuccessfulOutcome.Value.InitialContextSetupResponse.ProtocolIEs.List
-	if wantDiagnostics {
-		require.Len(t, ies, 5)
-	} else {
-		require.Len(t, ies, 4)
-	}
-
-	diagnosticsCount := 0
-	diagnosticsPresent := 0
-	var diagnostics *ngapType.CriticalityDiagnostics
-	for i := range ies {
-		ie := &ies[i]
-		if ie.Id.Value == ngapType.ProtocolIEIDCriticalityDiagnostics {
-			diagnosticsCount++
-			diagnosticsPresent = ie.Value.Present
-			diagnostics = ie.Value.CriticalityDiagnostics
-		}
-	}
-
-	requireCriticalityDiagnosticsIE(
-		t,
-		wantDiagnostics,
-		diagnosticsCount,
-		diagnosticsPresent,
-		ngapType.InitialContextSetupResponseIEsPresentCriticalityDiagnostics,
-		diagnostics,
-		ngapType.ProcedureCodeInitialContextSetup,
-	)
-}
-
-func validateInitialContextSetupFailure(t *testing.T, pdu *ngapType.NGAPPDU, wantDiagnostics bool) {
-	t.Helper()
-
-	require.NotNil(t, pdu.UnsuccessfulOutcome)
-	require.Equal(
-		t,
-		ngapType.UnsuccessfulOutcomePresentInitialContextSetupFailure,
-		pdu.UnsuccessfulOutcome.Value.Present,
-	)
-	require.NotNil(t, pdu.UnsuccessfulOutcome.Value.InitialContextSetupFailure)
-
-	ies := pdu.UnsuccessfulOutcome.Value.InitialContextSetupFailure.ProtocolIEs.List
-	if wantDiagnostics {
-		require.Len(t, ies, 5)
-	} else {
-		require.Len(t, ies, 4)
-	}
-
-	var cause *ngapType.Cause
-	diagnosticsCount := 0
-	diagnosticsPresent := 0
-	var diagnostics *ngapType.CriticalityDiagnostics
-	for i := range ies {
-		ie := &ies[i]
-		switch ie.Id.Value {
-		case ngapType.ProtocolIEIDCause:
-			cause = ie.Value.Cause
-		case ngapType.ProtocolIEIDCriticalityDiagnostics:
-			diagnosticsCount++
-			diagnosticsPresent = ie.Value.Present
-			diagnostics = ie.Value.CriticalityDiagnostics
-		}
-	}
-
-	requireRadioNetworkUnspecifiedCause(t, cause)
-	requireCriticalityDiagnosticsIE(
-		t,
-		wantDiagnostics,
-		diagnosticsCount,
-		diagnosticsPresent,
-		ngapType.InitialContextSetupFailureIEsPresentCriticalityDiagnostics,
-		diagnostics,
-		ngapType.ProcedureCodeInitialContextSetup,
-	)
-}
-
-func validateUEContextModificationResponse(t *testing.T, pdu *ngapType.NGAPPDU, wantDiagnostics bool) {
-	t.Helper()
-
-	require.NotNil(t, pdu.SuccessfulOutcome)
-	require.Equal(
-		t,
-		ngapType.SuccessfulOutcomePresentUEContextModificationResponse,
-		pdu.SuccessfulOutcome.Value.Present,
-	)
-	require.NotNil(t, pdu.SuccessfulOutcome.Value.UEContextModificationResponse)
-
-	ies := pdu.SuccessfulOutcome.Value.UEContextModificationResponse.ProtocolIEs.List
-	if wantDiagnostics {
-		require.Len(t, ies, 3)
-	} else {
-		require.Len(t, ies, 2)
-	}
-
-	diagnosticsCount := 0
-	diagnosticsPresent := 0
-	var diagnostics *ngapType.CriticalityDiagnostics
-	for i := range ies {
-		ie := &ies[i]
-		if ie.Id.Value == ngapType.ProtocolIEIDCriticalityDiagnostics {
-			diagnosticsCount++
-			diagnosticsPresent = ie.Value.Present
-			diagnostics = ie.Value.CriticalityDiagnostics
-		}
-	}
-
-	requireCriticalityDiagnosticsIE(
-		t,
-		wantDiagnostics,
-		diagnosticsCount,
-		diagnosticsPresent,
-		ngapType.UEContextModificationResponseIEsPresentCriticalityDiagnostics,
-		diagnostics,
-		ngapType.ProcedureCodeUEContextModification,
-	)
-}
-
-func validateUEContextModificationFailure(t *testing.T, pdu *ngapType.NGAPPDU, wantDiagnostics bool) {
-	t.Helper()
-
-	require.NotNil(t, pdu.UnsuccessfulOutcome)
-	require.Equal(
-		t,
-		ngapType.UnsuccessfulOutcomePresentUEContextModificationFailure,
-		pdu.UnsuccessfulOutcome.Value.Present,
-	)
-	require.NotNil(t, pdu.UnsuccessfulOutcome.Value.UEContextModificationFailure)
-
-	ies := pdu.UnsuccessfulOutcome.Value.UEContextModificationFailure.ProtocolIEs.List
-	if wantDiagnostics {
-		require.Len(t, ies, 4)
-	} else {
-		require.Len(t, ies, 3)
-	}
-
-	var cause *ngapType.Cause
-	diagnosticsCount := 0
-	diagnosticsPresent := 0
-	var diagnostics *ngapType.CriticalityDiagnostics
-	for i := range ies {
-		ie := &ies[i]
-		switch ie.Id.Value {
-		case ngapType.ProtocolIEIDCause:
-			cause = ie.Value.Cause
-		case ngapType.ProtocolIEIDCriticalityDiagnostics:
-			diagnosticsCount++
-			diagnosticsPresent = ie.Value.Present
-			diagnostics = ie.Value.CriticalityDiagnostics
-		}
-	}
-
-	requireRadioNetworkUnspecifiedCause(t, cause)
-	requireCriticalityDiagnosticsIE(
-		t,
-		wantDiagnostics,
-		diagnosticsCount,
-		diagnosticsPresent,
-		ngapType.UEContextModificationFailureIEsPresentCriticalityDiagnostics,
-		diagnostics,
-		ngapType.ProcedureCodeUEContextModification,
-	)
-}
-
-func validateUEContextReleaseComplete(t *testing.T, pdu *ngapType.NGAPPDU, wantDiagnostics bool) {
-	t.Helper()
-
-	require.NotNil(t, pdu.SuccessfulOutcome)
-	require.Equal(
-		t,
-		ngapType.SuccessfulOutcomePresentUEContextReleaseComplete,
-		pdu.SuccessfulOutcome.Value.Present,
-	)
-	require.NotNil(t, pdu.SuccessfulOutcome.Value.UEContextReleaseComplete)
-
-	ies := pdu.SuccessfulOutcome.Value.UEContextReleaseComplete.ProtocolIEs.List
-	if wantDiagnostics {
-		require.Len(t, ies, 5)
-	} else {
-		require.Len(t, ies, 4)
-	}
-
-	diagnosticsCount := 0
-	diagnosticsPresent := 0
-	var diagnostics *ngapType.CriticalityDiagnostics
-	for i := range ies {
-		ie := &ies[i]
-		if ie.Id.Value == ngapType.ProtocolIEIDCriticalityDiagnostics {
-			diagnosticsCount++
-			diagnosticsPresent = ie.Value.Present
-			diagnostics = ie.Value.CriticalityDiagnostics
-		}
-	}
-
-	requireCriticalityDiagnosticsIE(
-		t,
-		wantDiagnostics,
-		diagnosticsCount,
-		diagnosticsPresent,
-		ngapType.UEContextReleaseCompleteIEsPresentCriticalityDiagnostics,
-		diagnostics,
-		ngapType.ProcedureCodeUEContextRelease,
-	)
-}
-
-func validatePDUSessionResourceSetupResponse(t *testing.T, pdu *ngapType.NGAPPDU, wantDiagnostics bool) {
-	t.Helper()
-
-	require.NotNil(t, pdu.SuccessfulOutcome)
-	require.Equal(
-		t,
-		ngapType.SuccessfulOutcomePresentPDUSessionResourceSetupResponse,
-		pdu.SuccessfulOutcome.Value.Present,
-	)
-	require.NotNil(t, pdu.SuccessfulOutcome.Value.PDUSessionResourceSetupResponse)
-
-	ies := pdu.SuccessfulOutcome.Value.PDUSessionResourceSetupResponse.ProtocolIEs.List
-	if wantDiagnostics {
-		require.Len(t, ies, 5)
-	} else {
-		require.Len(t, ies, 4)
-	}
-
-	diagnosticsCount := 0
-	diagnosticsPresent := 0
-	var diagnostics *ngapType.CriticalityDiagnostics
-	for i := range ies {
-		ie := &ies[i]
-		if ie.Id.Value == ngapType.ProtocolIEIDCriticalityDiagnostics {
-			diagnosticsCount++
-			diagnosticsPresent = ie.Value.Present
-			diagnostics = ie.Value.CriticalityDiagnostics
-		}
-	}
-
-	requireCriticalityDiagnosticsIE(
-		t,
-		wantDiagnostics,
-		diagnosticsCount,
-		diagnosticsPresent,
-		ngapType.PDUSessionResourceSetupResponseIEsPresentCriticalityDiagnostics,
-		diagnostics,
-		ngapType.ProcedureCodePDUSessionResourceSetup,
-	)
-}
-
-func validatePDUSessionResourceModifyResponse(t *testing.T, pdu *ngapType.NGAPPDU, wantDiagnostics bool) {
-	t.Helper()
-
-	require.NotNil(t, pdu.SuccessfulOutcome)
-	require.Equal(
-		t,
-		ngapType.SuccessfulOutcomePresentPDUSessionResourceModifyResponse,
-		pdu.SuccessfulOutcome.Value.Present,
-	)
-	require.NotNil(t, pdu.SuccessfulOutcome.Value.PDUSessionResourceModifyResponse)
-
-	ies := pdu.SuccessfulOutcome.Value.PDUSessionResourceModifyResponse.ProtocolIEs.List
-	if wantDiagnostics {
-		require.Len(t, ies, 6)
-	} else {
-		require.Len(t, ies, 5)
-	}
-
-	diagnosticsCount := 0
-	diagnosticsPresent := 0
-	var diagnostics *ngapType.CriticalityDiagnostics
-	for i := range ies {
-		ie := &ies[i]
-		if ie.Id.Value == ngapType.ProtocolIEIDCriticalityDiagnostics {
-			diagnosticsCount++
-			diagnosticsPresent = ie.Value.Present
-			diagnostics = ie.Value.CriticalityDiagnostics
-		}
-	}
-
-	requireCriticalityDiagnosticsIE(
-		t,
-		wantDiagnostics,
-		diagnosticsCount,
-		diagnosticsPresent,
-		ngapType.PDUSessionResourceModifyResponseIEsPresentCriticalityDiagnostics,
-		diagnostics,
-		ngapType.ProcedureCodePDUSessionResourceModify,
-	)
-}
-
-func requireCriticalityDiagnosticsIE(
+func requireDiagnosticsPresence(
 	t *testing.T,
-	want bool,
-	count int,
-	present int,
-	wantPresent int,
 	diagnostics *ngapType.CriticalityDiagnostics,
-	wantProcedureCode int64,
+	want bool,
 ) {
 	t.Helper()
-
-	if !want {
-		require.Zero(t, count)
+	if want {
+		require.NotNil(t, diagnostics)
+		requireCriticalityDiagnostics(t, diagnostics, diagnostics.ProcedureCode.Value)
+	} else {
 		require.Nil(t, diagnostics)
-		return
 	}
+}
 
-	require.Equal(t, 1, count)
-	require.Equal(t, wantPresent, present)
-	requireCriticalityDiagnostics(t, diagnostics, wantProcedureCode)
+func validateInitialContextSetupResponse(t *testing.T, parsed ngap.Message, want bool) {
+	t.Helper()
+	msg, ok := parsed.(*ngap.InitialContextSetupResponse)
+	require.True(t, ok)
+	require.NotNil(t, msg.AMFUENGAPID)
+	require.NotNil(t, msg.RANUENGAPID)
+	requireDiagnosticsPresence(t, msg.CriticalityDiagnostics, want)
+}
+
+func validateInitialContextSetupFailure(t *testing.T, parsed ngap.Message, want bool) {
+	t.Helper()
+	msg, ok := parsed.(*ngap.InitialContextSetupFailure)
+	require.True(t, ok)
+	require.NotNil(t, msg.Cause)
+	requireDiagnosticsPresence(t, msg.CriticalityDiagnostics, want)
+}
+
+func validateUEContextModificationResponse(t *testing.T, parsed ngap.Message, want bool) {
+	t.Helper()
+	msg, ok := parsed.(*ngap.UEContextModificationResponse)
+	require.True(t, ok)
+	requireDiagnosticsPresence(t, msg.CriticalityDiagnostics, want)
+}
+
+func validateUEContextModificationFailure(t *testing.T, parsed ngap.Message, want bool) {
+	t.Helper()
+	msg, ok := parsed.(*ngap.UEContextModificationFailure)
+	require.True(t, ok)
+	require.NotNil(t, msg.Cause)
+	requireDiagnosticsPresence(t, msg.CriticalityDiagnostics, want)
+}
+
+func validateUEContextReleaseComplete(t *testing.T, parsed ngap.Message, want bool) {
+	t.Helper()
+	msg, ok := parsed.(*ngap.UEContextReleaseComplete)
+	require.True(t, ok)
+	requireDiagnosticsPresence(t, msg.CriticalityDiagnostics, want)
+}
+
+func validatePDUSessionResourceSetupResponse(t *testing.T, parsed ngap.Message, want bool) {
+	t.Helper()
+	msg, ok := parsed.(*ngap.PDUSessionResourceSetupResponse)
+	require.True(t, ok)
+	requireDiagnosticsPresence(t, msg.CriticalityDiagnostics, want)
+}
+
+func validatePDUSessionResourceModifyResponse(t *testing.T, parsed ngap.Message, want bool) {
+	t.Helper()
+	msg, ok := parsed.(*ngap.PDUSessionResourceModifyResponse)
+	require.True(t, ok)
+	requireDiagnosticsPresence(t, msg.CriticalityDiagnostics, want)
 }
 
 func requireCriticalityDiagnostics(
@@ -840,30 +592,13 @@ func requireCriticalityDiagnostics(
 	wantProcedureCode int64,
 ) {
 	t.Helper()
-
 	require.NotNil(t, diagnostics)
 	require.NotNil(t, diagnostics.ProcedureCode)
 	require.Equal(t, wantProcedureCode, diagnostics.ProcedureCode.Value)
 	require.NotNil(t, diagnostics.TriggeringMessage)
-	require.Equal(t, ngapType.TriggeringMessagePresentInitiatingMessage, diagnostics.TriggeringMessage.Value)
 	require.NotNil(t, diagnostics.ProcedureCriticality)
-	require.Equal(t, ngapType.CriticalityPresentReject, diagnostics.ProcedureCriticality.Value)
 	require.NotNil(t, diagnostics.IEsCriticalityDiagnostics)
 	require.Len(t, diagnostics.IEsCriticalityDiagnostics.List, 1)
-
-	item := diagnostics.IEsCriticalityDiagnostics.List[0]
-	require.Equal(t, ngapType.CriticalityPresentIgnore, item.IECriticality.Value)
-	require.Equal(t, ngapType.ProtocolIEIDAMFUENGAPID, item.IEID.Value)
-	require.Equal(t, ngapType.TypeOfErrorPresentNotUnderstood, item.TypeOfError.Value)
-}
-
-func requireRadioNetworkUnspecifiedCause(t *testing.T, cause *ngapType.Cause) {
-	t.Helper()
-
-	require.NotNil(t, cause)
-	require.Equal(t, ngapType.CausePresentRadioNetwork, cause.Present)
-	require.NotNil(t, cause.RadioNetwork)
-	require.Equal(t, ngapType.CauseRadioNetworkPresentUnspecified, cause.RadioNetwork.Value)
 }
 
 func testRanUE() *n3iwf_context.N3IWFRanUe {
@@ -882,7 +617,7 @@ func testRanUE() *n3iwf_context.N3IWFRanUe {
 
 func testCause() ngapType.Cause {
 	return *BuildCause(
-		ngapType.CausePresentRadioNetwork,
+		CausePresentRadioNetwork,
 		ngapType.CauseRadioNetworkPresentUnspecified,
 	)
 }
@@ -901,9 +636,9 @@ func testCriticalityDiagnostics(procedureCode int64) *ngapType.CriticalityDiagno
 		IEsCriticalityDiagnostics: &ngapType.CriticalityDiagnosticsIEList{
 			List: []ngapType.CriticalityDiagnosticsIEItem{
 				{
-					IECriticality: ngapType.Criticality{Value: ngapType.CriticalityPresentIgnore},
-					IEID:          ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
-					TypeOfError:   ngapType.TypeOfError{Value: ngapType.TypeOfErrorPresentNotUnderstood},
+					IECriticality: &ngapType.Criticality{Value: ngapType.CriticalityPresentIgnore},
+					IEID:          &ngapType.ProtocolIEID{Value: ngapType.ProtocolIEIDAMFUENGAPID},
+					TypeOfError:   &ngapType.TypeOfError{Value: ngapType.TypeOfErrorPresentNotUnderstood},
 				},
 			},
 		},
@@ -932,8 +667,8 @@ func testSupportedTAList() []factory.SupportedTAItem {
 func testAllowedNSSAI() *ngapType.AllowedNSSAI {
 	return &ngapType.AllowedNSSAI{
 		List: []ngapType.AllowedNSSAIItem{{
-			SNSSAI: ngapType.SNSSAI{
-				SST: ngapType.SST{Value: aper.OctetString{0x01}},
+			SNSSAI: &ngapType.SNSSAI{
+				SST: &ngapType.SST{Value: aper.OctetString{0x01}},
 				SD:  &ngapType.SD{Value: aper.OctetString{0x01, 0x02, 0x03}},
 			},
 		}},
@@ -996,43 +731,48 @@ func testFailedModifyListModRes() *ngapType.PDUSessionResourceFailedToModifyList
 }
 
 func testNotifyList() *ngapType.PDUSessionResourceNotifyList {
-	item := ngapType.PDUSessionResourceNotifyItem{}
-	item.PDUSessionID.Value = testPDUSessionID
-	item.PDUSessionResourceNotifyTransfer = testTransferBytes()
+	transfer := aper.OctetString(testTransferBytes())
+	item := ngapType.PDUSessionResourceNotifyItem{
+		PDUSessionID:                     &ngapType.PDUSessionID{Value: testPDUSessionID},
+		PDUSessionResourceNotifyTransfer: &transfer,
+	}
 	return &ngapType.PDUSessionResourceNotifyList{List: []ngapType.PDUSessionResourceNotifyItem{item}}
 }
 
 func testReleasedListNot() *ngapType.PDUSessionResourceReleasedListNot {
-	item := ngapType.PDUSessionResourceReleasedItemNot{}
-	item.PDUSessionID.Value = testPDUSessionID
-	item.PDUSessionResourceNotifyReleasedTransfer = testTransferBytes()
+	transfer := aper.OctetString(testTransferBytes())
+	item := ngapType.PDUSessionResourceReleasedItemNot{
+		PDUSessionID:                             &ngapType.PDUSessionID{Value: testPDUSessionID},
+		PDUSessionResourceNotifyReleasedTransfer: &transfer,
+	}
 	return &ngapType.PDUSessionResourceReleasedListNot{List: []ngapType.PDUSessionResourceReleasedItemNot{item}}
 }
 
 func testReleasedListRelRes() ngapType.PDUSessionResourceReleasedListRelRes {
-	item := ngapType.PDUSessionResourceReleasedItemRelRes{}
-	item.PDUSessionID.Value = testPDUSessionID
-	item.PDUSessionResourceReleaseResponseTransfer = testTransferBytes()
+	transfer := aper.OctetString(testTransferBytes())
+	item := ngapType.PDUSessionResourceReleasedItemRelRes{
+		PDUSessionID: &ngapType.PDUSessionID{Value: testPDUSessionID},
+		PDUSessionResourceReleaseResponseTransfer: &transfer,
+	}
 	return ngapType.PDUSessionResourceReleasedListRelRes{
 		List: []ngapType.PDUSessionResourceReleasedItemRelRes{item},
 	}
 }
 
 func testUPTransportLayerInformation(ipAddress string, teid []byte) *ngapType.UPTransportLayerInformation {
+	address := util.IPAddressToNgap(ipAddress, "")
 	return &ngapType.UPTransportLayerInformation{
-		Present: ngapType.UPTransportLayerInformationPresentGTPTunnel,
-		GTPTunnel: &ngapType.GTPTunnel{
-			TransportLayerAddress: ngapConvert.IPAddressToNgap(ipAddress, ""),
-			GTPTEID:               ngapType.GTPTEID{Value: teid},
+		Choice: &ngapType.GTPTunnel{
+			TransportLayerAddress: &address,
+			GTPTEID:               &ngapType.GTPTEID{Value: teid},
 		},
 	}
 }
 
-func testCPTransportLayerInformation(ipAddress string) ngapType.CPTransportLayerInformation {
-	address := ngapConvert.IPAddressToNgap(ipAddress, "")
-	return ngapType.CPTransportLayerInformation{
-		Present:           ngapType.CPTransportLayerInformationPresentEndpointIPAddress,
-		EndpointIPAddress: &address,
+func testCPTransportLayerInformation(ipAddress string) *ngapType.CPTransportLayerInformation {
+	address := util.IPAddressToNgap(ipAddress, "")
+	return &ngapType.CPTransportLayerInformation{
+		Choice: &address,
 	}
 }
 
@@ -1048,7 +788,10 @@ func testTNLAssociationList() *ngapType.TNLAssociationList {
 	return &ngapType.TNLAssociationList{
 		List: []ngapType.TNLAssociationItem{{
 			TNLAssociationAddress: testCPTransportLayerInformation("198.51.100.11"),
-			Cause:                 testCause(),
+			Cause: func() *ngapType.Cause {
+				cause := testCause()
+				return &cause
+			}(),
 		}},
 	}
 }
