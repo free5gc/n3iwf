@@ -4,117 +4,114 @@ import (
 	"runtime/debug"
 
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/ngap"
-	"github.com/free5gc/ngap/ngapType"
+	ngapMessage "github.com/free5gc/ngap/message"
 	"github.com/free5gc/sctp"
 )
 
-func (s *Server) NGAPDispatch(conn *sctp.SCTPConn, msg []byte) {
+func (s *Server) NGAPDispatch(conn *sctp.SCTPConn, encoded []byte) {
 	ngapLog := logger.NgapLog
-
 	defer func() {
-		if p := recover(); p != nil {
-			// Print stack for panic to log. Fatalf() will let program exit.
-			ngapLog.Fatalf("panic: %v\n%s", p, string(debug.Stack()))
+		if recovered := recover(); recovered != nil {
+			ngapLog.Fatalf("panic: %v\n%s", recovered, string(debug.Stack()))
 		}
 	}()
 
-	// AMF SCTP address
 	sctpAddr := conn.RemoteAddr().String()
-	// AMF context
-	n3iwfCtx := s.Context()
-	amf, _ := n3iwfCtx.AMFPoolLoad(sctpAddr)
-	// Decode
-	pdu, err := ngap.Decoder(msg)
+	amf, _ := s.Context().AMFPoolLoad(sctpAddr)
+	parsed, err := ngapMessage.Parse(encoded)
 	if err != nil {
-		ngapLog.Errorf("NGAP decode error: %+v\n", err)
+		ngapLog.Errorf("NGAP decode error: %+v", err)
+		return
+	}
+	if !isHandledInboundMessage(parsed) {
+		ngapLog.Warnf("Not implemented NGAP message type=%T messageType=%d procedureCode=%d",
+			parsed, parsed.MessageType(), parsed.ProcedureCode())
 		return
 	}
 
-	switch pdu.Present {
-	case ngapType.NGAPPDUPresentInitiatingMessage:
-		initiatingMessage := pdu.InitiatingMessage
-		if initiatingMessage == nil {
-			ngapLog.Errorln("Initiating Message is nil")
-			return
-		}
+	switch msg := parsed.(type) {
+	case *ngapMessage.NGReset:
+		s.HandleNGReset(amf, msg)
+	case *ngapMessage.InitialContextSetupRequest:
+		s.HandleInitialContextSetupRequest(amf, msg)
+	case *ngapMessage.UEContextModificationRequest:
+		s.HandleUEContextModificationRequest(amf, msg)
+	case *ngapMessage.UEContextReleaseCommand:
+		s.HandleUEContextReleaseCommand(amf, msg)
+	case *ngapMessage.DownlinkNASTransport:
+		s.HandleDownlinkNASTransport(amf, msg)
+	case *ngapMessage.PDUSessionResourceSetupRequest:
+		s.HandlePDUSessionResourceSetupRequest(amf, msg)
+	case *ngapMessage.PDUSessionResourceModifyRequest:
+		s.HandlePDUSessionResourceModifyRequest(amf, msg)
+	case *ngapMessage.PDUSessionResourceReleaseCommand:
+		s.HandlePDUSessionResourceReleaseCommand(amf, msg)
+	case *ngapMessage.ErrorIndication:
+		s.HandleErrorIndication(amf, msg)
+	case *ngapMessage.UERadioCapabilityCheckRequest:
+		s.HandleUERadioCapabilityCheckRequest(amf, msg)
+	case *ngapMessage.AMFConfigurationUpdate:
+		s.HandleAMFConfigurationUpdate(amf, msg)
+	case *ngapMessage.DownlinkRANConfigurationTransfer:
+		s.HandleDownlinkRANConfigurationTransfer(msg)
+	case *ngapMessage.DownlinkRANStatusTransfer:
+		s.HandleDownlinkRANStatusTransfer(msg)
+	case *ngapMessage.AMFStatusIndication:
+		s.HandleAMFStatusIndication(msg)
+	case *ngapMessage.LocationReportingControl:
+		s.HandleLocationReportingControl(msg)
+	case *ngapMessage.UETNLABindingReleaseRequest:
+		s.HandleUETNLAReleaseRequest(msg)
+	case *ngapMessage.OverloadStart:
+		s.HandleOverloadStart(amf, msg)
+	case *ngapMessage.OverloadStop:
+		s.HandleOverloadStop(amf, msg)
+	case *ngapMessage.NGSetupResponse:
+		s.HandleNGSetupResponse(sctpAddr, conn, msg)
+	case *ngapMessage.NGResetAcknowledge:
+		s.HandleNGResetAcknowledge(amf, msg)
+	case *ngapMessage.PDUSessionResourceModifyConfirm:
+		s.HandlePDUSessionResourceModifyConfirm(amf, msg)
+	case *ngapMessage.RANConfigurationUpdateAcknowledge:
+		s.HandleRANConfigurationUpdateAcknowledge(amf, msg)
+	case *ngapMessage.NGSetupFailure:
+		s.HandleNGSetupFailure(sctpAddr, conn, msg)
+	case *ngapMessage.RANConfigurationUpdateFailure:
+		s.HandleRANConfigurationUpdateFailure(amf, msg)
+	default:
+		ngapLog.Warnf("Not implemented NGAP message type=%T messageType=%d procedureCode=%d",
+			parsed, parsed.MessageType(), parsed.ProcedureCode())
+	}
+}
 
-		switch initiatingMessage.ProcedureCode.Value {
-		case ngapType.ProcedureCodeNGReset:
-			s.HandleNGReset(amf, pdu)
-		case ngapType.ProcedureCodeInitialContextSetup:
-			s.HandleInitialContextSetupRequest(amf, pdu)
-		case ngapType.ProcedureCodeUEContextModification:
-			s.HandleUEContextModificationRequest(amf, pdu)
-		case ngapType.ProcedureCodeUEContextRelease:
-			s.HandleUEContextReleaseCommand(amf, pdu)
-		case ngapType.ProcedureCodeDownlinkNASTransport:
-			s.HandleDownlinkNASTransport(amf, pdu)
-		case ngapType.ProcedureCodePDUSessionResourceSetup:
-			s.HandlePDUSessionResourceSetupRequest(amf, pdu)
-		case ngapType.ProcedureCodePDUSessionResourceModify:
-			s.HandlePDUSessionResourceModifyRequest(amf, pdu)
-		case ngapType.ProcedureCodePDUSessionResourceRelease:
-			s.HandlePDUSessionResourceReleaseCommand(amf, pdu)
-		case ngapType.ProcedureCodeErrorIndication:
-			s.HandleErrorIndication(amf, pdu)
-		case ngapType.ProcedureCodeUERadioCapabilityCheck:
-			s.HandleUERadioCapabilityCheckRequest(amf, pdu)
-		case ngapType.ProcedureCodeAMFConfigurationUpdate:
-			s.HandleAMFConfigurationUpdate(amf, pdu)
-		case ngapType.ProcedureCodeDownlinkRANConfigurationTransfer:
-			s.HandleDownlinkRANConfigurationTransfer(pdu)
-		case ngapType.ProcedureCodeDownlinkRANStatusTransfer:
-			s.HandleDownlinkRANStatusTransfer(pdu)
-		case ngapType.ProcedureCodeAMFStatusIndication:
-			s.HandleAMFStatusIndication(pdu)
-		case ngapType.ProcedureCodeLocationReportingControl:
-			s.HandleLocationReportingControl(pdu)
-		case ngapType.ProcedureCodeUETNLABindingRelease:
-			s.HandleUETNLAReleaseRequest(pdu)
-		case ngapType.ProcedureCodeOverloadStart:
-			s.HandleOverloadStart(amf, pdu)
-		case ngapType.ProcedureCodeOverloadStop:
-			s.HandleOverloadStop(amf, pdu)
-		default:
-			ngapLog.Warnf("Not implemented NGAP message(initiatingMessage), procedureCode:%d]\n",
-				initiatingMessage.ProcedureCode.Value)
-		}
-	case ngapType.NGAPPDUPresentSuccessfulOutcome:
-		successfulOutcome := pdu.SuccessfulOutcome
-		if successfulOutcome == nil {
-			ngapLog.Errorln("Successful Outcome is nil")
-			return
-		}
-
-		switch successfulOutcome.ProcedureCode.Value {
-		case ngapType.ProcedureCodeNGSetup:
-			s.HandleNGSetupResponse(sctpAddr, conn, pdu)
-		case ngapType.ProcedureCodeNGReset:
-			s.HandleNGResetAcknowledge(amf, pdu)
-		case ngapType.ProcedureCodePDUSessionResourceModifyIndication:
-			s.HandlePDUSessionResourceModifyConfirm(amf, pdu)
-		case ngapType.ProcedureCodeRANConfigurationUpdate:
-			s.HandleRANConfigurationUpdateAcknowledge(amf, pdu)
-		default:
-			ngapLog.Warnf("Not implemented NGAP message(successfulOutcome), procedureCode:%d]\n",
-				successfulOutcome.ProcedureCode.Value)
-		}
-	case ngapType.NGAPPDUPresentUnsuccessfulOutcome:
-		unsuccessfulOutcome := pdu.UnsuccessfulOutcome
-		if unsuccessfulOutcome == nil {
-			ngapLog.Errorln("Unsuccessful Outcome is nil")
-			return
-		}
-
-		switch unsuccessfulOutcome.ProcedureCode.Value {
-		case ngapType.ProcedureCodeNGSetup:
-			s.HandleNGSetupFailure(sctpAddr, conn, pdu)
-		case ngapType.ProcedureCodeRANConfigurationUpdate:
-			s.HandleRANConfigurationUpdateFailure(amf, pdu)
-		default:
-			ngapLog.Warnf("Not implemented NGAP message(unsuccessfulOutcome), procedureCode:%d]\n",
-				unsuccessfulOutcome.ProcedureCode.Value)
-		}
+func isHandledInboundMessage(parsed ngapMessage.Message) bool {
+	switch parsed.(type) {
+	case *ngapMessage.NGReset,
+		*ngapMessage.InitialContextSetupRequest,
+		*ngapMessage.UEContextModificationRequest,
+		*ngapMessage.UEContextReleaseCommand,
+		*ngapMessage.DownlinkNASTransport,
+		*ngapMessage.PDUSessionResourceSetupRequest,
+		*ngapMessage.PDUSessionResourceModifyRequest,
+		*ngapMessage.PDUSessionResourceReleaseCommand,
+		*ngapMessage.ErrorIndication,
+		*ngapMessage.UERadioCapabilityCheckRequest,
+		*ngapMessage.AMFConfigurationUpdate,
+		*ngapMessage.DownlinkRANConfigurationTransfer,
+		*ngapMessage.DownlinkRANStatusTransfer,
+		*ngapMessage.AMFStatusIndication,
+		*ngapMessage.LocationReportingControl,
+		*ngapMessage.UETNLABindingReleaseRequest,
+		*ngapMessage.OverloadStart,
+		*ngapMessage.OverloadStop,
+		*ngapMessage.NGSetupResponse,
+		*ngapMessage.NGResetAcknowledge,
+		*ngapMessage.PDUSessionResourceModifyConfirm,
+		*ngapMessage.RANConfigurationUpdateAcknowledge,
+		*ngapMessage.NGSetupFailure,
+		*ngapMessage.RANConfigurationUpdateFailure:
+		return true
+	default:
+		return false
 	}
 }

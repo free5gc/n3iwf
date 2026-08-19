@@ -5,12 +5,12 @@ import (
 
 	n3iwf_context "github.com/free5gc/n3iwf/internal/context"
 	"github.com/free5gc/n3iwf/internal/logger"
-	"github.com/free5gc/ngap/ngapType"
+	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/free5gc/sctp"
 	ngap_metrics "github.com/free5gc/util/metrics/ngap"
 )
 
-var emptyCause = ngapType.Cause{Present: 0}
+var emptyCause = ngapType.Cause{}
 
 func SendToAmf(amf *n3iwf_context.N3IWFAMF, pkt []byte) (bool, string) {
 	ngapLog := logger.NgapLog

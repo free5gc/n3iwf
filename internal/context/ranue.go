@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/free5gc/ngap/ngapType"
+	ngapType "github.com/free5gc/ngap/ie"
 )
 
 type UeCtxRelState bool
@@ -63,12 +63,13 @@ type RanUeSharedCtx struct {
 	TemporaryPDUSessionSetupData *PDUSessionSetupTemporaryData
 
 	// Others
-	Guami                            *ngapType.GUAMI
-	IndexToRfsp                      int64
-	Ambr                             *ngapType.UEAggregateMaximumBitRate
-	AllowedNssai                     *ngapType.AllowedNSSAI
-	RadioCapability                  *ngapType.UERadioCapability                // TODO: This is for RRC, can be deleted
-	CoreNetworkAssistanceInformation *ngapType.CoreNetworkAssistanceInformation // TS 38.413 9.3.1.15
+	Guami           *ngapType.GUAMI
+	IndexToRfsp     int64
+	Ambr            *ngapType.UEAggregateMaximumBitRate
+	AllowedNssai    *ngapType.AllowedNSSAI
+	RadioCapability *ngapType.UERadioCapability // TODO: This is for RRC, can be deleted
+	// TS 38.413 9.3.1.15
+	CoreNetworkAssistanceInformation *ngapType.CoreNetworkAssistanceInformationForInactive
 	IMSVoiceSupported                int32
 	RRCEstablishmentCause            int16
 	PduSessionReleaseList            ngapType.PDUSessionResourceReleasedListRelRes

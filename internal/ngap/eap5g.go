@@ -4,10 +4,10 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"github.com/free5gc/aper"
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/ngap/aper"
+	ngapType "github.com/free5gc/ngap/ie"
 )
 
 // 3GPP specified EAP-5G
@@ -113,7 +113,7 @@ func UnmarshalEAP5GData(
 					guamiField = append(guamiField, parameterValue...)
 					// Decode GUAMI using aper
 					ngapGUAMI := new(ngapType.GUAMI)
-					err = aper.UnmarshalWithParams(guamiField, ngapGUAMI, "valueExt")
+					err = ngapType.UnmarshalBinary(guamiField, ngapGUAMI)
 					if err != nil {
 						ngapLog.Errorf("APER unmarshal with parameter failed: %+v", err)
 						return nil, errors.New("unmarshal failed when decoding GUAMI")
@@ -145,7 +145,7 @@ func UnmarshalEAP5GData(
 					plmnField = append(plmnField, parameterValue...)
 					// Decode PLMN using aper
 					ngapPLMN := new(ngapType.PLMNIdentity)
-					err = aper.UnmarshalWithParams(plmnField, ngapPLMN, "valueExt")
+					err = ngapType.UnmarshalBinary(plmnField, ngapPLMN)
 					if err != nil {
 						ngapLog.Errorf("APER unmarshal with parameter failed: %v", err)
 						return nil, errors.New("unmarshal failed when decoding PLMN")
@@ -186,14 +186,14 @@ func UnmarshalEAP5GData(
 						ngapSNSSAIItem := ngapType.AllowedNSSAIItem{}
 
 						if len(snssaiValue) == 1 {
-							ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
-								SST: ngapType.SST{
+							ngapSNSSAIItem.SNSSAI = &ngapType.SNSSAI{
+								SST: &ngapType.SST{
 									Value: []byte{snssaiValue[0]},
 								},
 							}
 						} else if len(snssaiValue) == 4 {
-							ngapSNSSAIItem.SNSSAI = ngapType.SNSSAI{
-								SST: ngapType.SST{
+							ngapSNSSAIItem.SNSSAI = &ngapType.SNSSAI{
+								SST: &ngapType.SST{
 									Value: []byte{snssaiValue[0]},
 								},
 								SD: &ngapType.SD{

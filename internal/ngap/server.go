@@ -13,7 +13,7 @@ import (
 	"github.com/free5gc/n3iwf/internal/logger"
 	"github.com/free5gc/n3iwf/internal/ngap/message"
 	"github.com/free5gc/n3iwf/pkg/factory"
-	lib_ngap "github.com/free5gc/ngap"
+	ngap_message "github.com/free5gc/ngap/message"
 	"github.com/free5gc/sctp"
 	"github.com/free5gc/util/safe_channel"
 )
@@ -151,7 +151,7 @@ func (s *Server) listenAndServe(
 		errChan <- fmt.Errorf("get socket information failed")
 		return
 	}
-	info.PPID = lib_ngap.PPID
+	info.PPID = ngap_message.PPID
 	err = conn.SetDefaultSentParam(info)
 	if err != nil {
 		ngapLog.Errorf("[SCTP] SetDefaultSentParam(): %+v", err)
@@ -203,7 +203,7 @@ func (s *Server) listenAndServe(
 
 		ngapLog.Tracef("[SCTP] Successfully read %d bytes.", n)
 
-		if info == nil || info.PPID != lib_ngap.PPID {
+		if info == nil || info.PPID != ngap_message.PPID {
 			ngapLog.Warn("Received SCTP PPID != 60")
 			continue
 		}

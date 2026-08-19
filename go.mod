@@ -4,11 +4,10 @@ go 1.26.2
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d
-	github.com/free5gc/aper v1.1.1
 	github.com/free5gc/ike v1.2.1
-	github.com/free5gc/ngap v1.1.3
-	github.com/free5gc/sctp v1.1.2
-	github.com/free5gc/util v1.3.2
+	github.com/free5gc/ngap v1.2.0
+	github.com/free5gc/sctp v1.2.0
+	github.com/free5gc/util v1.4.0
 	github.com/gin-contrib/pprof v1.5.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/gopacket v1.1.19
@@ -26,6 +25,7 @@ require (
 )
 
 require (
+	github.com/aead/cmac v0.0.0-20160719120800-7af84192f0b1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
@@ -34,8 +34,7 @@ require (
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/free5gc/nas v1.2.3 // indirect
-	github.com/free5gc/openapi v1.2.4 // indirect
+	github.com/free5gc/nas v1.2.4-0.20260707083822-348faf940c55 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect

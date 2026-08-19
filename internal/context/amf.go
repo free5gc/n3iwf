@@ -4,9 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/free5gc/aper"
-	"github.com/free5gc/ngap/ngapConvert"
-	"github.com/free5gc/ngap/ngapType"
+	"github.com/free5gc/n3iwf/internal/util"
+	ngapType "github.com/free5gc/ngap/ie"
 	"github.com/free5gc/sctp"
 )
 
@@ -69,19 +68,31 @@ func (amf *N3IWFAMF) RemoveAllRelatedUe() error {
 }
 
 func (amf *N3IWFAMF) AddAMFTNLAssociationItem(info ngapType.CPTransportLayerInformation) *AMFTNLAssociationItem {
+	address, err := util.ValidateTransportLayerAddress(info)
+	if err != nil {
+		return nil
+	}
 	item := &AMFTNLAssociationItem{}
-	item.Ipv4, item.Ipv6 = ngapConvert.IPAddressToString(*info.EndpointIPAddress)
+	item.Ipv4, item.Ipv6 = util.IPAddressToString(address)
 	amf.AMFTNLAssociationList[item.Ipv4+item.Ipv6] = item
 	return item
 }
 
 func (amf *N3IWFAMF) FindAMFTNLAssociationItem(info ngapType.CPTransportLayerInformation) *AMFTNLAssociationItem {
-	v4, v6 := ngapConvert.IPAddressToString(*info.EndpointIPAddress)
+	address, err := util.ValidateTransportLayerAddress(info)
+	if err != nil {
+		return nil
+	}
+	v4, v6 := util.IPAddressToString(address)
 	return amf.AMFTNLAssociationList[v4+v6]
 }
 
 func (amf *N3IWFAMF) DeleteAMFTNLAssociationItem(info ngapType.CPTransportLayerInformation) {
-	v4, v6 := ngapConvert.IPAddressToString(*info.EndpointIPAddress)
+	address, err := util.ValidateTransportLayerAddress(info)
+	if err != nil {
+		return
+	}
+	v4, v6 := util.IPAddressToString(address)
 	delete(amf.AMFTNLAssociationList, v4+v6)
 }
 
@@ -94,7 +105,10 @@ func (amf *N3IWFAMF) StartOverload(
 	}
 	content := AMFOverloadContent{}
 	if resp != nil {
-		content.Action = resp.OverloadAction
+		switch action := resp.Choice.(type) {
+		case *ngapType.OverloadAction:
+			content.Action = action
+		}
 	}
 	if trafloadInd != nil {
 		content.TrafficInd = &trafloadInd.Value
@@ -103,10 +117,15 @@ func (amf *N3IWFAMF) StartOverload(
 		for _, item := range nssai.List {
 			sliceItem := SliceOverloadItem{}
 			for _, item2 := range item.SliceOverloadList.List {
-				sliceItem.SNssaiList = append(sliceItem.SNssaiList, item2.SNSSAI)
+				if item2.SNSSAI != nil {
+					sliceItem.SNssaiList = append(sliceItem.SNssaiList, *item2.SNSSAI)
+				}
 			}
 			if item.SliceOverloadResponse != nil {
-				sliceItem.Action = item.SliceOverloadResponse.OverloadAction
+				switch action := item.SliceOverloadResponse.Choice.(type) {
+				case *ngapType.OverloadAction:
+					sliceItem.Action = action
+				}
 			}
 			if item.SliceTrafficLoadReductionIndication != nil {
 				sliceItem.TrafficInd = &item.SliceTrafficLoadReductionIndication.Value
@@ -126,11 +145,14 @@ func (amf *N3IWFAMF) StopOverload() {
 // and return if this AMF is avalible for UE
 func (amf *N3IWFAMF) FindAvalibleAMFByCompareGUAMI(ueSpecifiedGUAMI *ngapType.GUAMI) bool {
 	for _, amfServedGUAMI := range amf.ServedGUAMIList.List {
-		codedAMFServedGUAMI, err := aper.MarshalWithParams(&amfServedGUAMI.GUAMI, "valueExt")
+		if amfServedGUAMI.GUAMI == nil {
+			continue
+		}
+		codedAMFServedGUAMI, err := ngapType.MarshalBinary(amfServedGUAMI.GUAMI)
 		if err != nil {
 			return false
 		}
-		codedUESpecifiedGUAMI, err := aper.MarshalWithParams(ueSpecifiedGUAMI, "valueExt")
+		codedUESpecifiedGUAMI, err := ngapType.MarshalBinary(ueSpecifiedGUAMI)
 		if err != nil {
 			return false
 		}
@@ -148,7 +170,8 @@ func (amf *N3IWFAMF) FindAvalibleAMFByCompareSelectedPLMNId(ueSpecifiedSelectedP
 	}
 
 	for _, amfServedPLMNId := range amf.PLMNSupportList.List {
-		if !bytes.Equal(amfServedPLMNId.PLMNIdentity.Value, ueSpecifiedSelectedPLMNId.Value) {
+		if amfServedPLMNId.PLMNIdentity == nil ||
+			!bytes.Equal(amfServedPLMNId.PLMNIdentity.Value, ueSpecifiedSelectedPLMNId.Value) {
 			continue
 		}
 		return true
