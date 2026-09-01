@@ -1597,10 +1597,20 @@ func (s *Server) CreatePDUSessionChildSA(
 			proposal.EncryptionAlgorithm = append(proposal.EncryptionAlgorithm,
 				encrTranform)
 			// Integrity transform
-			if pduSession.SecurityIntegrity {
-				proposal.IntegrityAlgorithm = append(proposal.IntegrityAlgorithm,
-					integ.ToTransform(ikeSecurityAssociation.IntegInfo))
+			//
+			// N3IWF only offers non-combined-mode (non-AEAD) ESP encryption
+			// algorithms, so per RFC 7296 section 3.3.2 Transform Type 3
+			// (Integrity Algorithm) MUST be present in the ESP proposal. It
+			// must not be gated on pduSession.SecurityIntegrity: when the SMF
+			// signals IntegrityProtectionIndication "not-needed" that produced
+			// a proposal with no integrity transform, which both peers then
+			// rejected while deriving the child SA keys.
+			if ikeSecurityAssociation.IntegInfo == nil {
+				ikeLog.Errorf("CreatePDUSessionChildSA: IKE SA has no integrity algorithm")
+				break
 			}
+			proposal.IntegrityAlgorithm = append(proposal.IntegrityAlgorithm,
+				integ.ToTransform(ikeSecurityAssociation.IntegInfo))
 
 			// RFC 7296
 			// Diffie-Hellman transform is optional in CREATE_CHILD_SA
