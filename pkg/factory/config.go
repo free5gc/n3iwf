@@ -129,6 +129,7 @@ type Info struct {
 }
 
 type Configuration struct {
+	IdleTimeout      *time.Duration     `yaml:"idleTimeout,omitempty" valid:"optional"`
 	N3IWFInfo        *N3IWFNFInfo       `yaml:"n3iwfInformation"        valid:"required"`
 	LocalSctpAddr    string             `yaml:"localSctpAddr,omitempty" valid:"optional,host"`
 	AMFSCTPAddresses []AMFSCTPAddresses `yaml:"amfSCTPAddresses"        valid:"required"`
@@ -535,4 +536,15 @@ func (c *Config) GetMetricsNamespace() string {
 		return c.Configuration.Metrics.Namespace
 	}
 	return N3iwfMetricsDefaultNamespace
+}
+
+// GetIdleTimeout returns the HTTP server idle timeout. Omitted values preserve
+// the previous 1ms timeout; an explicit zero disables the timeout.
+func (c *Config) GetIdleTimeout() time.Duration {
+	c.RLock()
+	defer c.RUnlock()
+	if c.Configuration == nil || c.Configuration.IdleTimeout == nil {
+		return time.Millisecond
+	}
+	return *c.Configuration.IdleTimeout
 }

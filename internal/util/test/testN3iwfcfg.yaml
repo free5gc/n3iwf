@@ -3,6 +3,7 @@ info:
   description: N3IWF initial local configuration
 
 configuration:
+  idleTimeout: 1ms # HTTP server idle timeout; 0s disables it
   N3IWFInformation:
     GlobalN3IWFID:
       PLMNID:
