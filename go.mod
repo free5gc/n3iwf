@@ -7,7 +7,7 @@ require (
 	github.com/free5gc/ike v1.2.1
 	github.com/free5gc/ngap v1.2.0
 	github.com/free5gc/sctp v1.2.0
-	github.com/free5gc/util v1.4.0
+	github.com/free5gc/util v1.4.1-0.20261014070359-d865b0ce854b
 	github.com/gin-contrib/pprof v1.5.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/gopacket v1.1.19
