@@ -25,8 +25,13 @@ func NewDPDPeriodicTimer(d time.Duration, maxRetryTimes int32, ikeSA *IKESecurit
 			case <-t.done:
 				return
 			case <-ticker.C:
-				atomic.AddInt32(&ikeSA.CurrentRetryTimes, 1)
-				if atomic.LoadInt32(&ikeSA.CurrentRetryTimes) > 0 {
+				retryTimes := atomic.AddInt32(&ikeSA.CurrentRetryTimes, 1)
+				// Only declare the peer dead once the number of consecutive
+				// missed DPD responses reaches the operator-configured
+				// maxRetryTimes budget. maxRetryTimes <= 0 preserves the
+				// historical fail-fast behavior of giving up after the
+				// first missed response.
+				if retryTimes >= maxRetryTimes {
 					cancelFunc()
 					return
 				}
