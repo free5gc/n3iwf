@@ -25,8 +25,9 @@ func NewDPDPeriodicTimer(d time.Duration, maxRetryTimes int32, ikeSA *IKESecurit
 			case <-t.done:
 				return
 			case <-ticker.C:
-				atomic.AddInt32(&ikeSA.CurrentRetryTimes, 1)
-				if atomic.LoadInt32(&ikeSA.CurrentRetryTimes) > 0 {
+				retryTimes := atomic.AddInt32(&ikeSA.CurrentRetryTimes, 1)
+				// maxRetryTimes <= 0 keeps the original fail-fast-on-first-miss behavior.
+				if retryTimes >= maxRetryTimes {
 					cancelFunc()
 					return
 				}
