@@ -242,10 +242,12 @@ func (s *Server) HandleNGReset(
 	switch resetChoice := resetType.Choice.(type) {
 	case *ngapType.ResetAll:
 		ngapLog.Trace("ResetType Present: NG Interface")
-		// TODO: Release Uu Interface related to this amf(IPSec)
-		// Remove all Ue
-		if err := amf.RemoveAllRelatedUe(); err != nil {
-			ngapLog.Errorf("RemoveAllRelatedUe error : %v", err)
+		// releaseIkeUeAndRanUe tears down the IKE/IPsec SA as well as the
+		// NGAP UE context; RemoveAllRelatedUe alone only did the latter.
+		for _, ranUe := range amf.N3iwfRanUeList {
+			if err := s.releaseIkeUeAndRanUe(ranUe); err != nil {
+				ngapLog.Errorf("releaseIkeUeAndRanUe error : %v", err)
+			}
 		}
 		message.SendNGResetAcknowledge(amf, nil, nil)
 	case *ngapType.UEAssociatedLogicalNGConnectionList:
@@ -277,9 +279,8 @@ func (s *Server) HandleNGReset(
 				}
 				continue
 			}
-			// TODO: Release Uu Interface (IPSec)
-			if err := ranUe.Remove(); err != nil {
-				ngapLog.Errorf("Remove RanUE Context error : %v", err)
+			if err := s.releaseIkeUeAndRanUe(ranUe); err != nil {
+				ngapLog.Errorf("releaseIkeUeAndRanUe error : %v", err)
 			}
 		}
 		message.SendNGResetAcknowledge(amf, partOfNGInterface, nil)
